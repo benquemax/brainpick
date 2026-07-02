@@ -1,0 +1,13 @@
+{
+  "name": "brainpick-monorepo",
+  "private": true,
+  "description": "Monorepo root for brainpick — the npm-published package lives in packages/node",
+  "scripts": {
+    "docs:validate": "codumentation validate",
+    "docs:build": "codumentation build"
+  },
+  "workspaces": [],
+  "devDependencies": {
+    "codumentation": "^0.1.2"
+  }
+}

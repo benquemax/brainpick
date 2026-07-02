@@ -1,0 +1,91 @@
+# Brainpick — working rules for agents
+
+Brainpick compiles an OKF markdown bundle into tiered, disposable artifacts
+(index, link graph, vectors, entity graph) and serves them to agents (MCP +
+CLI) and humans (a live holographic-brain web UI). Read `_vision.md` for the
+north star and the README for the thirteen principles — they manifest
+throughout this codebase and every design decision should trace to at least
+one of them.
+
+## How we build
+
+- **TDD is mandatory.** Write the failing test first, then the code. No
+  implementation lands without the test that motivated it.
+- **Tests define the feature set.** Verification tests are never throwaway:
+  every test that proved a new implementation joins the automated suite
+  permanently, and the pre-push gate runs the full suite — the feature set
+  of this software must always work. e2e tests land with every feature and
+  protect the repo from broken code.
+- **Spec-first for behavior.** Anything both engines must agree on (artifact
+  bytes, API shapes, delta sequences, MCP tool contracts) changes in `spec/`
+  first — new conformance case or golden fixture, then the implementations.
+  The Python engine is the reference implementation; goldens are regenerated
+  only via script and reviewed like code.
+- **Dual runtime, one product.** `packages/python/` and `packages/node/` are
+  native peers; the npm package must never require Python. Shared behavior
+  is proven by the conformance harness, not by hope.
+
+## Repo conventions
+
+- **This file is the only agent-facing document.** The project is
+  agent-agnostic: whatever the harness — Claude Code, OpenCode, Aider, or
+  anything else — everything an agent needs lives here. `CLAUDE.md` is
+  exactly `@AGENTS.md` and must stay that way.
+- `_todo.md` (gitignored) is the parking lot: ideas and follow-ups go there
+  immediately instead of derailing the task in flight. Check it when
+  starting work.
+- `_plans/` (gitignored) holds plan documents; `_temp/` holds scratch files
+  (contents gitignored, `.gitkeep` committed). Never litter the repo root.
+- `_vision.md` is committed — it is the product's north star, not scratch.
+- Markdown in `docs/` is kebab-case with `title` + `summary` frontmatter.
+- README links are absolute URLs (the file ships to PyPI/npm).
+- **Git etiquette:** never `git push` — that is Tom's call, always. Staging
+  and committing completed, verified work is fine.
+
+## Toolchain
+
+- Python ≥ 3.10, stdlib-first (argparse, no click/typer); `ruff` is the
+  style arbiter; `pytest -q` for tests; `uv` for environments.
+- Node ≥ 20, TypeScript; `vitest` for tests; npm workspaces
+  (`packages/node`, `packages/webui`).
+- `henxels check --all` must be green before any commit; the contract in
+  `henxels.yaml` is the structural truth of this repo — to disobey a rule,
+  change the contract (a conscious, reviewable act).
+- `npx codumentation validate` must be green — documented claims are
+  executable specifications here, not hopes.
+
+<!-- henxels:begin -->
+## The contract (henxels)
+
+_Auto-generated from `henxels.yaml` by `henxels sync`. Do not edit by hand._
+
+Each bullet is a **henxel** (a rule). To disobey one, change `henxels.yaml` —
+that is the only sanctioned escape. Run `henxels explain <path>` before creating
+a file to see what governs that spot.
+
+### Rules
+
+- The scratch folder survives: _temp/ exists with its .gitkeep (in ./_temp)
+  ↳ Scratch, screenshots and pipeline intermediates go to _temp/ (gitignored), never the repo root.
+- Docs are kebab-case markdown with title and summary frontmatter (in ./docs/*)
+  ↳ docs/ is the human tour; frontmatter titles and summaries feed indexes and search.
+- Documented claims stay true — codumentation validates before every push
+  ↳ Docs here are executable specifications (principle 12); drift fails the push, not the reader.
+
+### Behaviours
+
+- push is blocked until `henxels bless push`
+- deleting files / removing many lines is blocked until `henxels bless delete`
+- warns when a new file looks like a near-copy of a committed one
+
+### Custom henxels & contributing
+
+**Before writing a custom check, run `henxels catalogue` and use the built-in that
+matches your intent — don't reinvent one.** Never name a custom check after a built-in
+or a setting (e.g. `warn_about_large_files` is a setting, not a check).
+
+Need a check that genuinely doesn't exist? `henxels create-new-statement <name>` scaffolds a local check
+(auto-loaded from `henxels_checks.py`). **If your check is reusable** — useful in
+other repos, not tied to this one — contribute it upstream with `henxels contribute`.
+We're in the agentic era: send a ready-to-merge PR instead of opening an issue.
+<!-- henxels:end -->

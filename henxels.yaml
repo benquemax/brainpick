@@ -1,0 +1,29 @@
+# henxels.yaml — a whiteboard list of rules. Each bullet is one henxel.
+# Change a rule here to change the rules; that's the only way to disobey responsibly.
+# yaml-language-server: $schema=./.henxels/henxels.schema.json
+
+# Behaviours (not tests): protections + tuning knobs.
+settings:
+  confirm_before_push: true       # pushing is Tom's call — block until `henxels bless push`
+  confirm_before_deleting:        # losing files / many lines must be deliberate
+    over_lines: 5
+  warn_about_similar_files:       # nudge when a new file looks like a copy
+    above: 0.85
+    ignore: ["**/__init__.py"]
+
+henxels:
+  - henxel: "The scratch folder survives: _temp/ exists with its .gitkeep"
+    in: ./_temp
+    required_files: .gitkeep
+    why: "Scratch, screenshots and pipeline intermediates go to _temp/ (gitignored), never the repo root."
+
+  - henxel: "Docs are kebab-case markdown with title and summary frontmatter"
+    in: ./docs/*
+    allowed_filetypes: .md
+    filename_casing: kebab-case
+    required_frontmatter: [title, summary]
+    why: "docs/ is the human tour; frontmatter titles and summaries feed indexes and search."
+
+  - henxel: "Documented claims stay true — codumentation validates before every push"
+    run_before_push: "npx --yes codumentation validate"
+    why: "Docs here are executable specifications (principle 12); drift fails the push, not the reader."

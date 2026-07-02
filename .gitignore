@@ -1,0 +1,28 @@
+# parking lot, plans & scratch — repo-local, never shared
+_todo.md
+_plans/
+_temp/*
+!_temp/.gitkeep
+
+# compiled brain artifacts are disposable (principle 2)
+.brainpick/
+
+# python
+__pycache__/
+*.egg-info/
+.venv/
+build/
+dist/
+
+# node
+node_modules/
+
+# synced web UI bundles — built by CI/release, never committed
+packages/python/src/brainpick/_static/*
+!packages/python/src/brainpick/_static/.gitkeep
+packages/node/static/*
+!packages/node/static/.gitkeep
+
+# Codumentation logs
+.codumentation.log
+.codumentation-summary.log
