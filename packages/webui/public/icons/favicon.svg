@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgb(13,19,38)"/>
+      <stop offset="100%" stop-color="rgb(4,6,14)"/>
+    </linearGradient>
+      <radialGradient id="glow0"><stop offset="0%" stop-color="rgb(107,229,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(107,229,255)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glow1"><stop offset="0%" stop-color="rgb(173,148,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(173,148,255)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glow2"><stop offset="0%" stop-color="rgb(107,229,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(107,229,255)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glow3"><stop offset="0%" stop-color="rgb(173,148,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(173,148,255)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glow4"><stop offset="0%" stop-color="rgb(107,229,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(107,229,255)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glow5"><stop offset="0%" stop-color="rgb(107,229,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(107,229,255)" stop-opacity="0"/></radialGradient>
+      <radialGradient id="glow6"><stop offset="0%" stop-color="rgb(173,148,255)" stop-opacity="0.9"/><stop offset="100%" stop-color="rgb(173,148,255)" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112.64" fill="url(#bg)"/>
+  <g stroke="rgb(107,229,255)" stroke-opacity="0.38" stroke-width="3">
+    <line x1="256.0" y1="240.6" x2="143.4" y2="153.6"/>
+    <line x1="256.0" y1="240.6" x2="368.6" y2="138.2"/>
+    <line x1="256.0" y1="240.6" x2="404.5" y2="297.0"/>
+    <line x1="256.0" y1="240.6" x2="169.0" y2="368.6"/>
+    <line x1="143.4" y1="153.6" x2="97.3" y2="266.2"/>
+    <line x1="368.6" y1="138.2" x2="404.5" y2="297.0"/>
+    <line x1="322.6" y1="399.4" x2="169.0" y2="368.6"/>
+    <line x1="256.0" y1="240.6" x2="322.6" y2="399.4"/>
+  </g>
+  <g>
+    <circle cx="256.0" cy="240.6" r="104.4" fill="url(#glow0)"/><circle cx="256.0" cy="240.6" r="28.7" fill="rgb(107,229,255)"/>
+    <circle cx="143.4" cy="153.6" r="55.3" fill="url(#glow1)"/><circle cx="143.4" cy="153.6" r="15.2" fill="rgb(173,148,255)"/>
+    <circle cx="368.6" cy="138.2" r="61.4" fill="url(#glow2)"/><circle cx="368.6" cy="138.2" r="16.9" fill="rgb(107,229,255)"/>
+    <circle cx="404.5" cy="297.0" r="51.6" fill="url(#glow3)"/><circle cx="404.5" cy="297.0" r="14.2" fill="rgb(173,148,255)"/>
+    <circle cx="322.6" cy="399.4" r="46.7" fill="url(#glow4)"/><circle cx="322.6" cy="399.4" r="12.8" fill="rgb(107,229,255)"/>
+    <circle cx="169.0" cy="368.6" r="55.3" fill="url(#glow5)"/><circle cx="169.0" cy="368.6" r="15.2" fill="rgb(107,229,255)"/>
+    <circle cx="97.3" cy="266.2" r="39.3" fill="url(#glow6)"/><circle cx="97.3" cy="266.2" r="10.8" fill="rgb(173,148,255)"/>
+  </g>
+</svg>

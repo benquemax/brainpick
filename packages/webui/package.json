@@ -18,7 +18,7 @@
   "dependencies": {
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
-    "camera-controls": "^2.10.0",
+    "camera-controls": "^3.0.0",
     "d3-force": "^3.0.0",
     "marked": "^15.0.0",
     "react": "^19.0.0",

@@ -2,6 +2,7 @@
 
 ## 2026-07-02
 
+- Created: the web UI workspace — 2D cosmos, live deltas, search, PWA shell.
 - Updated: the wiki is now compiled by brainpick itself — spec v0.1 (manifest,
   T1 artifacts, REST, live deltas, MCP tools, config), the kotiaurinko
   conformance fixture, and the Python T1 engine landed; the generated index

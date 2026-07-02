@@ -42,6 +42,14 @@ data: {"seq":4213,"state":"running","tier":"t1"}
 - SSE `id` equals `seq`. Servers keep a ring buffer (≥ 256 deltas); a
   reconnect with `Last-Event-ID` inside the buffer replays missed deltas,
   otherwise the server sends one `graph.snapshot` to resync.
+- `compile.status.state` is `running`, `done`, or `failed` (clients treat
+  unknown values as `done`).
+- The graph's top-level `tags` map is NOT carried by deltas — clients that
+  need it live derive it from node records (`stats.tags` carries the count).
+- A client reconnecting WITHOUT `Last-Event-ID` while holding state compares
+  the `hello` seq to its own: ahead → resync via `GET /api/graph`; equal →
+  continue. Replayed deltas are idempotent by seq — clients apply a delta
+  only when `delta.seq == local_seq + 1` and ignore older ones.
 - Heartbeat comment (`: ping`) at least every 30 s.
 - Watcher hygiene: debounce ≥ 200 ms, coalesce bursts, ignore
   `.brainpick/`, `.git/`, `_temp/`, `node_modules/`; unchanged content

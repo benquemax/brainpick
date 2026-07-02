@@ -1,0 +1,15 @@
+- generic [ref=e3]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - 'generic "connection: live" [ref=e9]'
+      - generic [ref=e10]: brainpick
+      - generic "manifest seq" [ref=e11]: seq 4221
+    - generic [ref=e12]:
+      - generic "documents" [ref=e13]: 11 docs
+      - generic "edges" [ref=e14]: 20 edges
+      - generic "orphans" [ref=e15]: 3 orphans
+    - generic [ref=e16]:
+      - generic [ref=e17]: t1 fresh
+      - generic [ref=e18]: t2 off
+      - generic [ref=e19]: t3 off
+  - generic: / search · drag to pan · wheel / pinch to zoom · click a node to read

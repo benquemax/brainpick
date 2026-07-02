@@ -43,10 +43,11 @@ first occurrence's text as `label`.
   "edges": [{"count": 1, "kind": "link", "label": "Maa", "source": "kuu.md", "target": "maa.md"}],
   "ghosts": [{"source": "saaret/laguuni.md", "target": "olematon.md"}],
   "islands": [["saaret/atolli.md", "saaret/laguuni.md"]],
-  "nodes": [{"description": null, "id": "aurinko.md", "in": 3, "orphan": false,
-             "out": 2, "reserved": false, "tags": ["tähti"], "timestamp": null,
+  "nodes": [{"description": "The star everything in this bundle orbits.",
+             "id": "aurinko.md", "in": 4, "orphan": false, "out": 3,
+             "reserved": false, "tags": ["tähti"], "timestamp": null,
              "title": "Aurinko", "type": "Concept"}],
-  "stats": {"docs": 10, "edges": 9, "ghosts": 1, "islands": 1, "orphans": 1, "tags": 7},
+  "stats": {"docs": 10, "edges": 20, "ghosts": 1, "islands": 1, "orphans": 1, "tags": 8},
   "tags": {"koti": ["maa.md"], "tähti": ["aurinko.md"]}
 }
 ```

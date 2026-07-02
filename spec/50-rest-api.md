@@ -10,7 +10,7 @@ Both servers implement this surface. All responses are JSON (except `/` and
 | `GET /api/health` | `{"impl": "python", "name": "brainpick", "spec_version": "0.1", "version": "0.1.0"}` |
 | `GET /api/status` | manifest summary: `seq`, `tiers`, `docs`, `edges`, `ghosts`, `orphans`, `bundle_root`, `watching` |
 | `GET /api/graph?layer=links` | the full `t1/graph.json` payload (`layer=entities` → 404 until T3; ETag = `"<seq>"`, honor `If-None-Match` with 304) |
-| `GET /api/docs/{path}` | `{"path", "frontmatter", "title", "text", "neighbors": {"in": [...], "out": [...]}}` — 404 with suggestion list on miss |
+| `GET /api/docs/{path}` | `{"path", "frontmatter", "title", "text", "neighbors": {"in": [...], "out": [...]}}` where neighbor entries are `{"path", "title"}` — on miss, 404 with `{"error": "<instruction>", "suggestions": ["<path>", …]}` (≤ 5 fuzzy matches) |
 | `GET /api/search?q=&mode=auto&limit=8` | `{"hits": [{"path", "title", "description", "score", "snippet", "source"}], "used_modes": [...], "degraded_from": null}` |
 | `GET /api/neighbors?id=&depth=1&layer=links` | `{"center", "nodes": [...], "edges": [...]}` — node/edge shapes as in graph.json |
 | `GET /api/live` | SSE stream, see `60-live-deltas.md` |
@@ -19,7 +19,9 @@ Both servers implement this surface. All responses are JSON (except `/` and
 Spec 0.1 requires modes `keyword` and `auto` (`auto` = keyword when nothing
 else is available; response says `"used_modes": ["keyword"]`). Unknown
 `mode` values fall back to `auto` — never an error. `snippet` is the first
-match window ≤ 240 chars, or `null`.
+match window ≤ 240 chars, or `null`. A hit's `source` names the retriever
+that produced it (`keyword | semantic | graph`; under fusion, the
+highest-contributing one).
 
 Search scoring (normative for conformance): BM25 (k1=1.2, b=0.75) over
 `docs.jsonl` records. The searchable text of a document is the `title`
