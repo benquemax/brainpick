@@ -17,13 +17,53 @@ henxels:
     required_files: .gitkeep
     why: "Scratch, screenshots and pipeline intermediates go to _temp/ (gitignored), never the repo root."
 
-  - henxel: "Docs are kebab-case markdown with title and summary frontmatter"
-    in: ./docs/*
-    allowed_filetypes: .md
-    filename_casing: kebab-case
-    required_frontmatter: [title, summary]
-    why: "docs/ is the human tour; frontmatter titles and summaries feed indexes and search."
-
   - henxel: "Documented claims stay true — codumentation validates before every push"
     run_before_push: "npx --yes codumentation validate"
     why: "Docs here are executable specifications (principle 12); drift fails the push, not the reader."
+
+  # --- the OKF wiki (okf-llm-wiki template) --------------------------------
+  # The bundle in docs/ is brainpick's own LLM wiki AND its dogfood corpus.
+  # It follows the Open Knowledge Format:
+  # https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
+  - henxel: "Every concept doc is kebab-case markdown with OKF frontmatter (type is the one MUST)"
+    in: ./docs/*
+    except: ["**/index.md", "**/log.md", "docs/references/*"]
+    allowed_filetypes: .md
+    filename_casing: kebab-case
+    required_frontmatter: [type, title, description]
+    frontmatter_values:
+      type: [Concept, Reference, Decision, Playbook]
+    why: "One concept per page; the description feeds the generated index and the graph UI."
+
+  - henxel: "timestamp is a real ISO 8601 datetime and is bumped when a doc changes"
+    in: ./docs/*
+    except: ["**/index.md", "**/log.md", "docs/references/*"]
+    frontmatter_dates: { timestamp: datetime }
+    bump_updated_on_change: timestamp
+
+  - henxel: "Every link lands — bundle-absolute (/a/b.md) and relative alike"
+    in: ./docs/*
+    rooted_links_resolve: ./docs
+    links_resolve: true
+
+  - henxel: "A concept is a node in the knowledge graph, not an orphan"
+    in: ./docs/*
+    except: ["**/index.md", "**/log.md", "docs/references/*"]
+    min_outbound_links: 1
+    why: "Links are the edges of the brain; link text is the target's title."
+
+  - henxel: "OKF reserved files stay frontmatter-free (the bundle root may declare okf_version)"
+    in: ["./docs/**/index.md", "./docs/**/log.md"]
+    except: ./docs/index.md
+    no_frontmatter: true
+
+  - henxel: "Update logs are date-sectioned, newest first"
+    in: ./docs/**/log.md
+    log_headings_are_dates: true    # custom check, lives in henxels_checks.py
+
+  - henxel: "The bundle root has an index and every top-level concept is listed in it"
+    in: ./docs
+    except: "**/log.md"
+    required_files: index.md
+    referenced_in: docs/index.md
+    why: "Until brainpick generates the index (principle 4), it is maintained by hand and refereed here."

@@ -37,7 +37,15 @@ one of them.
 - `_plans/` (gitignored) holds plan documents; `_temp/` holds scratch files
   (contents gitignored, `.gitkeep` committed). Never litter the repo root.
 - `_vision.md` is committed — it is the product's north star, not scratch.
-- Markdown in `docs/` is kebab-case with `title` + `summary` frontmatter.
+- **`docs/` is an OKF bundle — brainpick's own LLM wiki.** It doubles as the
+  dogfood corpus for the whole stack (compiled, served, and visualized by
+  brainpick itself). Write it like any governed brain: one concept per
+  kebab-case page, OKF frontmatter (`type`, `title`, `description`,
+  `timestamp`), rich relative links whose text is the target's title, every
+  page reachable from `docs/index.md`. The henxels contract enforces this.
+- **Docs-as-you-go:** every feature lands with its wiki concept page(s) in
+  the same commit — the wiki must grow with the code, both as documentation
+  and as test mass for the interface.
 - README links are absolute URLs (the file ships to PyPI/npm).
 - **Git etiquette:** never `git push` — that is Tom's call, always. Staging
   and committing completed, verified work is fine.
@@ -63,14 +71,24 @@ Each bullet is a **henxel** (a rule). To disobey one, change `henxels.yaml` —
 that is the only sanctioned escape. Run `henxels explain <path>` before creating
 a file to see what governs that spot.
 
+Only use `git commit --no-verify` in a genuine emergency: it bypasses the hooks that run this contract, the safety mechanism meant to protect the repository. Prefer `henxels bless <action>` or editing `henxels.yaml` — both keep the deviation visible.
+
 ### Rules
 
 - The scratch folder survives: _temp/ exists with its .gitkeep (in ./_temp)
   ↳ Scratch, screenshots and pipeline intermediates go to _temp/ (gitignored), never the repo root.
-- Docs are kebab-case markdown with title and summary frontmatter (in ./docs/*)
-  ↳ docs/ is the human tour; frontmatter titles and summaries feed indexes and search.
 - Documented claims stay true — codumentation validates before every push
   ↳ Docs here are executable specifications (principle 12); drift fails the push, not the reader.
+- Every concept doc is kebab-case markdown with OKF frontmatter (type is the one MUST) (in ./docs/*)
+  ↳ One concept per page; the description feeds the generated index and the graph UI.
+- timestamp is a real ISO 8601 datetime and is bumped when a doc changes (in ./docs/*)
+- Every link lands — bundle-absolute (/a/b.md) and relative alike (in ./docs/*)
+- A concept is a node in the knowledge graph, not an orphan (in ./docs/*)
+  ↳ Links are the edges of the brain; link text is the target's title.
+- OKF reserved files stay frontmatter-free (the bundle root may declare okf_version) (in ./docs/**/index.md, ./docs/**/log.md)
+- Update logs are date-sectioned, newest first (in ./docs/**/log.md)
+- The bundle root has an index and every top-level concept is listed in it (in ./docs)
+  ↳ Until brainpick generates the index (principle 4), it is maintained by hand and refereed here.
 
 ### Behaviours
 

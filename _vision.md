@@ -67,7 +67,9 @@ is a full citizen.
 Test-driven, spec-first, and self-hosted: this repo is governed by
 henxels, its docs are codumented (validated against the code they
 describe), and both engines must pass the same conformance fixtures.
-Perfect UX and AX are fruits of great DX.
+The documentation itself is an OKF brain in `docs/` — the first brain
+brainpick ever compiles is the one that explains it. Perfect UX and AX
+are fruits of great DX.
 
 ## What v1 includes
 
