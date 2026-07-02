@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brainpick.dev/spec/0.1/manifest.schema.json",
+  "title": "brainpick manifest.json",
+  "type": "object",
+  "required": ["bundle_root", "compiled_at", "files", "generator", "index_md", "seq", "spec_version", "tiers"],
+  "additionalProperties": false,
+  "properties": {
+    "bundle_root": {"type": "string"},
+    "compiled_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["bytes", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "required": ["impl", "name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "impl": {"enum": ["python", "node"]},
+        "name": {"const": "brainpick"},
+        "version": {"type": "string"}
+      }
+    },
+    "index_md": {
+      "type": "object",
+      "required": ["content_hash", "managed"],
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+        "managed": {"enum": ["manage", "section", "off"]}
+      }
+    },
+    "seq": {"type": "integer", "minimum": 1},
+    "spec_version": {"const": "0.1"},
+    "tiers": {
+      "type": "object",
+      "required": ["t1", "t2", "t3"],
+      "additionalProperties": false,
+      "properties": {
+        "t1": {"enum": ["fresh", "stale", "off"]},
+        "t2": {"enum": ["fresh", "stale", "off"]},
+        "t3": {"enum": ["fresh", "stale", "off"]}
+      }
+    }
+  }
+}

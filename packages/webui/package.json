@@ -1,0 +1,39 @@
+{
+  "name": "@brainpick/webui",
+  "private": true,
+  "version": "0.1.0",
+  "description": "brainpick web UI — the live 2D cosmos view of a compiled bundle (PWA)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:mock": "node scripts/dev-with-mock.mjs",
+    "mock": "node scripts/mock-server.mjs",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "camera-controls": "^2.10.0",
+    "d3-force": "^3.0.0",
+    "marked": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.175.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/d3-force": "^3.0.10",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "vite-plugin-pwa": "^1.0.0",
+    "vitest": "^3.1.0"
+  }
+}

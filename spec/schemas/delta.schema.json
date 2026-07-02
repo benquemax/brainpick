@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brainpick.dev/spec/0.1/delta.schema.json",
+  "title": "brainpick graph.delta event payload",
+  "type": "object",
+  "required": ["added", "cause", "removed", "seq", "stats", "updated"],
+  "additionalProperties": false,
+  "properties": {
+    "added": {
+      "type": "object",
+      "required": ["edges", "nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "edges": {"type": "array", "items": {"$ref": "graph.schema.json#/$defs/edge"}},
+        "nodes": {"type": "array", "items": {"$ref": "graph.schema.json#/$defs/node"}}
+      }
+    },
+    "cause": {
+      "type": "object",
+      "required": ["paths", "tier"],
+      "additionalProperties": false,
+      "properties": {
+        "paths": {"type": "array", "items": {"type": "string"}},
+        "tier": {"enum": ["t1", "t2", "t3"]}
+      }
+    },
+    "removed": {
+      "type": "object",
+      "required": ["edges", "nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["kind", "source", "target"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"enum": ["link", "wikilink"]},
+              "source": {"type": "string"},
+              "target": {"type": "string"}
+            }
+          }
+        },
+        "nodes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "seq": {"type": "integer", "minimum": 1},
+    "stats": {"$ref": "graph.schema.json#/properties/stats"},
+    "updated": {
+      "type": "object",
+      "required": ["nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {"type": "array", "items": {"$ref": "graph.schema.json#/$defs/node"}}
+      }
+    }
+  }
+}

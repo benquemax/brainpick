@@ -2,6 +2,10 @@
 
 ## 2026-07-02
 
+- Updated: the wiki is now compiled by brainpick itself — spec v0.1 (manifest,
+  T1 artifacts, REST, live deltas, MCP tools, config), the kotiaurinko
+  conformance fixture, and the Python T1 engine landed; the generated index
+  section below the preamble is its work.
 - Created: seeded the wiki with the founding concept set — the tiers,
   artifact spec, compile pipeline, live deltas, MCP tools, search modes,
   guarded writes, runtime parity, knowledge graph tier, embedding detection,

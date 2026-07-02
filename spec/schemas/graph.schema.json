@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://brainpick.dev/spec/0.1/graph.schema.json",
+  "title": "brainpick t1/graph.json",
+  "type": "object",
+  "required": ["edges", "ghosts", "islands", "nodes", "stats", "tags"],
+  "additionalProperties": false,
+  "$defs": {
+    "node": {
+      "type": "object",
+      "required": ["description", "id", "in", "orphan", "out", "reserved", "tags", "timestamp", "title", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "description": {"type": ["string", "null"]},
+        "id": {"type": "string"},
+        "in": {"type": "integer", "minimum": 0},
+        "orphan": {"type": "boolean"},
+        "out": {"type": "integer", "minimum": 0},
+        "reserved": {"type": "boolean"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "timestamp": {"type": ["string", "null"]},
+        "title": {"type": "string"},
+        "type": {"type": ["string", "null"]}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "required": ["count", "kind", "label", "source", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "count": {"type": "integer", "minimum": 1},
+        "kind": {"enum": ["link", "wikilink"]},
+        "label": {"type": ["string", "null"]},
+        "source": {"type": "string"},
+        "target": {"type": "string"}
+      }
+    }
+  },
+  "properties": {
+    "edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+    "ghosts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target"],
+        "additionalProperties": false,
+        "properties": {"source": {"type": "string"}, "target": {"type": "string"}}
+      }
+    },
+    "islands": {"type": "array", "items": {"type": "array", "items": {"type": "string"}, "minItems": 1}},
+    "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "stats": {
+      "type": "object",
+      "required": ["docs", "edges", "ghosts", "islands", "orphans", "tags"],
+      "additionalProperties": false,
+      "properties": {
+        "docs": {"type": "integer"}, "edges": {"type": "integer"},
+        "ghosts": {"type": "integer"}, "islands": {"type": "integer"},
+        "orphans": {"type": "integer"}, "tags": {"type": "integer"}
+      }
+    },
+    "tags": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}}
+  }
+}

@@ -6,7 +6,7 @@
     "docs:validate": "codumentation validate",
     "docs:build": "codumentation build"
   },
-  "workspaces": [],
+  "workspaces": ["packages/webui"],
   "devDependencies": {
     "codumentation": "^0.1.2"
   }

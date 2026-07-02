@@ -73,10 +73,18 @@ holographic-brain web UI that updates live while agents write).
 | T3 | entity/relation graph (LightRAG behind an adapter) | a small LLM |
 
 
-## Quick start (coming)
+## Quick start (pre-release)
 
-Nothing is published yet — this is the founding commit. The intended first
-contact, once v0.1 ships:
+Nothing is on PyPI or npm yet, but the Python engine already compiles brains
+from a checkout:
+
+```bash
+cd packages/python
+uv run brainpick compile --root /path/to/your/okf-bundle       # T1: graph + index
+uv run brainpick compile --check-fresh --root /path/to/bundle  # commit-gate freshness
+```
+
+Once v0.1 ships, first contact becomes:
 
 ```bash
 uvx brainpick init     # or: npx brainpick init — native in both runtimes

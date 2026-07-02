@@ -1,0 +1,38 @@
+# Scripted mutations for the delta conformance case. The harness compiles
+# the fixture, then applies each step and recompiles, asserting the emitted
+# graph.delta against expected-deltas.jsonl (line N = step N; seq-relative).
+
+steps:
+  - id: add-uusi
+    action: write
+    path: uusi.md
+    content: |
+      ---
+      type: Concept
+      title: Uusi
+      description: A freshly discovered rock.
+      tags: [uusi]
+      ---
+
+      # Uusi
+
+      It circles close to [Kuu](kuu.md).
+
+  - id: retitle-kuu
+    action: write
+    path: kuu.md
+    content: |
+      ---
+      type: Concept
+      title: Kuutamo
+      tags: [kuu]
+      timestamp: 2026-06-16T08:30:00Z
+      ---
+
+      # Kuutamo
+
+      The moon pulls the tides of [Maa](maa.md).
+
+  - id: remove-komeetta
+    action: delete
+    path: komeetta.md

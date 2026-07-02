@@ -54,6 +54,12 @@ one of them.
 
 - Python ≥ 3.10, stdlib-first (argparse, no click/typer); `ruff` is the
   style arbiter; `pytest -q` for tests; `uv` for environments.
+  - Engine dev loop: `cd packages/python && uv sync --extra dev && uv run
+    pytest -q && uv run ruff check .`
+  - Conformance goldens are regenerated ONLY via
+    `uv run python ../../scripts/regen-golden.py` (from packages/python) and
+    the diffs reviewed like code — never hand-edit
+    `spec/fixtures/expected/`.
 - Node ≥ 20, TypeScript; `vitest` for tests; npm workspaces
   (`packages/node`, `packages/webui`).
 - `henxels check --all` must be green before any commit; the contract in
@@ -79,6 +85,8 @@ Only use `git commit --no-verify` in a genuine emergency: it bypasses the hooks 
   ↳ Scratch, screenshots and pipeline intermediates go to _temp/ (gitignored), never the repo root.
 - Documented claims stay true — codumentation validates before every push
   ↳ Docs here are executable specifications (principle 12); drift fails the push, not the reader.
+- The Python engine's tests pass before every commit
+  ↳ Tests define the feature set; the feature set must always work (principle 12).
 - Every concept doc is kebab-case markdown with OKF frontmatter (type is the one MUST) (in ./docs/*)
   ↳ One concept per page; the description feeds the generated index and the graph UI.
 - timestamp is a real ISO 8601 datetime and is bumped when a doc changes (in ./docs/*)

@@ -1,0 +1,50 @@
+# Language-agnostic conformance cases. Each engine's harness reads this file
+# and runs every case against the shared fixtures. Adding a case here
+# tightens both engines at once — behavior changes land HERE first.
+
+version: "0.1"
+
+cases:
+  # class: compile — copy the fixture bundle to a temp dir, run a full
+  # compile with default config, byte-compare each listed artifact against
+  # fixtures/expected/<bundle>/ (manifest compared after normalizing the
+  # volatile fields named in spec/10-manifest.md).
+  - id: compile-kotiaurinko-t1
+    class: compile
+    bundle: kotiaurinko
+    artifacts:
+      - .brainpick/manifest.json
+      - .brainpick/t1/graph.json
+      - .brainpick/t1/docs.jsonl
+      - index.md            # the generated section, in the bundle itself
+
+  # class: compile-idempotent — compile the fixture twice; the second run
+  # must be a no-op: identical artifacts, unchanged seq.
+  - id: compile-kotiaurinko-idempotent
+    class: compile-idempotent
+    bundle: kotiaurinko
+
+  # class: check-fresh — after a compile, --check-fresh exits 0; after
+  # mutating the named file, it exits 1.
+  - id: check-fresh-kotiaurinko
+    class: check-fresh
+    bundle: kotiaurinko
+    mutate: kuu.md
+
+  # class: query — run searches against the compiled fixture and assert the
+  # top-k result SET (order-insensitive, scores ignored).
+  - id: search-keyword-aurinko
+    class: query
+    bundle: kotiaurinko
+    query: "aurinko"
+    mode: keyword
+    limit: 8
+    expect_paths: [aurinko.md, komeetta.md, planeetat.md, yksinainen.md]
+
+  # class: delta — apply scripted mutations to a compiled fixture, recompile
+  # after each step, and compare emitted graph.delta payloads against the
+  # scenario's expected-deltas.jsonl (seq-relative).
+  - id: live-edit-01
+    class: delta
+    bundle: kotiaurinko
+    scenario: live-edit-01
