@@ -71,7 +71,10 @@ possible, `merged: {content, strategy}` as a PROPOSAL (never auto-applied):
    already has doubles as the merge tool;
 3. neither available → conflict response without `merged` (manual path).
 
-Omitting `base_sha` preserves today's last-write-wins (writes stay
+Edge semantics: a doc DELETED since it was read conflicts with
+`current_sha: null, theirs: null`. The `base_sha` comparison is evaluated
+first, but a matching `base_sha` does not override `create`'s no-clobber
+rule. Omitting `base_sha` preserves today's last-write-wins (writes stay
 serialized server-side either way).
 
 Servers expose `brain_write` only when config `[serve] writes = "guarded"`

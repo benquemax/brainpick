@@ -55,10 +55,13 @@ export {
   type T2Result,
 } from "./compile/t2";
 export {
+  CONFIG_FILE,
   defaultConfig,
   loadConfig,
+  LOCAL_CONFIG_FILE,
   type Config,
   type EmbeddingConfig,
+  type ExtractionConfig,
   type ModelsConfig,
   type ModulesConfig,
 } from "./config";
@@ -91,3 +94,79 @@ export {
   VectorStoreUnavailable,
   type ChunkRow,
 } from "./vectorstore";
+export {
+  bfsNeighborhood,
+  dumps,
+  EventQueue,
+  jsonable,
+  resolveDoc,
+  RING_SIZE,
+  ServeState,
+  suggestPaths,
+  type Resolution,
+  type ServeEvent,
+} from "./serve/state";
+export { apiRouter, intParam } from "./serve/rest";
+export { liveHandler, PING_INTERVAL_MS, sseFrame } from "./serve/live";
+export {
+  bundleFilter,
+  DEBOUNCE_MS,
+  recompileAndBroadcast,
+  sourceFilter,
+  watchBundle,
+  watchIgnored,
+  type BundleWatcher,
+} from "./serve/watcher";
+export {
+  buildApp,
+  FALLBACK_HTML,
+  isLocalHost,
+  resolveUiDir,
+  type BuildAppOptions,
+  type ServeHandles,
+} from "./serve/app";
+export {
+  bumpTimestamp,
+  createMcpServer,
+  neighborsPayload,
+  overviewPayload,
+  readPayload,
+  resolveWritePath,
+  searchPayload,
+  slugifyDocPath,
+  tokensOf,
+  writePayload,
+  WRITES_OFF_REFUSAL,
+  type WritePayloadOptions,
+} from "./mcp";
+export {
+  detectBundle,
+  detectHenxels,
+  detectLinkStyle,
+  findRepoRoot,
+  henxelsOnPath,
+  openaiKeyPresent,
+  pickBackend,
+  probeBackends,
+  probeOllama,
+  probeOpenaiCompatible,
+  which,
+  type Backend,
+  type BundleInfo,
+  type LinkStyle,
+  type ProbeResult,
+} from "./detect";
+export {
+  brainpickCommand,
+  gitignoreSuggestion,
+  henxelsFragment,
+  isFancy,
+  mcpSnippets,
+  renderConfig,
+  renderLocalConfig,
+  runDoctor,
+  runInit,
+  type DoctorOptions,
+  type InitOptions,
+} from "./scaffold";
+export { getCloseMatches, SequenceMatcher } from "./core/difflib";

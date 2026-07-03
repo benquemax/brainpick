@@ -21,7 +21,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "static"
   ],
   "scripts": {
     "build": "tsup",
@@ -30,9 +31,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "chokidar": "^4.0.3",
     "commander": "^13.1.0",
+    "express": "^5.2.1",
     "smol-toml": "^1.3.1",
-    "yaml": "^2.8.0"
+    "yaml": "^2.8.0",
+    "zod": "^3.25.76"
   },
   "//optionalDependencies": "T2's vector store (spec/30) — absence degrades T2 with an instruction, never breaks T1. apache-arrow is @lancedb/lancedb's peer (schema construction).",
   "optionalDependencies": {
@@ -40,6 +45,7 @@
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.1.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.0",

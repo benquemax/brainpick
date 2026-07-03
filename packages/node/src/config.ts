@@ -1,4 +1,6 @@
-/** brainpick.toml (spec/80): defaults when absent, env overrides, unknown keys warn. */
+/** brainpick.toml (spec/80): defaults when absent, env overrides, unknown keys warn.
+ * Layering: brainpick.local.toml (machine-local endpoints) deep-merges over the
+ * shared file — precedence CLI > env > local.toml > toml > defaults. */
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -44,8 +46,16 @@ export interface EmbeddingConfig {
   dim: number; // 0 = unknown; discovered from the first embedding response
 }
 
+export interface ExtractionConfig {
+  kind: string; // ollama | openai-compatible — T3's model, doubles as the merge resolver
+  endpoint: string;
+  model: string;
+  api_key_env: string; // names an env var, never a key (spec/80)
+}
+
 export interface ModelsConfig {
   embedding: EmbeddingConfig;
+  extraction: ExtractionConfig;
 }
 
 export interface Config {
@@ -64,7 +74,10 @@ export function defaultConfig(): Config {
     bundle: { root: ".", include: ["**/*.md"], exclude: [] },
     index: { mode: "section", file: "index.md" },
     modules: { vectors: "auto", graph: "off", ui: true },
-    models: { embedding: { kind: "", endpoint: "", model: "", dim: 0 } },
+    models: {
+      embedding: { kind: "", endpoint: "", model: "", dim: 0 },
+      extraction: { kind: "", endpoint: "", model: "", api_key_env: "" },
+    },
     serve: {
       host: "127.0.0.1",
       port: 4747,
@@ -138,12 +151,13 @@ function isTable(value: unknown): value is Record<string, unknown> {
 function applyTable(
   section: Record<string, SectionValue>,
   table: Record<string, unknown>,
+  file: string,
   label: string,
   warn: Warn,
 ): void {
   for (const [key, value] of Object.entries(table)) {
     if (!Object.prototype.hasOwnProperty.call(section, key)) {
-      warn(`brainpick.toml: unknown key ${label} ${key} — ignored`);
+      warn(`${file}: unknown key ${label} ${key} — ignored`);
       continue;
     }
     section[key] = coerce(section[key]!, value);
@@ -163,7 +177,65 @@ function applyEnv(
 
 const defaultWarn: Warn = (message) => console.warn(message);
 
-/** Read <root>/brainpick.toml; absent file means all defaults (zero-config bundles). */
+const MODEL_TABLES = ["embedding", "extraction"] as const;
+
+/** The shared config plus the machine-local overlay, in merge order. */
+export const CONFIG_FILE = "brainpick.toml";
+export const LOCAL_CONFIG_FILE = "brainpick.local.toml";
+
+function readToml(path: string, label: string, warn: Warn): Record<string, unknown> | null {
+  let text: string | null = null;
+  try {
+    if (statSync(path).isFile()) text = readFileSync(path, "utf8");
+  } catch {
+    return null; // absent — this layer contributes nothing
+  }
+  if (text === null) return null;
+  try {
+    return parseToml(text);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const consequence = label === CONFIG_FILE ? "using defaults" : "ignoring it";
+    warn(`${label} is not valid TOML (${msg}) — ${consequence}`);
+    return null;
+  }
+}
+
+function applyData(config: Config, data: Record<string, unknown>, label: string, warn: Warn): void {
+  if ("spec" in data) config.spec = pyStrOf(data["spec"]);
+  for (const key of Object.keys(data)) {
+    if (!KNOWN_TOP.has(key)) warn(`${label}: unknown key '${key}' — ignored`);
+  }
+
+  for (const sectionName of SECTIONS) {
+    const section = config[sectionName] as unknown as Record<string, SectionValue>;
+    const table = data[sectionName];
+    if (!isTable(table)) continue;
+    applyTable(section, table, label, `[${sectionName}]`, warn);
+  }
+
+  const models = data["models"];
+  if (isTable(models)) {
+    for (const [tableName, table] of Object.entries(models)) {
+      if (!(MODEL_TABLES as readonly string[]).includes(tableName)) {
+        warn(`${label}: unknown table [models.${tableName}] — ignored`);
+        continue;
+      }
+      if (!isTable(table)) continue;
+      applyTable(
+        config.models[tableName as (typeof MODEL_TABLES)[number]] as unknown as Record<string, SectionValue>,
+        table,
+        label,
+        `[models.${tableName}]`,
+        warn,
+      );
+    }
+  }
+}
+
+/** Read <root>/brainpick.toml, deep-merge <root>/brainpick.local.toml over it
+ * (spec/80 layering), then apply env overrides; absent files mean all defaults
+ * (zero-config bundles). */
 export function loadConfig(
   root: string,
   env: Record<string, string | undefined> = process.env,
@@ -171,62 +243,22 @@ export function loadConfig(
 ): Config {
   const config = defaultConfig();
 
-  const path = join(root, "brainpick.toml");
-  let data: Record<string, unknown> = {};
-  let text: string | null = null;
-  try {
-    if (statSync(path).isFile()) text = readFileSync(path, "utf8");
-  } catch {
-    /* absent — defaults */
-  }
-  if (text !== null) {
-    try {
-      data = parseToml(text);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      warn(`brainpick.toml is not valid TOML (${msg}) — using defaults`);
-      data = {};
-    }
-  }
-
-  if ("spec" in data) config.spec = pyStrOf(data["spec"]);
-  for (const key of Object.keys(data)) {
-    if (!KNOWN_TOP.has(key)) warn(`brainpick.toml: unknown key '${key}' — ignored`);
-  }
-
-  for (const sectionName of SECTIONS) {
-    const section = config[sectionName] as unknown as Record<string, SectionValue>;
-    const table = data[sectionName];
-    if (!isTable(table)) continue;
-    applyTable(section, table, `[${sectionName}]`, warn);
-  }
-
-  const models = data["models"];
-  if (isTable(models)) {
-    for (const [tableName, table] of Object.entries(models)) {
-      if (tableName !== "embedding") {
-        warn(`brainpick.toml: unknown table [models.${tableName}] — ignored`);
-        continue;
-      }
-      if (!isTable(table)) continue;
-      applyTable(
-        config.models.embedding as unknown as Record<string, SectionValue>,
-        table,
-        "[models.embedding]",
-        warn,
-      );
-    }
+  for (const file of [CONFIG_FILE, LOCAL_CONFIG_FILE]) {
+    const data = readToml(join(root, file), file, warn);
+    if (data !== null) applyData(config, data, file, warn);
   }
 
   for (const sectionName of SECTIONS) {
     const section = config[sectionName] as unknown as Record<string, SectionValue>;
     applyEnv(section, `BRAINPICK_${sectionName.toUpperCase()}`, env);
   }
-  applyEnv(
-    config.models.embedding as unknown as Record<string, SectionValue>,
-    "BRAINPICK_MODELS_EMBEDDING",
-    env,
-  );
+  for (const tableName of MODEL_TABLES) {
+    applyEnv(
+      config.models[tableName] as unknown as Record<string, SectionValue>,
+      `BRAINPICK_MODELS_${tableName.toUpperCase()}`,
+      env,
+    );
+  }
 
   return config;
 }

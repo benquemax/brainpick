@@ -46,6 +46,8 @@ holds MACHINE-LOCAL values (model endpoints, tokens-by-reference) and
 deep-merges over the shared file; `brainpick init` writes detected
 endpoints THERE and adds it to `.gitignore`. Precedence: CLI flags > env
 (`BRAINPICK_*`) > `brainpick.local.toml` > `brainpick.toml` > defaults.
+An unparseable local layer is warned about and ignored — the shared file
+still applies.
 
 ## Model sections
 

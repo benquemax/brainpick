@@ -12,6 +12,14 @@ uv run brainpick serve --root /path/to/bundle --open     # the living graph
 uv run brainpick compile --check-fresh --root /path/to/bundle   # commit gate
 \`\`\`
 
+Same brain, no Python — the native Node engine:
+
+\`\`\`bash
+npm run build -w packages/node
+node packages/node/dist/cli.js init --root /path/to/bundle
+node packages/node/dist/cli.js serve --root /path/to/bundle --open
+\`\`\`
+
 Once v0.1 ships, first contact becomes:
 
 \`\`\`bash

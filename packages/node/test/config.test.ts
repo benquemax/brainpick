@@ -141,3 +141,71 @@ test("unknown embedding keys warn, not error", () => {
   expect(warnings.some((w) => w.includes("[models.future]"))).toBe(true);
   expect(cfg.models.embedding.kind).toBe("");
 });
+
+// -- layering: brainpick.local.toml deep-merges over the shared file (spec/80) ------
+
+function withLocal(root: string, text: string): string {
+  writeFileSync(join(root, "brainpick.local.toml"), text, "utf8");
+  return root;
+}
+
+test("local toml overrides shared toml", () => {
+  const root = withToml("[serve]\nport = 5757\nhost = \"127.0.0.1\"\n");
+  withLocal(root, "[serve]\nport = 6868\n");
+  const { cfg, warnings } = load(root);
+  expect(cfg.serve.port).toBe(6868); // local wins the contested key
+  expect(cfg.serve.host).toBe("127.0.0.1"); // untouched shared keys survive the merge
+  expect(warnings).toEqual([]);
+});
+
+test("local toml deep-merges models over shared policy", () => {
+  const root = withToml("[modules]\nvectors = \"on\"\n[index]\nmode = \"manage\"\n");
+  withLocal(root, '[models.embedding]\nkind = "ollama"\nendpoint = "http://127.0.0.1:11434"\nmodel = "nomic-embed-text"\n');
+  const { cfg } = load(root);
+  expect(cfg.modules.vectors).toBe("on"); // shared policy intact
+  expect(cfg.index.mode).toBe("manage");
+  expect(cfg.models.embedding.kind).toBe("ollama"); // machine-local endpoint layered in
+  expect(cfg.models.embedding.model).toBe("nomic-embed-text");
+});
+
+test("env still beats local toml", () => {
+  const root = withToml("[serve]\nport = 5757\n");
+  withLocal(root, "[serve]\nport = 6868\n");
+  const { cfg } = load(root, { BRAINPICK_SERVE_PORT: "7979" });
+  expect(cfg.serve.port).toBe(7979); // CLI > env > local > toml > defaults
+});
+
+test("local toml alone works without a shared file", () => {
+  const root = tempDir();
+  withLocal(root, '[models.embedding]\nkind = "mock"\n');
+  const { cfg, warnings } = load(root);
+  expect(cfg.models.embedding.kind).toBe("mock");
+  expect(cfg.serve.port).toBe(4747);
+  expect(warnings).toEqual([]);
+});
+
+test("broken local toml warns and keeps the shared layer", () => {
+  const root = withToml("[serve]\nport = 5757\n");
+  withLocal(root, "this is not toml [ = ]");
+  const { cfg, warnings } = load(root);
+  expect(warnings.some((w) => w.includes("brainpick.local.toml is not valid TOML"))).toBe(true);
+  expect(cfg.serve.port).toBe(5757); // the shared file still applied
+});
+
+test("unknown keys in local toml warn with the local filename", () => {
+  const root = withToml("");
+  withLocal(root, "[serve]\nfancy = true\n");
+  const { warnings } = load(root);
+  expect(warnings.some((w) => w.includes("brainpick.local.toml"))).toBe(true);
+});
+
+test("extraction model section parses without warnings", () => {
+  const root = withToml(
+    '[models.extraction]\nkind = "ollama"\nendpoint = "http://127.0.0.1:11434"\nmodel = "qwen3.5:4b"\napi_key_env = "MY_KEY"\n',
+  );
+  const { cfg, warnings } = load(root);
+  expect(warnings).toEqual([]);
+  expect(cfg.models.extraction.kind).toBe("ollama");
+  expect(cfg.models.extraction.model).toBe("qwen3.5:4b");
+  expect(cfg.models.extraction.api_key_env).toBe("MY_KEY");
+});

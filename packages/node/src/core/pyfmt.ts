@@ -24,6 +24,31 @@ export function pySplitWhitespace(s: string): string[] {
   return s.split(PY_SPACE_RUN).filter((part) => part !== "");
 }
 
+const PY_RSTRIP = new RegExp(`[${PY_SPACE_CLASS}]+$`, "u");
+
+/** Python `str.rstrip()` with no arguments. */
+export function pyRstrip(s: string): string {
+  return s.replace(PY_RSTRIP, "");
+}
+
+// Python str.splitlines() boundaries (\r\n counts once); JS split leaves one
+// trailing empty when the string ends on a terminator — Python drops it.
+const PY_LINE_BREAKS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
+
+/** Python `str.splitlines()` (without keepends). */
+export function pySplitLines(s: string): string[] {
+  const parts = s.split(PY_LINE_BREAKS);
+  if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+  return parts;
+}
+
+/** Python `len(str)` — code points, not UTF-16 units. */
+export function cpLen(s: string): number {
+  let n = 0;
+  for (const _ of s) n++;
+  return n;
+}
+
 /** Python `repr(float)` / `str(float)`: shortest round-trip digits, positional
  * notation when the decimal exponent is in [-4, 16), otherwise scientific with
  * a two-digit-minimum exponent ("1e+16", "1e-07"), and a trailing ".0" on

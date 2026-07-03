@@ -2,6 +2,9 @@
 
 ## 2026-07-03
 
+- Updated: full engine parity — the Node engine now serves too: REST, live
+  SSE, the same UI, and MCP with guarded writes; pick your runtime, the brain
+  is identical.
 - Updated: writes learned optimistic concurrency — stale saves are detected by
   content hash and resolved by a merge ladder that ends in the brain's own
   model proposing the merge.
