@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: python engine (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: sync
+        working-directory: packages/python
+        run: uv sync --extra dev
+      - name: ruff
+        working-directory: packages/python
+        run: uv run ruff check .
+      - name: tests (unit + conformance)
+        working-directory: packages/python
+        run: uv run pytest -q
+
+  webui:
+    name: web ui
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: typecheck
+        working-directory: packages/webui
+        run: npx tsc --noEmit
+      - name: tests
+        run: npm test -w packages/webui
+      - name: build (with PWA assets)
+        run: npm run build -w packages/webui
+
+  docs-truth:
+    name: documented claims hold
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx codumentation validate
+      - uses: astral-sh/setup-uv@v5
+      - name: henxels contract holds
+        run: |
+          uv tool install henxels
+          henxels check --all
+      - name: docs wiki is fresh (generated index matches the bundle)
+        working-directory: packages/python
+        run: |
+          uv sync
+          uv run brainpick compile --check-fresh --root ../../docs
