@@ -1,0 +1,8 @@
+# brainpick.toml — how this wiki is compiled and served.
+# Delete .brainpick/ any time; `brainpick compile` rebuilds everything.
+spec = "0.1"
+
+[models.embedding]              # T2: nomic-embed on ferocitee (Tom's LAN)
+kind = "ollama"
+endpoint = "http://ferocitee.local:11434"
+model = "nomic-embed-text"

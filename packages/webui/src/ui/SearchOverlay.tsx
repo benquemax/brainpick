@@ -34,6 +34,7 @@ export function SearchOverlay() {
   const open = useUI((s) => s.searchOpen);
   const query = useUI((s) => s.searchQuery);
   const mode = useUI((s) => s.searchMode);
+  const tiers = useUI((s) => s.tiers);
   const hits = useUI((s) => s.searchHits);
   const active = useUI((s) => s.searchActive);
   const meta = useUI((s) => s.searchMeta);
@@ -169,6 +170,10 @@ export function SearchOverlay() {
             >
               {MODE_LABEL[m]}
               {!enabled && <span className="mode-soon">T3 — coming</span>}
+              {/* tier state at the point of choice: informs without nagging */}
+              {m === 'semantic' && enabled && tiers != null && tiers.t2 !== 'fresh' && (
+                <span className="mode-soon">t2 {tiers.t2}</span>
+              )}
             </button>
           );
         })}
