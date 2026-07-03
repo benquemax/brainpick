@@ -2,8 +2,11 @@
 import json
 import os
 import re
+import subprocess
 
 from brainpick.config import load_config
+from brainpick.core.canonical import sha256_hex
+from brainpick.llm import MockChat
 from brainpick.mcp_server import (
     neighbors_payload,
     overview_payload,
@@ -17,6 +20,10 @@ from brainpick.serve.state import ServeState
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
     "# Uusi kivi\n\nNear [Kuu](kuu.md).\n"
+)
+KUU_REWRITE = (
+    "---\ntype: Concept\ntags: [kuu]\ntimestamp: 2026-06-15T08:30:00Z\n---\n\n"
+    "# Kuu\n\nThe moon pulls the tides of [Maa](maa.md), rewritten.\n"
 )
 
 
@@ -256,6 +263,125 @@ def test_write_henxels_violation_restores(kotiaurinko, monkeypatch, tmp_path):
     assert replaced["ok"] is False
     assert "tides" in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")  # bytes restored
     assert state.seq == 1
+
+
+# -- brain_write optimistic concurrency (spec/70 base_sha) --------------------------
+
+
+def test_write_stale_base_sha_conflicts_without_writing(kotiaurinko):
+    state = make_state(kotiaurinko)
+    before = (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+    result = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha="0" * 64)
+    assert result["ok"] is False
+    assert result["conflict"] is True
+    assert result["current_sha"] == sha256_hex(before.encode("utf-8"))
+    assert result["theirs"] == before
+    assert "re-read" in result["instruction"]
+    assert "merged" not in result  # no git base, no model → the manual path
+    assert (kotiaurinko / "kuu.md").read_text(encoding="utf-8") == before  # MUST NOT write
+    assert state.seq == 1
+
+
+def test_write_matching_base_sha_writes_normally(kotiaurinko):
+    state = make_state(kotiaurinko)
+    sha = sha256_hex((kotiaurinko / "kuu.md").read_bytes())
+    result = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha=sha)
+    assert result["ok"] is True
+    assert result["seq"] == 2
+    assert "rewritten" in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+
+
+def test_write_conflict_retry_with_current_sha_succeeds_and_bumps_seq(kotiaurinko):
+    state = make_state(kotiaurinko)
+    conflict = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha="0" * 64)
+    assert conflict["conflict"] is True
+    assert state.seq == 1
+    retry = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace",
+                          base_sha=conflict["current_sha"])
+    assert retry["ok"] is True
+    assert retry["seq"] == 2
+    assert state.seq == 2
+
+
+def test_write_omitted_base_sha_keeps_last_write_wins(kotiaurinko):
+    state = make_state(kotiaurinko)
+    result = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace")
+    assert result["ok"] is True  # today's behavior, untouched
+
+
+def test_write_base_sha_on_a_deleted_doc_conflicts(kotiaurinko):
+    state = make_state(kotiaurinko)
+    result = write_payload(state, "poistettu.md", "# X\n", mode="replace", base_sha="a" * 64)
+    assert result["ok"] is False
+    assert result["conflict"] is True
+    assert result["current_sha"] is None
+    assert result["theirs"] == ""
+    assert not (kotiaurinko / "poistettu.md").exists()
+
+
+def test_write_conflict_merged_proposal_from_the_configured_model(kotiaurinko):
+    (kotiaurinko / "brainpick.local.toml").write_text(
+        '[models.extraction]\nkind = "mock"\n', encoding="utf-8",
+    )
+    state = make_state(kotiaurinko)
+    result = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha="0" * 64)
+    assert result["conflict"] is True
+    assert result["merged"]["strategy"] == "llm"  # no git base → the two-input model merge
+    assert result["merged"]["content"] == KUU_REWRITE  # MockChat echoes the YOURS section
+    assert "proposal" in result["hint"]
+    assert "rewritten" not in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")  # never applied
+
+
+def test_write_conflict_insane_model_output_omits_merged(kotiaurinko, monkeypatch):
+    monkeypatch.setattr("brainpick.mcp_server.make_chat",
+                        lambda *_a, **_k: MockChat(reply="<<<<<<< broken\n"))
+    state = make_state(kotiaurinko)
+    result = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha="0" * 64)
+    assert result["conflict"] is True
+    assert "merged" not in result  # the sanity gate held — manual path
+
+
+def test_write_conflict_three_way_from_a_git_base(kotiaurinko):
+    def git(*args):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+             *args],
+            cwd=kotiaurinko, check=True, capture_output=True,
+        )
+
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    base_bytes = (kotiaurinko / "kuu.md").read_bytes()
+    base_text = base_bytes.decode("utf-8")
+
+    # A foreign writer edits the tides line after our writer read the doc.
+    theirs = base_text.replace(
+        "The moon pulls the tides of [Maa](maa.md).",
+        "The moon pulls the spring tides of [Maa](maa.md).",
+    )
+    (kotiaurinko / "kuu.md").write_text(theirs, encoding="utf-8")
+
+    state = make_state(kotiaurinko)
+    yours = base_text + "\n## Vaiheet\n\nNew moon, then full moon.\n"
+    result = write_payload(state, "kuu.md", yours, mode="replace",
+                           base_sha=sha256_hex(base_bytes))
+    assert result["conflict"] is True
+    assert result["merged"]["strategy"] == "three-way"  # git HEAD supplied the verified base
+    assert "spring tides" in result["merged"]["content"]  # their edit survives
+    assert "## Vaiheet" in result["merged"]["content"]    # your edit survives
+    assert "## Vaiheet" not in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")  # proposal only
+
+
+def test_write_conflict_budget_shapes_theirs(kotiaurinko):
+    state = make_state(kotiaurinko)
+    full = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha="0" * 64)
+    slim = write_payload(state, "kuu.md", KUU_REWRITE, mode="replace", base_sha="0" * 64,
+                         budget_tokens=40)
+    assert slim["truncated"] is True
+    assert len(slim["theirs"]) < len(full["theirs"])
+    assert slim["theirs"].endswith("…")
+    assert slim["current_sha"] == full["current_sha"]  # the retry key is never trimmed
 
 
 def test_write_henxels_missing_warns(kotiaurinko, monkeypatch, tmp_path):

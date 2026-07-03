@@ -14,12 +14,18 @@ from datetime import datetime, timezone
 from brainpick.compile.pipeline import _atomic_write
 from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
+from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
+from brainpick.llm import make_chat
+from brainpick.merge import find_base, resolve
 from brainpick.query.router import KNOWN_MODES, run_search
 from brainpick.serve.state import ServeState, bfs_neighborhood, jsonable, resolve_doc
 from brainpick.serve.watcher import recompile_and_broadcast
 WRITES_OFF_REFUSAL = (
     'writes are disabled here — set [serve] writes = "guarded" in brainpick.toml to enable brain_write'
+)
+CONFLICT_INSTRUCTION = (
+    "the doc changed since you read it — re-read, reconcile, retry with the new base_sha"
 )
 
 _HEADING = re.compile(r"^(#{1,6}) +(.+?)\s*$")
@@ -340,7 +346,40 @@ def _bump_timestamp(text: str, now: str) -> str:
     return f"---\ntimestamp: {now}\n---\n\n" + text
 
 
+def conflict_payload(state: ServeState, rel: str, previous: bytes, yours: str, base_sha: str,
+                     budget_tokens: int | None) -> dict:
+    """The spec/70 conflict shape — nothing was written. `merged`, when the
+    resolution ladder produced one, is a PROPOSAL and is never auto-applied."""
+    budget = budget_tokens or 2000
+    theirs = previous.decode("utf-8", errors="replace")
+    current_sha = sha256_hex(previous)
+    result = {
+        "ok": False,
+        "conflict": True,
+        "current_sha": current_sha,
+        "theirs": theirs,
+        "truncated": False,
+        "instruction": CONFLICT_INSTRUCTION,
+        "hint": f"reconcile against theirs, then brain_write again with base_sha '{current_sha}'.",
+    }
+    proposal = resolve(find_base(state.root, rel, base_sha), theirs, yours,
+                       make_chat(state.config.models.extraction))
+    if proposal is not None:
+        result["merged"] = proposal
+        result["hint"] = (f"merged is a {proposal['strategy']} proposal, NOT applied — review it, "
+                          f"then brain_write it with base_sha '{current_sha}'.")
+    # Only theirs is budget-shaped; a trimmed merged proposal would be a corrupted write-back.
+    if tokens_of(result) > budget:
+        overhead = tokens_of({**result, "theirs": ""})
+        allowed = max(160, (budget - overhead) * 4)
+        if len(theirs) > allowed:
+            result["theirs"] = theirs[:allowed].rsplit(" ", 1)[0] + " …"
+            result["truncated"] = True
+    return result
+
+
 def write_payload(state: ServeState, doc: str, content: str, mode: str = "create",
+                  base_sha: str | None = None, budget_tokens: int | None = None,
                   refusal: str | None = None) -> dict:
     if refusal:
         return {"ok": False, "instruction": refusal}
@@ -352,11 +391,23 @@ def write_payload(state: ServeState, doc: str, content: str, mode: str = "create
         return {"ok": False, "instruction": problem}
     target = state.root / rel
     previous = target.read_bytes() if target.is_file() else None
+    text = content if content.endswith("\n") else content + "\n"
+
+    # Optimistic concurrency (spec/70): a mismatched base_sha means the writer's
+    # knowledge is stale — the server MUST NOT write. Omitted = last-write-wins.
+    if base_sha:
+        if previous is None:
+            return {"ok": False, "conflict": True, "current_sha": None, "theirs": "",
+                    "instruction": "the doc was deleted since you read it — "
+                                   "re-create it with brain_write, without base_sha",
+                    "hint": "brain_search can confirm whether it moved instead."}
+        if sha256_hex(previous) != base_sha:
+            return conflict_payload(state, rel, previous, text, base_sha, budget_tokens)
+
     if mode == "create" and previous is not None:
         return {"ok": False,
                 "instruction": f"'{rel}' already exists — use mode 'replace' or 'append_section'"}
 
-    text = content if content.endswith("\n") else content + "\n"
     if mode == "append_section" and previous is not None:
         text = previous.decode("utf-8", errors="replace").rstrip("\n") + "\n\n" + text
     _atomic_write(target, text.encode("utf-8"))
@@ -432,11 +483,16 @@ def create_mcp_server(state: ServeState, write_refusal: str | None = None):
         return neighbors_payload(state, doc, depth, layer, budget_tokens)
 
     @server.tool()
-    def brain_write(doc: str, content: str, mode: str = "create") -> dict:
+    def brain_write(doc: str, content: str, mode: str = "create",
+                    base_sha: str | None = None, budget_tokens: int | None = None) -> dict:
         """Write a markdown doc into the bundle, guarded by its henxels contract. mode is
-        create (default, never overwrites), replace, or append_section. On a contract
-        violation nothing changes and instruction says exactly what to fix."""
-        return write_payload(state, doc, content, mode, refusal=write_refusal)
+        create (default, never overwrites), replace, or append_section. Pass base_sha
+        (the sha256 of the content you last read) to catch concurrent edits: on a
+        mismatch nothing is written and the result returns the current content, its
+        current_sha to retry with, and — when resolvable — a merged proposal. On a
+        contract violation nothing changes and instruction says exactly what to fix."""
+        return write_payload(state, doc, content, mode, base_sha=base_sha,
+                             budget_tokens=budget_tokens, refusal=write_refusal)
 
     @server.resource("brain://index")
     def brain_index() -> str:

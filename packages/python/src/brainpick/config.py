@@ -1,4 +1,6 @@
-"""brainpick.toml (spec/80): defaults when absent, env overrides, unknown keys warn."""
+"""brainpick.toml layered under brainpick.local.toml (spec/80): defaults when
+absent, the machine-local layer deep-merged over the shared one, env overrides
+on top, unknown keys warn."""
 from __future__ import annotations
 
 import os
@@ -11,6 +13,9 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
+
+CONFIG_FILE = "brainpick.toml"              # shared, versioned bundle policy
+LOCAL_CONFIG_FILE = "brainpick.local.toml"  # machine-local endpoints — gitignored
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _FALSY = {"0", "false", "no", "off"}
@@ -60,8 +65,20 @@ class EmbeddingConfig:
 
 
 @dataclass
+class ExtractionConfig:
+    """[models.extraction] — the chat model that powers T3 and doubles as the
+    merge resolver for stale brain_writes (spec/70)."""
+
+    kind: str = ""         # ollama | openai-compatible | mock (test hook)
+    endpoint: str = ""
+    model: str = ""
+    api_key_env: str = ""  # names an env var holding the key — never the key itself
+
+
+@dataclass
 class ModelsConfig:
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
 
 
 @dataclass
@@ -76,6 +93,7 @@ class Config:
 
 
 _SECTIONS = ("bundle", "index", "modules", "serve", "validate")
+_MODEL_TABLES = ("embedding", "extraction")
 # [models.*] tables are nested and handled separately below.
 _KNOWN_TOP = {"spec", "models", *_SECTIONS}
 
@@ -116,26 +134,78 @@ def _from_env(current, raw: str):
     return raw
 
 
+def config_layers(root: str | Path) -> list[Path]:
+    """The layer files present at root, weakest first (spec/80 precedence)."""
+    root = Path(root)
+    return [root / name for name in (CONFIG_FILE, LOCAL_CONFIG_FILE) if (root / name).is_file()]
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Tables merge recursively; scalars and lists replace (spec/80 layering)."""
+    merged = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _warn_unknown(filename: str, data: dict, defaults: Config) -> None:
+    """Per-layer unknown-key warnings — a newer brainpick's config never bricks this one."""
+    for key in data:
+        if key not in _KNOWN_TOP:
+            warnings.warn(f"{filename}: unknown key '{key}' — ignored", stacklevel=3)
+    for section_name in _SECTIONS:
+        table = data.get(section_name)
+        if not isinstance(table, dict):
+            continue
+        section = getattr(defaults, section_name)
+        for key in table:
+            if not hasattr(section, key):
+                warnings.warn(f"{filename}: unknown key [{section_name}] {key} — ignored",
+                              stacklevel=3)
+    models = data.get("models")
+    if not isinstance(models, dict):
+        return
+    for table_name, table in models.items():
+        if table_name not in _MODEL_TABLES:
+            warnings.warn(f"{filename}: unknown table [models.{table_name}] — ignored", stacklevel=3)
+            continue
+        if not isinstance(table, dict):
+            continue
+        model = getattr(defaults.models, table_name)
+        for key in table:
+            if not hasattr(model, key):
+                warnings.warn(f"{filename}: unknown key [models.{table_name}] {key} — ignored",
+                              stacklevel=3)
+
+
+def _read_layers(root: Path, defaults: Config) -> dict:
+    data: dict = {}
+    for path in (root / CONFIG_FILE, root / LOCAL_CONFIG_FILE):
+        if not path.is_file():
+            continue
+        try:
+            layer = tomllib.loads(path.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as error:
+            warnings.warn(f"{path.name} is not valid TOML ({error}) — layer ignored", stacklevel=3)
+            continue
+        _warn_unknown(path.name, layer, defaults)
+        data = _deep_merge(data, layer)
+    return data
+
+
 def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Config:
-    """Read <root>/brainpick.toml; absent file means all defaults (zero-config bundles)."""
+    """<root>/brainpick.toml deep-merged under brainpick.local.toml; absent files
+    mean all defaults (zero-config bundles); env (`BRAINPICK_*`) beats both layers."""
     root = Path(root)
     env = os.environ if env is None else env
     config = Config()
 
-    path = root / "brainpick.toml"
-    data: dict = {}
-    if path.is_file():
-        try:
-            data = tomllib.loads(path.read_text(encoding="utf-8"))
-        except tomllib.TOMLDecodeError as error:
-            warnings.warn(f"brainpick.toml is not valid TOML ({error}) — using defaults", stacklevel=2)
-            data = {}
-
+    data = _read_layers(root, config)
     if "spec" in data:
         config.spec = str(data["spec"])
-    for key in data:
-        if key not in _KNOWN_TOP:
-            warnings.warn(f"brainpick.toml: unknown key '{key}' — ignored", stacklevel=2)
 
     for section_name in _SECTIONS:
         section = getattr(config, section_name)
@@ -143,31 +213,19 @@ def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Confi
         if not isinstance(table, dict):
             continue
         for key, value in table.items():
-            if not hasattr(section, key):
-                warnings.warn(
-                    f"brainpick.toml: unknown key [{section_name}] {key} — ignored", stacklevel=2,
-                )
-                continue
-            setattr(section, key, _coerce(getattr(section, key), value))
+            if hasattr(section, key):
+                setattr(section, key, _coerce(getattr(section, key), value))
 
     models = data.get("models")
     if isinstance(models, dict):
-        for table_name, table in models.items():
-            if table_name != "embedding":
-                warnings.warn(f"brainpick.toml: unknown table [models.{table_name}] — ignored",
-                              stacklevel=2)
-                continue
+        for table_name in _MODEL_TABLES:
+            table = models.get(table_name)
             if not isinstance(table, dict):
                 continue
+            model = getattr(config.models, table_name)
             for key, value in table.items():
-                if not hasattr(config.models.embedding, key):
-                    warnings.warn(
-                        f"brainpick.toml: unknown key [models.embedding] {key} — ignored",
-                        stacklevel=2,
-                    )
-                    continue
-                current = getattr(config.models.embedding, key)
-                setattr(config.models.embedding, key, _coerce(current, value))
+                if hasattr(model, key):
+                    setattr(model, key, _coerce(getattr(model, key), value))
 
     for section_name in _SECTIONS:
         section = getattr(config, section_name)
@@ -176,10 +234,11 @@ def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Confi
             if raw is not None:
                 setattr(section, key, _from_env(getattr(section, key), raw))
 
-    for key in vars(config.models.embedding):
-        raw = env.get(f"BRAINPICK_MODELS_EMBEDDING_{key.upper()}")
-        if raw is not None:
-            current = getattr(config.models.embedding, key)
-            setattr(config.models.embedding, key, _from_env(current, raw))
+    for table_name in _MODEL_TABLES:
+        model = getattr(config.models, table_name)
+        for key in vars(model):
+            raw = env.get(f"BRAINPICK_MODELS_{table_name.upper()}_{key.upper()}")
+            if raw is not None:
+                setattr(model, key, _from_env(getattr(model, key), raw))
 
     return config

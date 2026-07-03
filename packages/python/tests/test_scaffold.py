@@ -68,6 +68,19 @@ def test_init_never_clobbers_an_existing_config(kotiaurinko, capsys):
     out = capsys.readouterr().out
     assert (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8") == marker
     assert "left untouched" in out
+    # the machine-local layer is independent: the detected backend still lands there
+    local = (kotiaurinko / "brainpick.local.toml").read_text(encoding="utf-8")
+    assert 'kind = "ollama"' in local
+
+
+def test_init_never_clobbers_an_existing_local_config(kotiaurinko, capsys):
+    marker = '# hand-tuned\n[models.embedding]\nkind = "mock"\n'
+    (kotiaurinko / "brainpick.local.toml").write_text(marker, encoding="utf-8")
+    assert run_init(kotiaurinko, env={}, probes=OLLAMA_FOUND) == 0
+    out = capsys.readouterr().out
+    assert (kotiaurinko / "brainpick.local.toml").read_text(encoding="utf-8") == marker
+    assert "brainpick.local.toml exists" in out
+    assert "pin the detected backend yourself" in out
 
 
 def test_init_dry_run_writes_nothing(kotiaurinko, capsys):
@@ -95,15 +108,25 @@ def test_init_missing_root_is_an_instruction(tmp_path, capsys):
     assert "olematon" in capsys.readouterr().out
 
 
-def test_init_records_a_detected_backend(kotiaurinko, capsys):
+def test_init_records_a_detected_backend_in_the_local_layer(kotiaurinko, capsys):
     assert run_init(kotiaurinko, env={}, probes=OLLAMA_FOUND) == 0
     out = capsys.readouterr().out
-    config_text = (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
-    assert "[models.embedding]" in config_text
-    assert 'kind = "ollama"' in config_text
-    assert 'endpoint = "http://127.0.0.1:11434"' in config_text
-    assert 'model = "nomic-embed-text:latest"' in config_text
+    # personal endpoints never land in the shared, committable file (spec/80)
+    shared = (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
+    assert "[models.embedding]" not in shared
+    assert "http://127.0.0.1:11434" not in shared
+    local = (kotiaurinko / "brainpick.local.toml").read_text(encoding="utf-8")
+    assert "[models.embedding]" in local
+    assert 'kind = "ollama"' in local
+    assert 'endpoint = "http://127.0.0.1:11434"' in local
+    assert 'model = "nomic-embed-text:latest"' in local
     assert "nomic-embed-text" in out
+    assert "brainpick.local.toml" in out
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        cfg = load_config(kotiaurinko)
+    assert caught == []  # both templates must be fully known to the loader
+    assert cfg.models.embedding.kind == "ollama"  # the layers merge into one config
 
 
 def test_init_offers_the_pull_when_ollama_is_modelless(kotiaurinko, capsys):
@@ -113,6 +136,7 @@ def test_init_offers_the_pull_when_ollama_is_modelless(kotiaurinko, capsys):
     out = capsys.readouterr().out
     assert "ollama pull nomic-embed-text" in out
     assert "[models.embedding]" not in (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
+    assert not (kotiaurinko / "brainpick.local.toml").exists()  # nothing local to record
 
 
 def test_init_openai_key_stays_opt_in_without_yes(kotiaurinko, capsys):
@@ -122,16 +146,18 @@ def test_init_openai_key_stays_opt_in_without_yes(kotiaurinko, capsys):
     assert "OPENAI_API_KEY" in out
     assert "--yes" in out  # the instruction to opt in
     assert "[models.embedding]" not in (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
+    assert not (kotiaurinko / "brainpick.local.toml").exists()
 
 
 def test_init_openai_key_recorded_with_yes(kotiaurinko):
     env = {"OPENAI_API_KEY": "sk-test"}
     assert run_init(kotiaurinko, yes=True, env=env, probes=NO_BACKENDS) == 0
-    config_text = (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
-    assert 'kind = "openai"' in config_text
+    assert "[models.embedding]" not in (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
+    local = (kotiaurinko / "brainpick.local.toml").read_text(encoding="utf-8")
+    assert 'kind = "openai"' in local
 
 
-def test_init_suggests_gitignore_line_without_editing(tmp_path, capsys):
+def test_init_suggests_gitignore_lines_without_editing(tmp_path, capsys):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
     gitignore = repo / ".gitignore"
@@ -140,13 +166,25 @@ def test_init_suggests_gitignore_line_without_editing(tmp_path, capsys):
     assert run_init(bundle, env={}, probes=NO_BACKENDS) == 0
     out = capsys.readouterr().out
     assert ".brainpick/" in out
+    assert "brainpick.local.toml" in out  # the machine-local layer stays personal
     assert gitignore.read_text(encoding="utf-8") == "node_modules/\n"  # suggested, not edited
+
+
+def test_init_suggests_only_the_missing_gitignore_line(tmp_path, capsys):
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    (repo / ".gitignore").write_text(".brainpick/\n", encoding="utf-8")
+    bundle = typed_bundle(repo / "wiki")
+    assert run_init(bundle, env={}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert "brainpick.local.toml" in out
+    assert ".brainpick/" not in out  # only the missing line is suggested
 
 
 def test_init_skips_gitignore_suggestion_when_covered(tmp_path, capsys):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    (repo / ".gitignore").write_text(".brainpick/\n", encoding="utf-8")
+    (repo / ".gitignore").write_text(".brainpick/\n**/brainpick.local.toml\n", encoding="utf-8")
     bundle = typed_bundle(repo / "wiki")
     assert run_init(bundle, env={}, probes=NO_BACKENDS) == 0
     assert ".gitignore" not in capsys.readouterr().out
@@ -204,6 +242,29 @@ def test_doctor_vectors_line_names_the_missing_extra(kotiaurinko, capsys, monkey
     capsys.readouterr()
     assert run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS) == 0  # optional, never a failure
     assert "brainpick[vectors]" in capsys.readouterr().out
+
+
+def test_doctor_reports_every_config_layer(kotiaurinko, capsys):
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    (kotiaurinko / "brainpick.local.toml").write_text(
+        '[models.embedding]\nkind = "mock"\n', encoding="utf-8",
+    )
+    capsys.readouterr()
+    assert run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert "config: brainpick.toml parses" in out
+    assert "brainpick.local.toml parses" in out
+    assert "machine-local" in out
+
+
+def test_doctor_broken_local_layer_fails_with_instruction(kotiaurinko, capsys):
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    (kotiaurinko / "brainpick.local.toml").write_text("not = [toml\n", encoding="utf-8")
+    capsys.readouterr()
+    assert run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS) == 1
+    out = capsys.readouterr().out
+    assert "config: brainpick.toml parses" in out  # the healthy layer still reports
+    assert "✗ config: brainpick.local.toml" in out
 
 
 def test_doctor_defaults_apply_without_config(kotiaurinko, capsys):

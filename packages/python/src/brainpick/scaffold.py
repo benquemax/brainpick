@@ -20,7 +20,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from brainpick.compile.pipeline import check_fresh, run_compile
-from brainpick.config import load_config
+from brainpick.config import LOCAL_CONFIG_FILE, config_layers, load_config
 from brainpick.vectorstore import lancedb_available
 from brainpick.detect import (
     Backend,
@@ -52,6 +52,8 @@ PULL_HINT = "ollama pull nomic-embed-text"
 
 _CONFIG_TEMPLATE = """\
 # brainpick.toml — written by `brainpick init`; every key is optional (spec 0.1).
+# SHARED bundle policy, safe to commit. Machine-local values (model endpoints,
+# tokens) belong in brainpick.local.toml beside it — deep-merged over this file.
 # Env overrides: BRAINPICK_<SECTION>_<KEY>. CLI flags override both.
 spec = "0.1"
 
@@ -79,7 +81,20 @@ token = ""                        # required for non-localhost binds
 
 [validate]
 henxels = "auto"                  # auto | always | never — honor a henxels contract when present
-{embedding}"""
+"""
+
+_LOCAL_CONFIG_TEMPLATE = """\
+# brainpick.local.toml — written by `brainpick init`; MACHINE-LOCAL values only.
+# Deep-merges over the shared brainpick.toml. Keep it out of version control —
+# a public bundle's readers do not share your LAN.
+
+[models.embedding]                # detected at init; T2 embeds with it
+kind = "{kind}"
+endpoint = "{endpoint}"
+model = "{model}"
+"""
+
+GITIGNORE_LINES = (".brainpick/", "brainpick.local.toml")
 
 
 def is_fancy(stream=None, env: Mapping[str, str] | None = None) -> bool:
@@ -135,17 +150,16 @@ def brainpick_command() -> list[str]:
     return ["uvx", "brainpick"]  # published: uvx resolves it from the index
 
 
-def render_config(backend: Backend | None) -> str:
-    if backend is None:
-        embedding = ""
-    else:
-        embedding = (
-            "\n[models.embedding]                # detected at init; T2 embeds with it\n"
-            f'kind = "{backend.kind}"\n'
-            f'endpoint = "{backend.endpoint}"\n'
-            f'model = "{backend.model}"\n'
-        )
-    return _CONFIG_TEMPLATE.format(embedding=embedding)
+def render_config() -> str:
+    """The shared brainpick.toml — bundle policy only, endpoint-free by design."""
+    return _CONFIG_TEMPLATE
+
+
+def render_local_config(backend: Backend) -> str:
+    """The machine-local brainpick.local.toml carrying the detected endpoint."""
+    return _LOCAL_CONFIG_TEMPLATE.format(
+        kind=backend.kind, endpoint=backend.endpoint, model=backend.model,
+    )
 
 
 def _indent(text: str, prefix: str = "    ") -> str:
@@ -184,17 +198,20 @@ def henxels_fragment(contract: Path, bundle: Path) -> str:
     )
 
 
-def gitignore_suggestion(bundle: Path) -> Path | None:
-    """The repo .gitignore that should learn `.brainpick/` — or None if covered/absent."""
+def gitignore_suggestion(bundle: Path) -> tuple[Path, list[str]] | None:
+    """The repo .gitignore and the lines it should learn — `.brainpick/` (disposable
+    artifacts) and `brainpick.local.toml` (personal endpoints). None if covered/absent."""
     repo = find_repo_root(bundle)
     if repo is None:
         return None
     gitignore = repo / ".gitignore"
     if not gitignore.is_file():
         return None
-    if ".brainpick" in gitignore.read_text(encoding="utf-8", errors="replace"):
+    text = gitignore.read_text(encoding="utf-8", errors="replace")
+    missing = [line for line in GITIGNORE_LINES if line.rstrip("/") not in text]
+    if not missing:
         return None
-    return gitignore
+    return gitignore, missing
 
 
 # -- init --------------------------------------------------------------------------
@@ -297,28 +314,41 @@ def run_init(
         if (root / "brainpick.toml").exists():
             voice.step("• keep the existing brainpick.toml (never rewritten)")
         else:
-            voice.step("• write brainpick.toml at the bundle root"
-                       + (" (recording the detected embedding backend)" if backend else ""))
+            voice.step("• write brainpick.toml at the bundle root (shared policy, endpoint-free)")
+        if backend is not None:
+            if (root / "brainpick.local.toml").exists():
+                voice.step("• keep the existing brainpick.local.toml (never rewritten)")
+            else:
+                voice.step("• write brainpick.local.toml recording the detected embedding backend")
         voice.step("• compile T1 into .brainpick/ and manage the index.md section")
         voice.step("• print the MCP snippets and the serve command")
         return 0
 
-    # 5 — config (written once; an existing config is the user's, not ours)
+    # 5 — config (written once; an existing config is the user's, not ours).
+    # Shared policy and machine-local endpoints are separate layers (spec/80).
     config_path = root / "brainpick.toml"
     if config_path.exists():
         voice.line("○", "config: brainpick.toml exists — left untouched")
-        if backend is not None:
+    else:
+        config_path.write_text(render_config(), encoding="utf-8")
+        voice.line("✓", "config: brainpick.toml written (shared policy — endpoints stay local)")
+
+    if backend is not None:
+        local_path = root / "brainpick.local.toml"
+        if local_path.exists():
+            voice.line("○", "config: brainpick.local.toml exists — left untouched")
             voice.step(f'pin the detected backend yourself: [models.embedding] '
                        f'kind = "{backend.kind}", model = "{backend.model}"')
-    else:
-        config_path.write_text(render_config(backend), encoding="utf-8")
-        recorded = " ([models.embedding] recorded)" if backend is not None else ""
-        voice.line("✓", f"config: brainpick.toml written{recorded}")
+        else:
+            local_path.write_text(render_local_config(backend), encoding="utf-8")
+            voice.line("✓", "config: brainpick.local.toml written ([models.embedding] recorded)")
 
-    gitignore = gitignore_suggestion(root)
-    if gitignore is not None:
-        voice.line("○", f"compiled artifacts are disposable — add to {gitignore} yourself:")
-        voice.step(".brainpick/")
+    suggestion = gitignore_suggestion(root)
+    if suggestion is not None:
+        gitignore, missing = suggestion
+        voice.line("○", f"artifacts are disposable, endpoints personal — add to {gitignore} yourself:")
+        for line in missing:
+            voice.step(line)
 
     # 6 — compile T1
     result = run_compile(root)
@@ -365,17 +395,18 @@ def run_doctor(
         if mark == "✗":
             failed = True
 
-    # config parses (or defaults)
-    config_path = root / "brainpick.toml"
-    if not config_path.is_file():
+    # config layers parse (or defaults) — spec/80: shared file + machine-local overlay
+    layers = config_layers(root)
+    if not layers:
         emit("✓", "config: none — defaults apply (a bundle needs zero config)")
-    else:
+    for config_path in layers:
+        note = " (machine-local layer)" if config_path.name == LOCAL_CONFIG_FILE else ""
         try:
             tomllib.loads(config_path.read_text(encoding="utf-8"))
-            emit("✓", "config: brainpick.toml parses")
+            emit("✓", f"config: {config_path.name} parses{note}")
         except tomllib.TOMLDecodeError as error:
-            emit("✗", f"config: brainpick.toml is not valid TOML ({error})",
-                 f"fix the syntax in {config_path} — the engine falls back to defaults meanwhile")
+            emit("✗", f"config: {config_path.name} is not valid TOML ({error})",
+                 f"fix the syntax in {config_path} — the engine skips this layer meanwhile")
 
     # bundle
     bundle = detect_bundle(root) if root.is_dir() else BundleInfo("none", 0, 0)

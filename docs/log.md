@@ -2,6 +2,9 @@
 
 ## 2026-07-03
 
+- Updated: writes learned optimistic concurrency — stale saves are detected by
+  content hash and resolved by a merge ladder that ends in the brain's own
+  model proposing the merge.
 - Updated: the cosmos got its game HUD — search modes (keyword/semantic/auto)
   in the UI, lenses, camera bookmarks, calmer glow.
 - Updated: the Node engine reached T2 — same chunks, same vectors, same hybrid

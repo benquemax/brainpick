@@ -39,7 +39,7 @@ leading excerpt + hint to request `sections`. Default budget 2000.
 `{"center", "nodes": [{"path", "title", "description", "distance"}],
 "edges": [{"source", "target", "kind"}], "hint"}`. Default budget 800.
 
-## brain_write({doc, content, mode?})
+## brain_write({doc, content, mode?, base_sha?})
 
 `mode ∈ create|replace|append_section` (default `create`). The guarded
 write path:
@@ -53,6 +53,26 @@ write path:
 4. Pass → bump frontmatter `timestamp` (creating it if absent), trigger an
    incremental compile, emit the delta. → `{"ok": true, "path", "seq",
    "hint"}`.
+
+**Optimistic concurrency (`base_sha`)**: writers SHOULD pass the sha256 of
+the doc content they last read (available from the manifest, `docs.jsonl`,
+or a future read response). When `base_sha` is present and differs from the
+current file's sha256, the server MUST NOT write. It returns
+`{ok: false, conflict: true, current_sha, theirs: <current content,
+budget-shaped>, instruction: "the doc changed since you read it — re-read,
+reconcile, retry with the new base_sha"}` — plus, when resolution is
+possible, `merged: {content, strategy}` as a PROPOSAL (never auto-applied):
+
+1. `strategy: "three-way"` — mechanical merge when base is known (git
+   history or cached) and the edits do not overlap;
+2. `strategy: "llm"` — a single-shot smart merge of base/theirs/yours
+   through the configured `[models.extraction]` chat model, when one is
+   configured — prose merges badly mechanically, so the model the brain
+   already has doubles as the merge tool;
+3. neither available → conflict response without `merged` (manual path).
+
+Omitting `base_sha` preserves today's last-write-wins (writes stay
+serialized server-side either way).
 
 Servers expose `brain_write` only when config `[serve] writes = "guarded"`
 (default) and, on non-localhost binds, only with a valid bearer token.

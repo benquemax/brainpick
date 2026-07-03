@@ -1,0 +1,5 @@
+# brainpick.toml — how this wiki is compiled and served (SHARED policy, committed).
+# Machine-local model endpoints live in brainpick.local.toml beside this file —
+# it deep-merges over this one and stays out of git.
+# Delete .brainpick/ any time; `brainpick compile` rebuilds everything.
+spec = "0.1"

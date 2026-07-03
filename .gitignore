@@ -34,5 +34,5 @@ packages/node/static/*
 test-results/
 playwright-report/
 
-# machine-local bundle config (personal endpoints — the shared layer is a parked design)
-docs/brainpick.toml
+# machine-local bundle config (personal endpoints — the shared brainpick.toml is committable)
+**/brainpick.local.toml

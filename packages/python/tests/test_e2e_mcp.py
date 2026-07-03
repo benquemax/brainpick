@@ -103,3 +103,49 @@ def test_mcp_semantic_search_over_mock_vectors(kotiaurinko):
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["tiers"]["t2"] == "fresh"
     asyncio.run(_semantic_scenario(kotiaurinko))
+
+
+KUU_REWRITE = (
+    "---\ntype: Concept\ntags: [kuu]\ntimestamp: 2026-06-15T08:30:00Z\n---\n\n"
+    "# Kuu\n\nThe moon pulls the tides of [Maa](maa.md), rewritten.\n"
+)
+
+
+async def _conflict_scenario(root):
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "brainpick", "mcp", "--root", str(root)],
+    )
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            stale = await _call(session, "brain_write", {
+                "doc": "kuu.md", "content": KUU_REWRITE, "mode": "replace",
+                "base_sha": "0" * 64,
+            })
+            assert stale["ok"] is False
+            assert stale["conflict"] is True
+            assert stale["current_sha"]
+            assert "tides" in stale["theirs"]  # the current content came back
+            # the mock extraction model (configured via brainpick.local.toml) proposed a merge
+            assert stale["merged"]["strategy"] == "llm"
+            assert stale["merged"]["content"] == KUU_REWRITE
+
+            retry = await _call(session, "brain_write", {
+                "doc": "kuu.md", "content": KUU_REWRITE, "mode": "replace",
+                "base_sha": stale["current_sha"],
+            })
+            assert retry["ok"] is True
+            assert retry["seq"] == 2
+
+
+def test_mcp_write_conflict_roundtrip(kotiaurinko):
+    # the machine-local layer configures the merge model — layering through the real CLI
+    (kotiaurinko / "brainpick.local.toml").write_text(
+        '[models.extraction]\nkind = "mock"\n', encoding="utf-8",
+    )
+    run_compile(kotiaurinko)
+    asyncio.run(_conflict_scenario(kotiaurinko))
+    assert "rewritten" in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+    manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["seq"] == 2
