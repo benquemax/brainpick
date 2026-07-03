@@ -74,6 +74,18 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_init(args: argparse.Namespace) -> int:
+    from brainpick.scaffold import run_init
+
+    return run_init(Path(args.root), yes=args.yes, dry_run=args.dry_run)
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from brainpick.scaffold import run_doctor
+
+    return run_doctor(Path(args.root))
+
+
 def _cmd_mcp(args: argparse.Namespace) -> int:
     # stdio is the protocol channel: nothing may print to stdout here
     from brainpick.config import load_config
@@ -117,6 +129,18 @@ def main(argv: list[str] | None = None) -> int:
     p_mcp = sub.add_parser("mcp", help="speak MCP over stdio (for agent hosts)")
     p_mcp.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_mcp.set_defaults(func=_cmd_mcp)
+
+    p_init = sub.add_parser("init", help="detect the bundle and backends, write config, compile T1")
+    p_init.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_init.add_argument("--yes", action="store_true",
+                        help="accept the opt-in choices (e.g. record OPENAI_API_KEY for T2)")
+    p_init.add_argument("--dry-run", action="store_true",
+                        help="print what init would do without writing anything")
+    p_init.set_defaults(func=_cmd_init)
+
+    p_doctor = sub.add_parser("doctor", help="diagnose config, bundle, artifacts, backends, and UI")
+    p_doctor.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_doctor.set_defaults(func=_cmd_doctor)
 
     args = parser.parse_args(argv)
     return args.func(args)

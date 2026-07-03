@@ -2,6 +2,9 @@
 
 ## 2026-07-03
 
+- Updated: onboarding landed — brainpick init detects the bundle and local
+  models, writes config, compiles, and hands out MCP snippets; doctor
+  diagnoses; Playwright now exercises the real server end to end.
 - Updated: the Python engine learned to serve — REST, live SSE deltas, the web
   UI, and MCP over stdio and streamable HTTP, with guarded writes.
 

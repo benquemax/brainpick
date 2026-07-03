@@ -29,3 +29,7 @@ packages/node/static/*
 
 # playwright-mcp browser session debris (agent verification runs)
 .playwright-mcp/
+
+# playwright e2e run output (packages/webui)
+test-results/
+playwright-report/

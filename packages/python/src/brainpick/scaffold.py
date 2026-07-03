@@ -1,0 +1,441 @@
+"""`brainpick init` and `brainpick doctor` (docs/onboarding.md): detect, propose,
+compile, glow — and never interrogate.
+
+Henxels-family voice: a box banner and colors on a TTY, plain lines in pipes, and
+every error is an instruction. init never rewrites what it does not own — existing
+configs, .gitignore, and henxels.yaml get paste-able fragments, not edits.
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Mapping
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    import tomli as tomllib
+
+from brainpick.compile.pipeline import check_fresh, run_compile
+from brainpick.detect import (
+    Backend,
+    BundleInfo,
+    detect_bundle,
+    detect_henxels,
+    detect_link_style,
+    find_repo_root,
+    henxels_on_path,
+    openai_key_present,
+    probe_backends,
+)
+
+_RESET = "\033[0m"
+_GREEN = "\033[32m"
+_RED = "\033[31m"
+_CYAN = "\033[36m"
+_DIM = "\033[2m"
+
+BANNER = r"""   ╭──────────────────╮
+   │    ◉ ─── ◉       │   brainpick
+   │     ╲   ╱        │   pick your agent's brain
+   │  ◉ ─── ◉ ─── ◉   │   compile · serve · glow
+   ╰──────────────────╯"""
+
+OPENAI_ENDPOINT = "https://api.openai.com/v1"
+OPENAI_DEFAULT_MODEL = "text-embedding-3-small"
+PULL_HINT = "ollama pull nomic-embed-text"
+
+_CONFIG_TEMPLATE = """\
+# brainpick.toml — written by `brainpick init`; every key is optional (spec 0.1).
+# Env overrides: BRAINPICK_<SECTION>_<KEY>. CLI flags override both.
+spec = "0.1"
+
+[bundle]
+root = "."                        # the bundle lives right here
+include = ["**/*.md"]
+exclude = []                      # .brainpick/, .git/, _temp/, node_modules/ always excluded
+
+[index]
+mode = "section"                  # manage | section | off — how index.md is maintained
+file = "index.md"
+
+[modules]                         # T1 always compiles; the deeper tiers are switchable
+vectors = "auto"                  # auto | on | off — T2 semantic search (lands in M2)
+graph = "off"                     # auto | on | off — T3 entity graph (lands in M3)
+ui = true
+
+[serve]
+host = "127.0.0.1"
+port = 4747
+transports = ["streamable-http"]  # add "sse" for the legacy transport
+watch = true                      # recompile when bundle files change
+writes = "guarded"                # guarded | off — agent writes are validated, never blind
+token = ""                        # required for non-localhost binds
+
+[validate]
+henxels = "auto"                  # auto | always | never — honor a henxels contract when present
+{embedding}"""
+
+
+def is_fancy(stream=None, env: Mapping[str, str] | None = None) -> bool:
+    env = os.environ if env is None else env
+    if env.get("NO_COLOR") or env.get("CI") or env.get("BRAINPICK_PLAIN"):
+        return False
+    stream = sys.stdout if stream is None else stream
+    return bool(getattr(stream, "isatty", lambda: False)())
+
+
+class _Voice:
+    """✓/○/✗ lines — colored on a TTY, identical but plain in pipes."""
+
+    def __init__(self, env: Mapping[str, str]):
+        self.fancy = is_fancy(env=env)
+
+    def _c(self, text: str, code: str) -> str:
+        return f"{code}{text}{_RESET}" if self.fancy else text
+
+    def banner(self) -> None:
+        if self.fancy:
+            print(self._c(BANNER, _CYAN))
+            print()
+
+    def line(self, mark: str, text: str) -> None:
+        color = {"✓": _GREEN, "✗": _RED, "○": _DIM}.get(mark, "")
+        print(f"{self._c(mark, color)} {text}")
+
+    def arrow(self, text: str) -> None:
+        print(f"    {self._c('→ ' + text, _CYAN)}")
+
+    def step(self, text: str) -> None:
+        print(f"    {text}")
+
+    def raw(self, text: str = "") -> None:
+        print(text)
+
+
+# -- paths and paste-ables ---------------------------------------------------------
+
+
+def _package_project_dir() -> Path | None:
+    """This checkout's packages/python — present in dev, absent in installed wheels."""
+    project = Path(__file__).resolve().parents[2]
+    return project if (project / "pyproject.toml").is_file() else None
+
+
+def brainpick_command() -> list[str]:
+    """A brainpick invocation that works from anywhere, for this installation."""
+    project = _package_project_dir()
+    if project is not None:
+        return ["uv", "run", "--project", str(project), "brainpick"]
+    return ["uvx", "brainpick"]  # published: uvx resolves it from the index
+
+
+def render_config(backend: Backend | None) -> str:
+    if backend is None:
+        embedding = ""
+    else:
+        embedding = (
+            "\n[models.embedding]                # detected at init; T2 lights it up (M2)\n"
+            f'kind = "{backend.kind}"\n'
+            f'endpoint = "{backend.endpoint}"\n'
+            f'model = "{backend.model}"\n'
+        )
+    return _CONFIG_TEMPLATE.format(embedding=embedding)
+
+
+def _indent(text: str, prefix: str = "    ") -> str:
+    return "\n".join(prefix + line for line in text.splitlines())
+
+
+def mcp_snippets(bundle: Path) -> str:
+    command = brainpick_command() + ["mcp", "--root", str(bundle)]
+    generic = {"mcpServers": {"brainpick": {"command": command[0], "args": command[1:]}}}
+    opencode = {"mcp": {"brainpick": {"type": "local", "command": command, "enabled": True}}}
+    parts = [
+        "Hand these keys to your agents:",
+        "",
+        "  Claude Code",
+        f"    claude mcp add brainpick -- {' '.join(command)}",
+        "",
+        "  any MCP host (stdio JSON)",
+        _indent(json.dumps(generic, indent=2)),
+        "",
+        "  opencode (opencode.json)",
+        _indent(json.dumps(opencode, indent=2)),
+    ]
+    if _package_project_dir() is not None:
+        parts += ["", f"  ○ once published this shrinks to: uvx brainpick mcp --root {bundle}"]
+    return "\n".join(parts)
+
+
+def henxels_fragment(contract: Path, bundle: Path) -> str:
+    """The freshness gate, paste-able into an existing contract — never applied for you."""
+    root = os.path.relpath(bundle, contract.parent)
+    command = " ".join(brainpick_command() + ["compile", "--check-fresh", "--root", root])
+    return (
+        '  - henxel: "The compiled brain is fresh before every commit"\n'
+        "    why: agents navigate the compiled artifacts — stale artifacts lie to them\n"
+        f'    run_before_commit: "{command}"'
+    )
+
+
+def gitignore_suggestion(bundle: Path) -> Path | None:
+    """The repo .gitignore that should learn `.brainpick/` — or None if covered/absent."""
+    repo = find_repo_root(bundle)
+    if repo is None:
+        return None
+    gitignore = repo / ".gitignore"
+    if not gitignore.is_file():
+        return None
+    if ".brainpick" in gitignore.read_text(encoding="utf-8", errors="replace"):
+        return None
+    return gitignore
+
+
+# -- init --------------------------------------------------------------------------
+
+
+def _hand_off_to_henxels(voice: _Voice, root: Path, bundle: BundleInfo) -> int:
+    if bundle.docs == 0:
+        voice.line("✗", f"no bundle at {root} — the directory holds no markdown yet")
+    else:
+        voice.line("✗", f"no bundle at {root} — {bundle.docs} .md files but only {bundle.typed} "
+                        "carry OKF `type:` frontmatter (3+ needed, or an index.md with okf_version)")
+    voice.step("brainpick never scaffolds wikis — its sibling henxels owns the template:")
+    voice.step("  uv tool install henxels")
+    voice.step(f"  cd {root} && henxels init --template okf-llm-wiki --wiki-dir .")
+    voice.step(f"then come back: brainpick init --root {root}")
+    return 1
+
+
+def _report_backends(
+    voice: _Voice, results: list[tuple[str, Backend | None]],
+    env: Mapping[str, str], yes: bool,
+) -> Backend | None:
+    """Print the probe verdicts; return the backend worth recording (or None)."""
+    found = next(
+        ((label, b) for label, b in results if b is not None and b.model is not None), None,
+    )
+    if found is not None:
+        label, backend = found
+        voice.line("✓", f"embeddings: {backend.model} via {label} at {backend.endpoint}"
+                        " — T2 will use it when it lands (M2)")
+        return backend
+
+    ollama = next((b for label, b in results if label == "ollama" and b is not None), None)
+    if ollama is not None:  # up, but modelless — offer the exact pull
+        voice.line("○", f"embeddings: ollama is up at {ollama.endpoint} but has no embedding model")
+        voice.arrow(f"{PULL_HINT}  (then rerun brainpick init)")
+    else:
+        voice.line("○", "embeddings: no local backend found — T1 shines without one")
+        voice.arrow(f"light it up later: {PULL_HINT}  (then rerun brainpick init)")
+
+    if openai_key_present(env):
+        if yes:
+            voice.line("✓", f"embeddings: OPENAI_API_KEY accepted (--yes) — recording "
+                            f"{OPENAI_DEFAULT_MODEL} for T2")
+            return Backend("openai", OPENAI_ENDPOINT, OPENAI_DEFAULT_MODEL)
+        voice.line("○", "OPENAI_API_KEY detected — a paid API stays opt-in (local-first):"
+                        " rerun with --yes to record it")
+    return None
+
+
+def run_init(
+    root: str | Path,
+    yes: bool = False,
+    dry_run: bool = False,
+    env: Mapping[str, str] | None = None,
+    probes: list[tuple[str, Backend | None]] | None = None,
+) -> int:
+    env = os.environ if env is None else env
+    voice = _Voice(env)
+    voice.banner()
+
+    root = Path(root)
+    if not root.is_dir():
+        voice.line("✗", f"{root} is not a directory")
+        voice.arrow(f"create it (mkdir -p {root}) or point --root at your bundle")
+        return 1
+    root = root.resolve()
+
+    # 1 — the bundle
+    bundle = detect_bundle(root)
+    if bundle.kind == "none":
+        return _hand_off_to_henxels(voice, root, bundle)
+    if bundle.kind == "okf":
+        voice.line("✓", f"bundle: OKF at {root} — index.md declares okf_version ({bundle.docs} docs)")
+    else:
+        voice.line("✓", f"bundle: {bundle.typed} typed concept docs at {root} (density scan)")
+
+    # 2 — link style (informational in 0.1)
+    style = detect_link_style(root)
+    if style.style == "none":
+        voice.line("○", "links: none yet — write [title](path.md) links and the graph appears")
+    else:
+        voice.line("○", f"links: {style.style} style ({style.markdown} markdown · "
+                        f"{style.wikilinks} wikilinks)")
+
+    # 3 — backends (parallel 300 ms probes; failures are silent misses)
+    results = probe_backends(env) if probes is None else probes
+    backend = _report_backends(voice, results, env, yes)
+
+    # 4 — henxels
+    contract = detect_henxels(root)
+    if contract is not None:
+        voice.line("✓", f"henxels: contract at {contract} — freshness gate offered below")
+    else:
+        voice.line("○", "henxels: no contract governs this bundle (optional) — uv tool install henxels")
+
+    if dry_run:
+        voice.raw()
+        voice.raw("dry run — nothing written. init would:")
+        if (root / "brainpick.toml").exists():
+            voice.step("• keep the existing brainpick.toml (never rewritten)")
+        else:
+            voice.step("• write brainpick.toml at the bundle root"
+                       + (" (recording the detected embedding backend)" if backend else ""))
+        voice.step("• compile T1 into .brainpick/ and manage the index.md section")
+        voice.step("• print the MCP snippets and the serve command")
+        return 0
+
+    # 5 — config (written once; an existing config is the user's, not ours)
+    config_path = root / "brainpick.toml"
+    if config_path.exists():
+        voice.line("○", "config: brainpick.toml exists — left untouched")
+        if backend is not None:
+            voice.step(f'pin the detected backend yourself: [models.embedding] '
+                       f'kind = "{backend.kind}", model = "{backend.model}"')
+    else:
+        config_path.write_text(render_config(backend), encoding="utf-8")
+        recorded = " ([models.embedding] recorded)" if backend is not None else ""
+        voice.line("✓", f"config: brainpick.toml written{recorded}")
+
+    gitignore = gitignore_suggestion(root)
+    if gitignore is not None:
+        voice.line("○", f"compiled artifacts are disposable — add to {gitignore} yourself:")
+        voice.step(".brainpick/")
+
+    # 6 — compile T1
+    result = run_compile(root)
+    stats = result.stats
+    voice.line("✓", f"compiled: {stats['docs']} docs · {stats['edges']} links · "
+                    f"{stats['orphans']} orphans — your brain, compiled")
+
+    # 7 — hand out the keys
+    voice.raw()
+    voice.raw(mcp_snippets(root))
+
+    # 8 — the henxels freshness gate
+    if contract is not None:
+        voice.raw()
+        voice.raw(f"Gate commits on a fresh brain — paste into {contract}:")
+        voice.raw()
+        voice.raw(henxels_fragment(contract, root))
+
+    # 9 — glow
+    serve = " ".join(brainpick_command() + ["serve", "--root", str(root), "--open"])
+    voice.raw()
+    voice.raw(f"Serve the brain: {serve}")
+    return 0
+
+
+# -- doctor ------------------------------------------------------------------------
+
+
+def run_doctor(
+    root: str | Path,
+    env: Mapping[str, str] | None = None,
+    probes: list[tuple[str, Backend | None]] | None = None,
+) -> int:
+    env = os.environ if env is None else env
+    voice = _Voice(env)
+    root = Path(root).resolve()
+    failed = False
+
+    def emit(mark: str, text: str, fix: str | None = None) -> None:
+        nonlocal failed
+        voice.line(mark, text)
+        if fix:
+            voice.arrow(fix)
+        if mark == "✗":
+            failed = True
+
+    # config parses (or defaults)
+    config_path = root / "brainpick.toml"
+    if not config_path.is_file():
+        emit("✓", "config: none — defaults apply (a bundle needs zero config)")
+    else:
+        try:
+            tomllib.loads(config_path.read_text(encoding="utf-8"))
+            emit("✓", "config: brainpick.toml parses")
+        except tomllib.TOMLDecodeError as error:
+            emit("✗", f"config: brainpick.toml is not valid TOML ({error})",
+                 f"fix the syntax in {config_path} — the engine falls back to defaults meanwhile")
+
+    # bundle
+    bundle = detect_bundle(root) if root.is_dir() else BundleInfo("none", 0, 0)
+    if bundle.kind == "okf":
+        emit("✓", f"bundle: OKF ({bundle.docs} docs)")
+    elif bundle.kind == "density":
+        emit("✓", f"bundle: {bundle.typed} typed concept docs of {bundle.docs} (density scan)")
+    else:
+        emit("✗", f"bundle: nothing OKF-shaped at {root}",
+             f"cd {root} && henxels init --template okf-llm-wiki --wiki-dir .")
+
+    # artifacts
+    verdict = check_fresh(root)
+    if verdict.fresh:
+        manifest = json.loads((root / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
+        emit("✓", f"artifacts: fresh (seq {manifest['seq']})")
+    else:
+        reason = verdict.reason.split(" — ")[0]
+        emit("✗", f"artifacts: {reason}", f"run: brainpick compile --root {root}")
+
+    # backend probes
+    results = probe_backends(env) if probes is None else probes
+    for label, backend in results:
+        if backend is None:
+            emit("○", f"{label}: not reachable")
+        elif backend.model is None:
+            hint = f" — {PULL_HINT}" if label == "ollama" else ""
+            emit("○", f"{label}: up at {backend.endpoint}, no embedding model{hint}")
+        else:
+            emit("✓", f"{label}: {backend.model} at {backend.endpoint}")
+    if openai_key_present(env):
+        emit("○", "OPENAI_API_KEY: set — a paid API stays opt-in (brainpick init --yes records it)")
+    else:
+        emit("○", "OPENAI_API_KEY: not set")
+
+    # henxels
+    on_path = henxels_on_path()
+    contract = detect_henxels(root)
+    if on_path and contract is not None:
+        emit("✓", f"henxels: on PATH · contract at {contract}")
+    elif on_path:
+        emit("○", f"henxels: on PATH · no contract governs {root}")
+    elif contract is not None:
+        emit("○", f"henxels: contract at {contract} but the CLI is missing — uv tool install henxels")
+    else:
+        emit("○", "henxels: not installed (optional) — uv tool install henxels")
+
+    # UI assets
+    from brainpick.serve.app import _resolve_ui_dir
+
+    ui_dir = _resolve_ui_dir()
+    if ui_dir is not None:
+        emit("✓", f"ui: {ui_dir}")
+    else:
+        emit("○", "ui: not built — the fallback page serves; build once:"
+                  " cd packages/webui && npm run build")
+
+    # the node sibling engine
+    project = _package_project_dir()
+    node_pkg = project.parent / "node" / "package.json" if project is not None else None
+    if node_pkg is not None and node_pkg.is_file():
+        emit("✓", f"node engine: {node_pkg.parent}")
+    else:
+        emit("○", "node engine: npm engine arrives in M2")
+
+    return 1 if failed else 0

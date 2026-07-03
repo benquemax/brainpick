@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "e2e": "npm run build && node ../../scripts/sync-ui.mjs && tsc --noEmit -p e2e/tsconfig.json && playwright test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e/tsconfig.json",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
@@ -27,7 +28,9 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/d3-force": "^3.0.10",
+    "@types/node": "^26.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",

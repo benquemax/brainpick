@@ -46,6 +46,26 @@ jobs:
       - name: build (with PWA assets)
         run: npm run build -w packages/webui
 
+  webui-e2e:
+    name: web ui e2e (real python engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: sync python engine
+        working-directory: packages/python
+        run: uv sync
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: playwright against brainpick serve
+        run: npm run e2e -w packages/webui
+
   docs-truth:
     name: documented claims hold
     runs-on: ubuntu-latest
