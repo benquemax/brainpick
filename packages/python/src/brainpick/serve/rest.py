@@ -7,10 +7,8 @@ from starlette.routing import Route
 
 from brainpick import SPEC_VERSION, __version__
 from brainpick.core.frontmatter import split_frontmatter
-from brainpick.query.keyword import search as keyword_search
+from brainpick.query.router import run_search
 from brainpick.serve.state import bfs_neighborhood, jsonable, suggest_paths
-
-KNOWN_MODES = ("auto", "keyword", "semantic", "graph")
 
 
 def _state(request: Request):
@@ -84,19 +82,16 @@ async def search_endpoint(request: Request) -> JSONResponse:
     query = request.query_params.get("q")
     if not query:
         return JSONResponse({"error": "add ?q=<words> — e.g. /api/search?q=aurinko"}, status_code=400)
-    mode = request.query_params.get("mode", "auto")
-    if mode not in KNOWN_MODES:
-        mode = "auto"  # unknown modes fall back, never error (spec/50)
+    mode = request.query_params.get("mode", "auto")  # the router forgives unknown modes
     try:
         limit = max(1, min(int(request.query_params.get("limit", "8")), 50))
     except ValueError:
         limit = 8
-    hits = keyword_search(state.records, query, limit=limit)
-    return JSONResponse({
-        "hits": hits,
-        "used_modes": ["keyword"],
-        "degraded_from": mode if mode in ("semantic", "graph") else None,
-    })
+    body = run_search(
+        state.records, state.manifest.get("tiers", {}), query,
+        mode=mode, limit=limit, semantic_fn=state.semantic_fn(),
+    )
+    return JSONResponse(body)
 
 
 async def neighbors_endpoint(request: Request) -> JSONResponse:

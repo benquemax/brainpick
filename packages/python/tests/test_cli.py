@@ -22,7 +22,9 @@ def test_flags_are_registered(capsys):
         assert flag in serve_help
     with pytest.raises(SystemExit):
         main(["compile", "--help"])
-    assert "--watch" in capsys.readouterr().out
+    compile_help = capsys.readouterr().out
+    assert "--watch" in compile_help
+    assert "--only" in compile_help
     with pytest.raises(SystemExit):
         main(["init", "--help"])
     init_help = capsys.readouterr().out

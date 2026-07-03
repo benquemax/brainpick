@@ -23,6 +23,15 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
 ]
+vectors = [
+    "lancedb>=0.25",
+]
+vectors-local = [
+    "fastembed>=0.7",
+]
+all = [
+    "brainpick[vectors,vectors-local]",
+]
 
 [project.scripts]
 brainpick = "brainpick.cli:main"

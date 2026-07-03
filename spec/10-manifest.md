@@ -36,7 +36,10 @@ which inputs, at which sequence number. It is **normative**.
 
 - `files`: every file matched by the bundle's include/exclude globs
   (default `**/*.md`, excluding `.brainpick/`, `.git/`, `_temp/`,
-  `node_modules/`), keyed by path. `sha256` is over raw file bytes.
+  `node_modules/` — those four directory names at ANY depth; dotfiles and
+  dot-directories are scanned normally), keyed by path. `sha256` is over
+  raw file bytes. Freshness text comparisons (index, artifacts) operate on
+  newline-normalized text (CRLF → LF), matching Python text mode.
   For the managed `index.md` the recorded hash is of the file as written
   (post-generation).
 - `seq`: monotonic compile counter. Starts at 1 on the first compile;

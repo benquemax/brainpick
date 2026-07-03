@@ -67,3 +67,54 @@ def test_bundle_root_indirection(tmp_path):
     (tmp_path / "brainpick.toml").write_text('[bundle]\nroot = "docs"\n', encoding="utf-8")
     cfg = load_config(tmp_path)
     assert cfg.bundle.root == "docs"
+
+
+def test_modules_and_embedding_defaults(tmp_path):
+    cfg = load_config(tmp_path)
+    assert cfg.modules.vectors == "auto"
+    assert cfg.modules.graph == "off"
+    assert cfg.modules.ui is True
+    assert cfg.models.embedding.kind == ""
+    assert cfg.models.embedding.endpoint == ""
+    assert cfg.models.embedding.model == ""
+    assert cfg.models.embedding.dim == 0
+
+
+def test_modules_and_embedding_from_toml(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        "[modules]\n"
+        'vectors = "on"\n'
+        "[models.embedding]\n"
+        'kind = "ollama"\n'
+        'endpoint = "http://127.0.0.1:11434"\n'
+        'model = "nomic-embed-text"\n'
+        "dim = 768\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.modules.vectors == "on"
+    assert cfg.models.embedding.kind == "ollama"
+    assert cfg.models.embedding.endpoint == "http://127.0.0.1:11434"
+    assert cfg.models.embedding.model == "nomic-embed-text"
+    assert cfg.models.embedding.dim == 768
+
+
+def test_embedding_env_overrides(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        '[models.embedding]\nkind = "ollama"\nmodel = "nomic-embed-text"\n', encoding="utf-8",
+    )
+    cfg = load_config(tmp_path, env={
+        "BRAINPICK_MODULES_VECTORS": "off",
+        "BRAINPICK_MODELS_EMBEDDING_KIND": "mock",
+    })
+    assert cfg.modules.vectors == "off"
+    assert cfg.models.embedding.kind == "mock"
+
+
+def test_unknown_embedding_keys_warn_not_error(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        "[models.embedding]\nturbo = true\n[models.future]\nx = 1\n", encoding="utf-8",
+    )
+    with pytest.warns(UserWarning):
+        cfg = load_config(tmp_path)
+    assert cfg.models.embedding.kind == ""

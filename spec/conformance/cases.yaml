@@ -31,8 +31,17 @@ cases:
     bundle: kotiaurinko
     mutate: kuu.md
 
+  # class: chunks — build the normative T2 chunk set (spec/30 chunker) from
+  # the bundle and byte-compare its canonical JSONL against the golden.
+  - id: chunks-kotiaurinko
+    class: chunks
+    bundle: kotiaurinko
+    artifact: t2/chunks.jsonl
+
   # class: query — run searches against the compiled fixture and assert the
-  # top-k result SET (order-insensitive, scores ignored).
+  # top-k result SET (order-insensitive, scores ignored). Cases with
+  # `embedder: mock` compile T2 with the normative mock embedder (spec/30)
+  # first: chunker → vectors → store → retrieval → router, end to end.
   - id: search-keyword-aurinko
     class: query
     bundle: kotiaurinko
@@ -40,6 +49,33 @@ cases:
     mode: keyword
     limit: 8
     expect_paths: [aurinko.md, komeetta.md, planeetat.md, yksinainen.md]
+
+  - id: search-semantic-kuu-vuorovesi
+    class: query
+    bundle: kotiaurinko
+    query: "kuu vuorovesi maa"
+    mode: semantic
+    embedder: mock
+    limit: 4
+    # Reviewed: kuu/planeetat/maa are the moon–tides–earth neighborhood (their
+    # bodies cross-link kuu and maa); yksinainen is the mock's 16-bucket hash
+    # tail — and what separates chunk-vector recall from BM25 (which ranks
+    # aurinko.md fourth instead).
+    expect_paths: [kuu.md, planeetat.md, maa.md, yksinainen.md]
+
+  - id: search-auto-aurinko-fused
+    class: query
+    bundle: kotiaurinko
+    query: "aurinko"
+    mode: auto
+    embedder: mock
+    limit: 8
+    # Reviewed: keyword alone finds only the 4 docs whose text says "aurinko";
+    # RRF fusion widens recall to every doc of this sun-centered bundle, so the
+    # fused set proves semantic ranking actually joined (a keyword-only engine
+    # returns 4 paths and fails).
+    expect_paths: [aurinko.md, komeetta.md, kuu.md, maa.md, planeetat.md,
+                   saaret/atolli.md, saaret/laguuni.md, yksinainen.md]
 
   # class: delta — apply scripted mutations to a compiled fixture, recompile
   # after each step, and compare emitted graph.delta payloads against the

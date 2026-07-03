@@ -75,13 +75,13 @@ holographic-brain web UI that updates live while agents write).
 
 ## Quick start (pre-release)
 
-Nothing is on PyPI or npm yet, but the Python engine already compiles brains
-from a checkout:
+Nothing is on PyPI or npm yet, but the engines already work from a checkout:
 
 ```bash
 cd packages/python
-uv run brainpick compile --root /path/to/your/okf-bundle       # T1: graph + index
-uv run brainpick compile --check-fresh --root /path/to/bundle  # commit-gate freshness
+uv run brainpick init --root /path/to/your/okf-bundle    # detect, config, compile
+uv run brainpick serve --root /path/to/bundle --open     # the living graph
+uv run brainpick compile --check-fresh --root /path/to/bundle   # commit gate
 ```
 
 Once v0.1 ships, first contact becomes:

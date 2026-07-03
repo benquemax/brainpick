@@ -23,7 +23,10 @@ def split_frontmatter(text: str) -> tuple[dict, str]:
 
     try:
         meta = yaml.safe_load(raw)
-    except yaml.YAMLError:
+    except (yaml.YAMLError, ValueError):
+        # ValueError: resolver-valid but constructor-invalid scalars, e.g. an
+        # impossible date (2026-02-31) — tolerance per spec/20, found by the
+        # Node engine's parity work.
         return {}, body
     if not isinstance(meta, dict):
         return {}, body

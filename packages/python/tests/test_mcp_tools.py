@@ -67,7 +67,7 @@ def test_search_hits_have_why_not_bodies(kotiaurinko):
     }
     assert set(result["hits"][0]) == {"path", "title", "description", "score", "why"}
     assert result["used_modes"] == ["keyword"]
-    assert result["degraded_from"] is None
+    assert result["degraded_from"] == "semantic"  # auto without T2 says so (spec/30)
     assert result["truncated"] is False
 
 
@@ -84,10 +84,29 @@ def test_search_forgiving_modes(kotiaurinko):
     state = make_state(kotiaurinko)
     unknown = search_payload(state, "aurinko", mode="banana")
     assert unknown["used_modes"] == ["keyword"]
-    assert unknown["degraded_from"] is None
+    assert unknown["degraded_from"] == "semantic"  # banana → auto → degraded without T2
+    assert "fell back to auto" in unknown["hint"]
+    keyword = search_payload(state, "aurinko", mode="keyword")
+    assert keyword["degraded_from"] is None
     degraded = search_payload(state, "aurinko", mode="semantic")
     assert degraded["used_modes"] == ["keyword"]
     assert degraded["degraded_from"] == "semantic"
+
+
+def test_search_semantic_hits_via_mock_vectors(kotiaurinko):
+    (kotiaurinko / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n',
+                                                encoding="utf-8")
+    state = make_state(kotiaurinko)
+    assert state.manifest["tiers"]["t2"] == "fresh"
+    semantic = search_payload(state, "kuu vuorovesi maa", mode="semantic")
+    assert semantic["used_modes"] == ["semantic"]
+    assert semantic["degraded_from"] is None
+    assert semantic["hits"]
+    assert all(set(h) == {"path", "title", "description", "score", "why"}
+               for h in semantic["hits"])
+    fused = search_payload(state, "aurinko", mode="auto")
+    assert fused["used_modes"] == ["keyword", "semantic"]
+    assert fused["degraded_from"] is None
 
 
 def test_read_resolution_ladder(kotiaurinko):

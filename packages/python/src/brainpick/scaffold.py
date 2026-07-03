@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Mapping
 
@@ -19,6 +20,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from brainpick.compile.pipeline import check_fresh, run_compile
+from brainpick.config import load_config
+from brainpick.vectorstore import lancedb_available
 from brainpick.detect import (
     Backend,
     BundleInfo,
@@ -62,7 +65,7 @@ mode = "section"                  # manage | section | off — how index.md is m
 file = "index.md"
 
 [modules]                         # T1 always compiles; the deeper tiers are switchable
-vectors = "auto"                  # auto | on | off — T2 semantic search (lands in M2)
+vectors = "auto"                  # auto | on | off — T2 semantic search (embedding backend required)
 graph = "off"                     # auto | on | off — T3 entity graph (lands in M3)
 ui = true
 
@@ -137,7 +140,7 @@ def render_config(backend: Backend | None) -> str:
         embedding = ""
     else:
         embedding = (
-            "\n[models.embedding]                # detected at init; T2 lights it up (M2)\n"
+            "\n[models.embedding]                # detected at init; T2 embeds with it\n"
             f'kind = "{backend.kind}"\n'
             f'endpoint = "{backend.endpoint}"\n'
             f'model = "{backend.model}"\n'
@@ -221,7 +224,7 @@ def _report_backends(
     if found is not None:
         label, backend = found
         voice.line("✓", f"embeddings: {backend.model} via {label} at {backend.endpoint}"
-                        " — T2 will use it when it lands (M2)")
+                        " — T2 embeds with it on the next compile")
         return backend
 
     ollama = next((b for label, b in results if label == "ollama" and b is not None), None)
@@ -392,6 +395,29 @@ def run_doctor(
     else:
         reason = verdict.reason.split(" — ")[0]
         emit("✗", f"artifacts: {reason}", f"run: brainpick compile --root {root}")
+
+    # T2 vectors: extra installed, backend configured, tier state (spec/30) — optional, never ✗
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # config problems already have their own line above
+        embedding = load_config(root).models.embedding
+    tiers = {}
+    manifest_path = root / ".brainpick" / "manifest.json"
+    if manifest_path.is_file():
+        try:
+            tiers = json.loads(manifest_path.read_text(encoding="utf-8")).get("tiers", {})
+        except ValueError:
+            tiers = {}
+    t2_state = tiers.get("t2", "off")
+    if not embedding.kind:
+        emit("○", "vectors: no [models.embedding] configured — brainpick init detects backends")
+    elif not lancedb_available():
+        emit("○", "vectors: lancedb missing — pip install 'brainpick[vectors]'")
+    elif t2_state == "fresh":
+        model = f" · {embedding.model}" if embedding.model else ""
+        emit("✓", f"vectors: t2 fresh — {embedding.kind}{model}")
+    else:
+        emit("○", f"vectors: configured ({embedding.kind}) but t2 is {t2_state}",
+             f"run: brainpick compile --root {root}")
 
     # backend probes
     results = probe_backends(env) if probes is None else probes

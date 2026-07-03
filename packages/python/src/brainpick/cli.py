@@ -12,10 +12,15 @@ from brainpick.compile.pipeline import CompileResult, check_fresh, run_compile
 def _print_compiled(result: CompileResult) -> None:
     s = result.stats
     print(
-        f"compiled: {s['docs']} docs · {s['edges']} links · {s['ghosts']} ghosts"
-        f" · {s['orphans']} orphans · seq {result.seq}",
+        f"compiled: {s.get('docs', 0)} docs · {s.get('edges', 0)} links"
+        f" · {s.get('ghosts', 0)} ghosts · {s.get('orphans', 0)} orphans · seq {result.seq}",
         flush=True,  # watch mode lives in pipes; every line lands when it happens
     )
+
+
+def _print_warnings(result: CompileResult) -> None:
+    for warning in result.warnings:
+        print(warning, flush=True)
 
 
 def _cmd_compile(args: argparse.Namespace) -> int:
@@ -25,11 +30,13 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         print("fresh" if verdict.fresh else verdict.reason)
         return 0 if verdict.fresh else 1
 
-    result = run_compile(root, full=args.full)
+    only = (args.only,) if args.only else None
+    result = run_compile(root, full=args.full, only=only)
     if result.changed:
         _print_compiled(result)
     else:
         print(f"fresh — nothing to do (seq {result.seq})")
+    _print_warnings(result)
 
     if args.watch:
         from watchfiles import watch as watch_sync
@@ -39,9 +46,10 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         print(f"watching {root} — Ctrl-C stops", flush=True)
         for _changes in watch_sync(root, watch_filter=source_filter(root), step=DEBOUNCE_MS,
                                    raise_interrupt=False):
-            result = run_compile(root)
+            result = run_compile(root, only=only)
             if result.changed:
                 _print_compiled(result)
+            _print_warnings(result)
     return 0
 
 
@@ -114,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     p_compile.add_argument("--full", action="store_true", help="ignore the manifest, rebuild all")
     p_compile.add_argument("--check-fresh", action="store_true",
                            help="verify freshness without writing (exit 1 when stale)")
+    p_compile.add_argument("--only", choices=("t1", "t2"), default=None,
+                           help="compile a single tier (t2 reuses the compiled docs substrate)")
     p_compile.add_argument("--watch", action="store_true",
                            help="stay running and recompile on changes")
     p_compile.set_defaults(func=_cmd_compile)

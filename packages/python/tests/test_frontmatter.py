@@ -25,6 +25,13 @@ def test_non_mapping_yaml_is_tolerated():
     assert body == "body\n"
 
 
+def test_constructor_invalid_timestamp_is_tolerated():
+    # resolver says timestamp, constructor raises ValueError (day out of range)
+    meta, body = split_frontmatter("---\ntimestamp: 2026-02-31T00:00:00Z\n---\nbody\n")
+    assert meta == {}
+    assert body == "body\n"
+
+
 def test_unterminated_frontmatter_is_body():
     meta, body = split_frontmatter("---\ntitle: x\nno end fence\n")
     assert meta == {}

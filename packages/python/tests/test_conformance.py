@@ -1,7 +1,8 @@
 """The shared conformance harness — reads spec/conformance/cases.yaml.
 
 Every case class here has a twin in packages/node once M2 lands. Adding a
-case to cases.yaml tightens both engines at once.
+case to cases.yaml tightens both engines at once. The Python engine claims
+every class — nothing here may skip (spec/README).
 """
 import json
 import shutil
@@ -11,10 +12,16 @@ import yaml
 
 from brainpick.compile.pipeline import check_fresh, run_compile
 from brainpick.compile.t1 import build_docs_records
+from brainpick.compile.t2 import build_chunks
 from brainpick.core.bundle import scan
+from brainpick.core.canonical import canonical_jsonl
 from brainpick.query.keyword import search
+from brainpick.query.router import run_search
+from brainpick.query.vectors import semantic_search
 
 from conftest import SPEC, FIXTURE_BUNDLES
+
+MOCK_CONFIG = '[models.embedding]\nkind = "mock"\n'  # the spec/30 conformance embedder
 
 EXPECTED = SPEC / "fixtures" / "expected"
 SCENARIOS = SPEC / "fixtures" / "scenarios"
@@ -78,11 +85,40 @@ def test_check_fresh(case, tmp_path):
     assert check_fresh(root).fresh is False
 
 
+@pytest.mark.parametrize("case", _cases("chunks"), ids=_case_ids("chunks"))
+def test_chunks_golden(case, tmp_path):
+    root = _bundle_copy(tmp_path, case["bundle"])
+    actual = canonical_jsonl(build_chunks(build_docs_records(scan(root))))
+    expected = (EXPECTED / case["bundle"] / case["artifact"]).read_text(encoding="utf-8")
+    assert actual == expected, f"{case['artifact']} drifted from golden"
+
+
+def _mock_query_hits(root, case) -> list[dict]:
+    """The full T2 path: compile with the mock embedder, then route the search."""
+    (root / "brainpick.toml").write_text(MOCK_CONFIG, encoding="utf-8")
+    run_compile(root)
+    bp = root / ".brainpick"
+    records = [json.loads(line)
+               for line in (bp / "t1" / "docs.jsonl").read_text(encoding="utf-8").splitlines()
+               if line]
+    tiers = json.loads((bp / "manifest.json").read_text(encoding="utf-8"))["tiers"]
+    assert tiers["t2"] == "fresh"
+    body = run_search(
+        records, tiers, case["query"], mode=case["mode"], limit=case["limit"],
+        semantic_fn=lambda q, k: semantic_search(bp, records, q, limit=k),
+    )
+    assert body["degraded_from"] is None  # the mock path must never fall back
+    return body["hits"]
+
+
 @pytest.mark.parametrize("case", _cases("query"), ids=_case_ids("query"))
 def test_query(case, tmp_path):
     root = _bundle_copy(tmp_path, case["bundle"])
-    records = build_docs_records(scan(root))
-    hits = search(records, case["query"], limit=case["limit"])
+    if case.get("embedder") == "mock":
+        hits = _mock_query_hits(root, case)
+    else:
+        records = build_docs_records(scan(root))
+        hits = search(records, case["query"], limit=case["limit"])
     assert {h["path"] for h in hits} == set(case["expect_paths"])
 
 

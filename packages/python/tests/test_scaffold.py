@@ -175,7 +175,35 @@ def test_doctor_happy_table_exits_zero(kotiaurinko, capsys):
     assert "bundle: OKF (10 docs)" in out
     assert "artifacts: fresh (seq 1)" in out
     assert "ollama: not reachable" in out
-    assert "npm engine arrives in M2" in out
+    assert "node engine" in out  # either the sibling checkout or the arrives-in-M2 note
+
+
+def test_doctor_vectors_line_walks_the_states(kotiaurinko, capsys):
+    from brainpick.compile.pipeline import run_compile
+
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    capsys.readouterr()
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    assert "vectors: no [models.embedding]" in capsys.readouterr().out
+
+    (kotiaurinko / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n',
+                                                encoding="utf-8")
+    run_compile(kotiaurinko)
+    capsys.readouterr()
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    out = capsys.readouterr().out
+    assert "vectors: t2 fresh" in out
+    assert "mock" in out
+
+
+def test_doctor_vectors_line_names_the_missing_extra(kotiaurinko, capsys, monkeypatch):
+    monkeypatch.setattr("brainpick.scaffold.lancedb_available", lambda: False)
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    (kotiaurinko / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n',
+                                                encoding="utf-8")
+    capsys.readouterr()
+    assert run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS) == 0  # optional, never a failure
+    assert "brainpick[vectors]" in capsys.readouterr().out
 
 
 def test_doctor_defaults_apply_without_config(kotiaurinko, capsys):

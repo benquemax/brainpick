@@ -15,11 +15,9 @@ from brainpick.compile.pipeline import _atomic_write
 from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
 from brainpick.core.frontmatter import split_frontmatter
-from brainpick.query.keyword import search as keyword_search
+from brainpick.query.router import KNOWN_MODES, run_search
 from brainpick.serve.state import ServeState, bfs_neighborhood, jsonable, resolve_doc
 from brainpick.serve.watcher import recompile_and_broadcast
-
-KNOWN_MODES = ("auto", "keyword", "semantic", "graph")
 WRITES_OFF_REFUSAL = (
     'writes are disabled here — set [serve] writes = "guarded" in brainpick.toml to enable brain_write'
 )
@@ -83,6 +81,8 @@ def _why(hit: dict, query: str) -> str:
         return f"title matches '{query}'"
     if hit["description"] and lowered in hit["description"].lower():
         return f"description mentions '{query}'"
+    if hit.get("source") == "semantic":
+        return f"semantically close to '{query}'"
     return f"body mentions '{query}'" if hit.get("snippet") else "keyword match"
 
 
@@ -99,7 +99,11 @@ def search_payload(state: ServeState, query: str, mode: str = "auto", limit: int
     except (TypeError, ValueError):
         limit = 8
 
-    raw = keyword_search(state.records, str(query or ""), limit=limit)
+    body = run_search(
+        state.records, state.manifest.get("tiers", {}), str(query or ""),
+        mode=requested, limit=limit, semantic_fn=state.semantic_fn(),
+    )
+    raw = body["hits"]
     hits = [
         {"path": h["path"], "title": h["title"], "description": h["description"],
          "score": h["score"], "why": _why(h, query)}
@@ -107,8 +111,8 @@ def search_payload(state: ServeState, query: str, mode: str = "auto", limit: int
     ]
     result = {
         "hits": hits,
-        "used_modes": ["keyword"],
-        "degraded_from": requested if requested in ("semantic", "graph") else None,
+        "used_modes": body["used_modes"],
+        "degraded_from": body["degraded_from"],
         "truncated": False,
         "hint": "",
     }

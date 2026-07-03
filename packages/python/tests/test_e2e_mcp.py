@@ -74,3 +74,32 @@ def test_mcp_stdio_roundtrip(kotiaurinko):
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["seq"] == 2
     assert not (kotiaurinko.parent / "ulos.md").exists()
+
+
+async def _semantic_scenario(root):
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "brainpick", "mcp", "--root", str(root)],
+    )
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            semantic = await _call(session, "brain_search",
+                                   {"query": "kuu vuorovesi maa", "mode": "semantic"})
+            assert semantic["used_modes"] == ["semantic"]
+            assert semantic["degraded_from"] is None
+            assert semantic["hits"]
+
+            fused = await _call(session, "brain_search", {"query": "aurinko", "mode": "auto"})
+            assert fused["used_modes"] == ["keyword", "semantic"]
+            assert fused["degraded_from"] is None
+            assert "aurinko.md" in {h["path"] for h in fused["hits"]}
+
+
+def test_mcp_semantic_search_over_mock_vectors(kotiaurinko):
+    (kotiaurinko / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n',
+                                                encoding="utf-8")
+    run_compile(kotiaurinko)
+    manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["tiers"]["t2"] == "fresh"
+    asyncio.run(_semantic_scenario(kotiaurinko))

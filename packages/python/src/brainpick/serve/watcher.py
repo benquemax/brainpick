@@ -50,7 +50,7 @@ def recompile_and_broadcast(state: ServeState) -> CompileResult:
     Hash-gated no-ops broadcast nothing; a change brackets its delta with
     compile.status running/done (spec/60)."""
     try:
-        result = run_compile(state.root)
+        result = run_compile(state.root, config=state.config)
     except Exception:
         state.broadcast_status("failed", state.seq)
         raise

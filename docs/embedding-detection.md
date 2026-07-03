@@ -2,7 +2,7 @@
 type: Reference
 title: Embedding detection
 description: The ladder brainpick climbs to find an embedding backend — explicit config, Ollama, OpenAI-compatible endpoints, a local ONNX fallback, or an honest off.
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-03T07:02:31Z
 ---
 
 # Embedding detection
@@ -25,8 +25,9 @@ short-timeout probes:
 6. **Nothing found** — T2 stays off, with the exact command that would
    change that. T1 still shines; the first wow needs no key at all.
 
-Whatever is chosen is fingerprinted (provider, model, dimensions) into the
-[artifact spec](artifact-spec.md)'s embedding record; changing the model
-later invalidates the vectors and triggers a clean re-embed automatically.
+Whatever is chosen is fingerprinted (provider, endpoint, model, dimensions)
+into the [artifact spec](artifact-spec.md)'s embedding record; changing the
+model later invalidates the vectors and triggers a clean re-embed
+automatically.
 Query-time embeddings use the same record, which is how the Node engine
 searches vectors it did not compile (see [runtime parity](runtime-parity.md)).

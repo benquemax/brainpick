@@ -163,13 +163,41 @@ def test_search_keyword_set(kotiaurinko):
         }
         assert set(body["hits"][0]) == {"path", "title", "description", "score", "snippet", "source"}
         assert body["used_modes"] == ["keyword"]
-        assert body["degraded_from"] is None
+        assert body["degraded_from"] == "semantic"  # auto without T2 says so (spec/30)
+        keyword = client.get("/api/search", params={"q": "aurinko", "mode": "keyword"}).json()
+        assert keyword["degraded_from"] is None
         unknown_mode = client.get("/api/search", params={"q": "aurinko", "mode": "banana"})
         assert unknown_mode.status_code == 200
         assert unknown_mode.json()["used_modes"] == ["keyword"]
         semantic = client.get("/api/search", params={"q": "aurinko", "mode": "semantic"}).json()
         assert semantic["degraded_from"] == "semantic"
         assert client.get("/api/search").status_code == 400
+
+
+def test_search_semantic_and_auto_with_mock_vectors(kotiaurinko):
+    (kotiaurinko / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n',
+                                                encoding="utf-8")
+    with TestClient(make_app(kotiaurinko)) as client:
+        assert client.get("/api/status").json()["tiers"]["t2"] == "fresh"
+
+        semantic = client.get(
+            "/api/search", params={"q": "kuu vuorovesi maa", "mode": "semantic"},
+        ).json()
+        assert semantic["used_modes"] == ["semantic"]
+        assert semantic["degraded_from"] is None
+        assert semantic["hits"]
+        assert all(h["source"] == "semantic" for h in semantic["hits"])
+        assert set(semantic["hits"][0]) == {
+            "path", "title", "description", "score", "snippet", "source",
+        }
+
+        auto = client.get("/api/search", params={"q": "aurinko", "mode": "auto"}).json()
+        assert auto["used_modes"] == ["keyword", "semantic"]
+        assert auto["degraded_from"] is None
+        paths = [h["path"] for h in auto["hits"]]
+        assert "aurinko.md" in paths
+        assert len(paths) == len(set(paths))  # RRF dedupes by document
+        assert all(h["source"] in ("keyword", "semantic") for h in auto["hits"])
 
 
 def test_neighbors_depth_semantics(kotiaurinko):

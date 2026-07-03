@@ -45,17 +45,39 @@ class ValidateConfig:
 
 
 @dataclass
+class ModulesConfig:
+    vectors: str = "auto"  # auto | on | off — T2 (spec/30)
+    graph: str = "off"     # auto | on | off — T3 (M3)
+    ui: bool = True
+
+
+@dataclass
+class EmbeddingConfig:
+    kind: str = ""      # ollama | openai-compatible | openai | fastembed | mock (test hook)
+    endpoint: str = ""
+    model: str = ""
+    dim: int = 0        # 0 = unknown; discovered from the first embedding response
+
+
+@dataclass
+class ModelsConfig:
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+
+
+@dataclass
 class Config:
     spec: str = "0.1"
     bundle: BundleConfig = field(default_factory=BundleConfig)
     index: IndexConfig = field(default_factory=IndexConfig)
+    modules: ModulesConfig = field(default_factory=ModulesConfig)
+    models: ModelsConfig = field(default_factory=ModelsConfig)
     serve: ServeConfig = field(default_factory=ServeConfig)
     validate: ValidateConfig = field(default_factory=ValidateConfig)
 
 
-_SECTIONS = ("bundle", "index", "serve", "validate")
-# [modules] and [models.*] are specified but land with T2/T3 — known, silently ignored.
-_KNOWN_TOP = {"spec", "modules", "models", *_SECTIONS}
+_SECTIONS = ("bundle", "index", "modules", "serve", "validate")
+# [models.*] tables are nested and handled separately below.
+_KNOWN_TOP = {"spec", "models", *_SECTIONS}
 
 
 def _coerce(current, value):
@@ -128,11 +150,36 @@ def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Confi
                 continue
             setattr(section, key, _coerce(getattr(section, key), value))
 
+    models = data.get("models")
+    if isinstance(models, dict):
+        for table_name, table in models.items():
+            if table_name != "embedding":
+                warnings.warn(f"brainpick.toml: unknown table [models.{table_name}] — ignored",
+                              stacklevel=2)
+                continue
+            if not isinstance(table, dict):
+                continue
+            for key, value in table.items():
+                if not hasattr(config.models.embedding, key):
+                    warnings.warn(
+                        f"brainpick.toml: unknown key [models.embedding] {key} — ignored",
+                        stacklevel=2,
+                    )
+                    continue
+                current = getattr(config.models.embedding, key)
+                setattr(config.models.embedding, key, _coerce(current, value))
+
     for section_name in _SECTIONS:
         section = getattr(config, section_name)
         for key in vars(section):
             raw = env.get(f"BRAINPICK_{section_name.upper()}_{key.upper()}")
             if raw is not None:
                 setattr(section, key, _from_env(getattr(section, key), raw))
+
+    for key in vars(config.models.embedding):
+        raw = env.get(f"BRAINPICK_MODELS_EMBEDDING_{key.upper()}")
+        if raw is not None:
+            current = getattr(config.models.embedding, key)
+            setattr(config.models.embedding, key, _from_env(current, raw))
 
     return config

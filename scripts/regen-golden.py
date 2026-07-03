@@ -19,6 +19,10 @@ sys.path.insert(0, str(REPO / "packages" / "python" / "src"))
 import yaml  # noqa: E402
 
 from brainpick.compile.pipeline import run_compile  # noqa: E402
+from brainpick.compile.t1 import build_docs_records  # noqa: E402
+from brainpick.compile.t2 import build_chunks  # noqa: E402
+from brainpick.core.bundle import scan  # noqa: E402
+from brainpick.core.canonical import canonical_jsonl  # noqa: E402
 
 SPEC = REPO / "spec"
 BUNDLES = SPEC / "fixtures" / "bundles"
@@ -53,6 +57,17 @@ def regen_compile(case: dict) -> None:
             print(f"golden: {dst.relative_to(REPO)}")
 
 
+def regen_chunks(case: dict) -> None:
+    """t2/chunks.jsonl is a pure function of the bundle (spec/30 chunker) —
+    no embedding backend involved, so the golden regenerates offline."""
+    bundle = case["bundle"]
+    records = build_docs_records(scan(BUNDLES / bundle))
+    dst = EXPECTED / bundle / case["artifact"]
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(canonical_jsonl(build_chunks(records)), encoding="utf-8")
+    print(f"golden: {dst.relative_to(REPO)}")
+
+
 def regen_delta(case: dict) -> None:
     bundle, scenario = case["bundle"], case["scenario"]
     steps = yaml.safe_load((SCENARIOS / scenario / "steps.yaml").read_text(encoding="utf-8"))["steps"]
@@ -82,6 +97,8 @@ def main() -> None:
     for case in CASES:
         if case["class"] == "compile":
             regen_compile(case)
+        elif case["class"] == "chunks":
+            regen_chunks(case)
         elif case["class"] == "delta":
             regen_delta(case)
     print("done — review the diffs like code before committing.")

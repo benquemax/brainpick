@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+- Created: the native Node engine's T1 compiler — byte-identical artifacts,
+  proven by the shared conformance suite; the npm side needs no Python.
+- Updated: T2 landed in the Python engine — deterministic chunking, LanceDB
+  vectors, the embedding ladder, and hybrid semantic search behind the same
+  one search tool.
 - Updated: onboarding landed — brainpick init detects the bundle and local
   models, writes config, compiles, and hands out MCP snippets; doctor
   diagnoses; Playwright now exercises the real server end to end.

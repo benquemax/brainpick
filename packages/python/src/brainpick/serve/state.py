@@ -145,7 +145,7 @@ class ServeState:
 
     def load(self) -> None:
         """Compile if stale (a serve is a compile), then hold the artifacts."""
-        result = run_compile(self.root)
+        result = run_compile(self.root, config=self.config)
         if result.changed:
             self.apply_compile_result(result)
         else:
@@ -242,6 +242,18 @@ class ServeState:
         return events
 
     # -- lookups -----------------------------------------------------------------
+
+    def semantic_fn(self):
+        """The vector retriever over this bundle's T2 artifacts (query.vectors),
+        shaped for query.router.run_search's semantic_fn hook."""
+        from brainpick.query.vectors import semantic_search
+
+        bp = self.root / ".brainpick"
+
+        def run(query: str, limit: int) -> list[dict]:
+            return semantic_search(bp, self.records, query, limit=limit)
+
+        return run
 
     def record_for(self, path: str) -> dict | None:
         return next((r for r in self.records if r["path"] == path), None)

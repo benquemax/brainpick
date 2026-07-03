@@ -15,7 +15,16 @@ A document is any bundle file matching the include globs. Per document:
   one-element list; values coerced to strings.
 - `reserved`: `true` for any `index.md` or `log.md`.
 - Frontmatter is the YAML mapping between a leading `---` line and the next
-  `---` line; tolerant — unparseable YAML or a non-mapping yields `{}`.
+  `---` line; tolerant — unparseable YAML, a non-mapping, or values the
+  dialect resolves but cannot construct (an impossible date like
+  `2026-02-31`, an out-of-range time) all yield `{}`, never an error.
+- The YAML dialect is normatively **PyYAML-compatible 1.1 resolution**:
+  ISO-ish scalars resolve to timestamps (constructor regex stricter than
+  resolver: `2026-6-1` stays a string), `yes/no/on/off/y/n` follow PyYAML
+  (not spec-pure 1.1 — bare `y`/`n` stay strings), sub-second digits
+  truncate, duplicate keys last-wins, unknown tags degrade the mapping to
+  `{}`. Non-Python engines must match PyYAML's resolution, not their YAML
+  library's defaults.
 
 ## Link extraction
 
