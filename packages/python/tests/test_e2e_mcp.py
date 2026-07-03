@@ -1,0 +1,76 @@
+"""e2e: the MCP server over real stdio — spawn `python -m brainpick mcp`, speak the protocol."""
+import asyncio
+import json
+import re
+import sys
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+from brainpick.compile.pipeline import run_compile
+
+NEW_DOC = (
+    "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
+    "# Uusi kivi\n\nNear [Kuu](kuu.md).\n"
+)
+
+
+async def _call(session, name, arguments):
+    result = await session.call_tool(name, arguments)
+    assert result.isError is False
+    return json.loads(result.content[0].text)
+
+
+async def _scenario(root):
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "brainpick", "mcp", "--root", str(root)],
+    )
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            tools = {t.name for t in (await session.list_tools()).tools}
+            assert tools == {
+                "brain_overview", "brain_search", "brain_read", "brain_neighbors", "brain_write",
+            }
+
+            overview = await _call(session, "brain_overview", {})
+            assert overview["counts"]["docs"] == 10
+            assert overview["hint"]
+
+            search = await _call(session, "brain_search", {"query": "aurinko"})
+            assert "aurinko.md" in {h["path"] for h in search["hits"]}
+            assert search["used_modes"] == ["keyword"]
+
+            read_result = await _call(session, "brain_read", {"doc": "kuu"})  # stem resolution
+            assert read_result["path"] == "kuu.md"
+            assert "tides" in read_result["content"]
+            assert {n["path"] for n in read_result["neighbors"]["out"]} == {"maa.md"}
+
+            neighbors = await _call(session, "brain_neighbors", {"doc": "maa.md"})
+            assert neighbors["center"] == "maa.md"
+            assert {n["path"] for n in neighbors["nodes"]} == {
+                "maa.md", "kuu.md", "planeetat.md", "index.md",
+            }
+
+            written = await _call(session, "brain_write", {"doc": "uusi-kivi", "content": NEW_DOC})
+            assert written["ok"] is True
+            assert written["path"] == "uusi-kivi.md"
+            assert written["seq"] == 2
+
+            rejected = await _call(session, "brain_write", {"doc": "../ulos.md", "content": "# Ulos\n"})
+            assert rejected["ok"] is False
+            assert rejected["instruction"]
+
+            resources = await session.list_resources()
+            assert "brain://index" in {str(r.uri) for r in resources.resources}
+
+
+def test_mcp_stdio_roundtrip(kotiaurinko):
+    run_compile(kotiaurinko)
+    asyncio.run(_scenario(kotiaurinko))
+    text = (kotiaurinko / "uusi-kivi.md").read_text(encoding="utf-8")
+    assert re.search(r"^timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", text, re.MULTILINE)
+    manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["seq"] == 2
+    assert not (kotiaurinko.parent / "ulos.md").exists()

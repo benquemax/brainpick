@@ -26,3 +26,6 @@ packages/node/static/*
 # Codumentation logs
 .codumentation.log
 .codumentation-summary.log
+
+# playwright-mcp browser session debris (agent verification runs)
+.playwright-mcp/

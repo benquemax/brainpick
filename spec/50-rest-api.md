@@ -8,11 +8,11 @@ Both servers implement this surface. All responses are JSON (except `/` and
 | Endpoint | Returns |
 |----------|---------|
 | `GET /api/health` | `{"impl": "python", "name": "brainpick", "spec_version": "0.1", "version": "0.1.0"}` |
-| `GET /api/status` | manifest summary: `seq`, `tiers`, `docs`, `edges`, `ghosts`, `orphans`, `bundle_root`, `watching` |
+| `GET /api/status` | manifest summary: `seq`, `tiers`, `docs`, `edges`, `ghosts`, `orphans`, `bundle_root` (the server's absolute bundle path — more useful to clients than the manifest's relative `"."`), `watching` |
 | `GET /api/graph?layer=links` | the full `t1/graph.json` payload (`layer=entities` → 404 until T3; ETag = `"<seq>"`, honor `If-None-Match` with 304) |
 | `GET /api/docs/{path}` | `{"path", "frontmatter", "title", "text", "neighbors": {"in": [...], "out": [...]}}` where neighbor entries are `{"path", "title"}` — on miss, 404 with `{"error": "<instruction>", "suggestions": ["<path>", …]}` (≤ 5 fuzzy matches) |
 | `GET /api/search?q=&mode=auto&limit=8` | `{"hits": [{"path", "title", "description", "score", "snippet", "source"}], "used_modes": [...], "degraded_from": null}` |
-| `GET /api/neighbors?id=&depth=1&layer=links` | `{"center", "nodes": [...], "edges": [...]}` — node/edge shapes as in graph.json |
+| `GET /api/neighbors?id=&depth=1&layer=links` | `{"center", "nodes": [...], "edges": [...]}` — node/edge shapes as in graph.json; `layer=entities` before T3 degrades to links with `"degraded_from": "entities"` (matching MCP semantics — only `/api/graph` 404s) |
 | `GET /api/live` | SSE stream, see `60-live-deltas.md` |
 | `GET /` | the static web UI (SPA fallback to `index.html`) |
 

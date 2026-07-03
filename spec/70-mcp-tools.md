@@ -2,7 +2,8 @@
 
 Both engines expose the same five tools, verbatim, over stdio
 (`brainpick mcp`), streamable HTTP (`/mcp`), and legacy SSE (`/sse`).
-Small-model ergonomics are normative: at most one required argument,
+Small-model ergonomics are normative: at most one required argument
+(`brain_write` is the sanctioned exception — `doc` and `content`),
 unknown enum values fall back to defaults with a note (never an error),
 every result carries a `hint` string naming a sensible next call, and every
 tool accepts `budget_tokens` (int; chars/4 estimate; results are shaped to

@@ -1,5 +1,10 @@
 # Update log
 
+## 2026-07-03
+
+- Updated: the Python engine learned to serve — REST, live SSE deltas, the web
+  UI, and MCP over stdio and streamable HTTP, with guarded writes.
+
 ## 2026-07-02
 
 - Created: the web UI workspace — 2D cosmos, live deltas, search, PWA shell.
