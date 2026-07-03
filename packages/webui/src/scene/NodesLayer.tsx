@@ -10,6 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { GraphRuntime } from './runtime';
+import { DIM_EASE, glslFloat as f, NODE_GLOW } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 iCosmos;
@@ -54,11 +55,12 @@ const VERTEX = /* glsl */ `
 
     float reserved = step(0.5, mod(iFlags, 2.0));
     float highlight = clamp(iHighlight, 0.0, 1.0);
-    float scale = iRadius * grow * (1.0 - death) * (1.0 + 0.30 * pulse + 0.30 * highlight);
+    float scale = iRadius * grow * (1.0 - death)
+      * (1.0 + ${f(NODE_GLOW.pulseScale)} * pulse + ${f(NODE_GLOW.highlightScale)} * highlight);
 
-    float bright = 1.0 + 1.2 * pulse + 0.9 * highlight;
-    bright *= mix(1.0, 0.5, reserved);
-    bright *= mix(1.0, 0.14, uDim * (1.0 - highlight));
+    float bright = 1.0 + ${f(NODE_GLOW.pulseBoost)} * pulse + ${f(NODE_GLOW.highlightBoost)} * highlight;
+    bright *= mix(1.0, ${f(NODE_GLOW.reservedFactor)}, reserved);
+    bright *= mix(1.0, ${f(NODE_GLOW.dimFloor)}, uDim * (1.0 - highlight));
 
     vQuad = position.xy;
     vColor = iColor;
@@ -81,10 +83,10 @@ const FRAGMENT = /* glsl */ `
   void main() {
     float d = length(vQuad);
     if (d > 1.0) discard;
-    // Hard-ish core with a wide radial glow falloff.
+    // Hard-ish core with a restrained radial halo (tuning.ts owns the numbers).
     float core = smoothstep(0.32, 0.06, d);
-    float glow = exp(-d * d * 4.5) * 0.85;
-    float i = (core * 1.5 + glow) * vIntensity;
+    float glow = exp(-d * d * ${f(NODE_GLOW.haloFalloff)}) * ${f(NODE_GLOW.haloStrength)};
+    float i = (core * ${f(NODE_GLOW.coreIntensity)} + glow) * vIntensity;
     gl_FragColor = vec4(vColor * i, i * vAlpha);
   }
 `;
@@ -237,9 +239,9 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     }
 
     material.uniforms.uTime!.value = runtime.now();
-    const dimTarget = s.searchOpen && s.searchHits.length > 0 ? 1 : 0;
+    const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;
-    dim.value += (dimTarget - (dim.value as number)) * 0.14;
+    dim.value += (dimTarget - (dim.value as number)) * DIM_EASE;
   });
 
   return <mesh ref={meshRef} material={material} frustumCulled={false} renderOrder={2} />;

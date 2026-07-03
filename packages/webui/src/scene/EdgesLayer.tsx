@@ -7,6 +7,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { GraphRuntime } from './runtime';
+import { DIM_EASE, EDGE_GLOW, glslFloat as f } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 aBrain;
@@ -28,7 +29,7 @@ const FRAGMENT = /* glsl */ `
   varying vec3 vColor;
 
   void main() {
-    float k = uOpacity * mix(1.0, 0.22, uDim);
+    float k = uOpacity * mix(1.0, ${f(EDGE_GLOW.dimFactor)}, uDim);
     gl_FragColor = vec4(vColor * k, k);
   }
 `;
@@ -66,7 +67,7 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
         fragmentShader: FRAGMENT,
         uniforms: {
           uMorph: { value: 0 },
-          uOpacity: { value: 0.3 },
+          uOpacity: { value: EDGE_GLOW.opacity },
           uDim: { value: 0 },
         },
         transparent: true,
@@ -116,9 +117,9 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
     pos.needsUpdate = true;
 
     const s = runtime.store.getState();
-    const dimTarget = s.searchOpen && s.searchHits.length > 0 ? 1 : 0;
+    const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;
-    dim.value += (dimTarget - (dim.value as number)) * 0.14;
+    dim.value += (dimTarget - (dim.value as number)) * DIM_EASE;
   });
 
   return <lineSegments ref={lineRef} material={material} frustumCulled={false} renderOrder={1} />;

@@ -2,6 +2,10 @@
 
 ## 2026-07-03
 
+- Updated: the cosmos got its game HUD — search modes (keyword/semantic/auto)
+  in the UI, lenses, camera bookmarks, calmer glow.
+- Updated: the Node engine reached T2 — same chunks, same vectors, same hybrid
+  search; the conformance suite now passes both engines with zero skips.
 - Created: the native Node engine's T1 compiler — byte-identical artifacts,
   proven by the shared conformance suite; the npm side needs no Python.
 - Updated: T2 landed in the Python engine — deterministic chunking, LanceDB

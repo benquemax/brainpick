@@ -31,7 +31,13 @@
   },
   "dependencies": {
     "commander": "^13.1.0",
+    "smol-toml": "^1.3.1",
     "yaml": "^2.8.0"
+  },
+  "//optionalDependencies": "T2's vector store (spec/30) — absence degrades T2 with an instruction, never breaks T1. apache-arrow is @lancedb/lancedb's peer (schema construction).",
+  "optionalDependencies": {
+    "@lancedb/lancedb": "^0.31.0",
+    "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

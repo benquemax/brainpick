@@ -107,6 +107,12 @@ export function createMockServer({ stepMs = 6000 } = {}) {
   function handleSearch(url, res) {
     const q = url.searchParams.get('q') ?? '';
     const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? '8') || 8));
+    // Mode handling mirrors the engine's query router on a T2-less bundle
+    // (TIERS.t2 is 'off' here): keyword answers everything, and semantic/auto/
+    // graph honestly report what they degraded from. Unknown modes -> auto.
+    const requested = url.searchParams.get('mode') ?? 'auto';
+    const mode = ['auto', 'keyword', 'semantic', 'graph'].includes(requested) ? requested : 'auto';
+    const degradedFrom = mode === 'keyword' ? null : mode === 'graph' ? 'graph' : 'semantic';
     const tokens = q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
     const hits = [];
     if (tokens.length > 0) {
@@ -145,7 +151,7 @@ export function createMockServer({ stepMs = 6000 } = {}) {
       }
       hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
     }
-    sendJson(res, 200, { hits: hits.slice(0, limit), used_modes: ['keyword'], degraded_from: null });
+    sendJson(res, 200, { hits: hits.slice(0, limit), used_modes: ['keyword'], degraded_from: degradedFrom });
   }
 
   function handleLive(req, res) {

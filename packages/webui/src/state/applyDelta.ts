@@ -6,7 +6,7 @@
  * gap (seq > current+1) raises `needsSnapshot` — SSE has no request channel,
  * so the connection layer reacts to that flag by refetching GET /api/graph.
  */
-import type { GraphDelta, GraphEdge, GraphNode, GraphPayload, GraphStats } from '../graph/types';
+import type { GhostEdge, GraphDelta, GraphEdge, GraphNode, GraphPayload, GraphStats } from '../graph/types';
 import { edgeKey } from '../graph/types';
 
 /** Join/exit/activity bookkeeping older than this is pruned on apply. */
@@ -29,6 +29,9 @@ export interface GraphSlice {
   seq: number;
   nodes: Map<string, GraphNode>;
   edges: Map<string, GraphEdge>;
+  /** Broken links toward paths that do not exist (phantom nodes). Deltas do
+   * not carry ghosts (spec/60) — the list refreshes on snapshots only. */
+  ghosts: GhostEdge[];
   stats: GraphStats | null;
   tags: Record<string, string[]>;
   /** Raised on a seq gap; the connection layer refetches and clears it. */
@@ -46,6 +49,7 @@ export function emptyGraphSlice(): GraphSlice {
     seq: 0,
     nodes: new Map(),
     edges: new Map(),
+    ghosts: [],
     stats: null,
     tags: {},
     needsSnapshot: false,
@@ -158,6 +162,7 @@ export function applySnapshot(state: GraphSlice, graph: GraphPayload, seq: numbe
     seq,
     nodes,
     edges,
+    ghosts: graph.ghosts,
     stats: graph.stats,
     tags: graph.tags,
     needsSnapshot: false,

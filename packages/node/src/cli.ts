@@ -2,9 +2,9 @@
 /** brainpick CLI — same verbs, same lines as the Python engine (spec parity). */
 import { resolve } from "node:path";
 
-import { Command } from "commander";
+import { Command, Option } from "commander";
 
-import { checkFresh, runCompile, type CompileResult } from "./compile/pipeline";
+import { checkFresh, runCompile, type CompileResult, type Tier } from "./compile/pipeline";
 import { VERSION } from "./version";
 
 function printCompiled(result: CompileResult): void {
@@ -27,7 +27,13 @@ program
   .option("--root <path>", "bundle root (default: current directory)", ".")
   .option("--full", "ignore the manifest, rebuild all")
   .option("--check-fresh", "verify freshness without writing (exit 1 when stale)")
-  .action((opts: { root: string; full?: boolean; checkFresh?: boolean }) => {
+  .addOption(
+    new Option("--only <tier>", "compile a single tier (t2 reuses the compiled docs substrate)").choices([
+      "t1",
+      "t2",
+    ]),
+  )
+  .action(async (opts: { root: string; full?: boolean; checkFresh?: boolean; only?: Tier }) => {
     const root = resolve(opts.root);
     if (opts.checkFresh) {
       const verdict = checkFresh(root);
@@ -35,10 +41,10 @@ program
       process.exitCode = verdict.fresh ? 0 : 1;
       return;
     }
-    const result = runCompile(root, opts.full ?? false);
+    const result = await runCompile(root, opts.full ?? false, opts.only ? [opts.only] : null);
     if (result.changed) printCompiled(result);
     else console.log(`fresh — nothing to do (seq ${result.seq})`);
     for (const warning of result.warnings) console.log(warning);
   });
 
-program.parse();
+await program.parseAsync();

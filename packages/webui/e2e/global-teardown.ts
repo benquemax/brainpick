@@ -1,6 +1,6 @@
 /**
- * Kill the spawned engine (process group first, then the pid) and remove the tmp
- * bundle. Runs even when tests fail — the port must be freed either way.
+ * Kill the spawned engines (process group first, then the pid) and remove the
+ * tmp bundles. Runs even when tests fail — the ports must be freed either way.
  */
 import { rmSync } from 'node:fs';
 
@@ -27,13 +27,16 @@ function alive(pid: number): boolean {
   }
 }
 
+async function stop(pid: number): Promise<void> {
+  if (!Number.isFinite(pid) || pid <= 0) return;
+  signal(pid, 'SIGTERM');
+  for (let i = 0; i < 20 && alive(pid); i += 1) await sleep(100);
+  if (alive(pid)) signal(pid, 'SIGKILL');
+}
+
 export default async function globalTeardown(): Promise<void> {
-  const pid = Number(process.env.BP_E2E_PID ?? '');
-  if (Number.isFinite(pid) && pid > 0) {
-    signal(pid, 'SIGTERM');
-    for (let i = 0; i < 20 && alive(pid); i += 1) await sleep(100);
-    if (alive(pid)) signal(pid, 'SIGKILL');
-  }
+  await stop(Number(process.env.BP_E2E_PID ?? ''));
+  await stop(Number(process.env.BP_E2E_PID_T2LESS ?? ''));
   const tmpDir = process.env.BP_E2E_TMPDIR;
   if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
 }

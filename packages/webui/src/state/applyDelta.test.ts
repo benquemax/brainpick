@@ -300,4 +300,25 @@ describe('applySnapshot', () => {
     expect(next.exits.get('b.md')).toEqual({ at: 9_000 });
     expect(next.joins.has('a.md')).toBe(false);
   });
+
+  it('adopts the snapshot ghosts; deltas carry none and preserve the held list', () => {
+    expect(emptyGraphSlice().ghosts).toEqual([]);
+    const withGhosts = applySnapshot(
+      emptyGraphSlice(),
+      {
+        nodes: [makeNode('a.md')],
+        edges: [],
+        ghosts: [{ source: 'a.md', target: 'olematon.md' }],
+        islands: [],
+        stats: makeStats({ docs: 1, ghosts: 1 }),
+        tags: {},
+      },
+      100,
+      1_000,
+    );
+    expect(withGhosts.ghosts).toEqual([{ source: 'a.md', target: 'olematon.md' }]);
+    // spec/60 deltas do not carry ghosts — the held list survives a delta
+    const afterDelta = applyDelta(withGhosts, makeDelta(101), 2_000);
+    expect(afterDelta.ghosts).toEqual([{ source: 'a.md', target: 'olematon.md' }]);
+  });
 });

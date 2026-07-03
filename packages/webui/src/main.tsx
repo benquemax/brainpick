@@ -26,6 +26,15 @@ document.addEventListener('visibilitychange', () => {
 
 const runtime = new GraphRuntime(uiStore);
 
+// Deterministic hook for e2e assertions (and console debugging): the store
+// is the single source of truth, so tests read state instead of pixels.
+declare global {
+  interface Window {
+    __bp_store: typeof uiStore;
+  }
+}
+window.__bp_store = uiStore;
+
 createRoot(document.getElementById('root') as HTMLElement).render(<App runtime={runtime} />);
 
 // Service worker (vite-plugin-pwa): precached shell + offline graph snapshot.

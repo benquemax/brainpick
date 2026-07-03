@@ -87,6 +87,8 @@ Only use `git commit --no-verify` in a genuine emergency: it bypasses the hooks 
   ↳ Docs here are executable specifications (principle 12); drift fails the push, not the reader.
 - The Python engine's tests pass before every commit
   ↳ Tests define the feature set; the feature set must always work (principle 12).
+- The WHOLE feature set works before every push — every engine, every suite, e2e included
+  ↳ The push gate is the full regression armor; nothing reaches the remote with a broken feature set.
 - Every concept doc is kebab-case markdown with OKF frontmatter (type is the one MUST) (in ./docs/*)
   ↳ One concept per page; the description feeds the generated index and the graph UI.
 - timestamp is a real ISO 8601 datetime and is bumped when a doc changes (in ./docs/*)

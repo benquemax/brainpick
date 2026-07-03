@@ -1,24 +1,27 @@
-/** The compile pipeline (spec/10): scan → T1 → artifacts, hash-incremental,
+/** The compile pipeline (spec/10): scan → T1 → T2 → artifacts, hash-incremental,
  * byte-stable on no-ops, delta-emitting on change. */
-import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
+import { loadConfig, type Config } from "../config";
 import { scan, type Document } from "../core/bundle";
 import { canonicalJson, canonicalJsonl, cmpStr, type JsonValue } from "../core/canonical";
+import { atomicWrite, readTextOrNull } from "../core/fs";
 import { deepEqual, diffGraphs, type GraphDelta } from "../deltas";
 import { SPEC_VERSION, VERSION } from "../version";
 import { applyIndexSection, buildDocsRecords, buildGraph, renderIndexBlock, type GraphStats } from "./t1";
+import { runT2Stage, t2Gate } from "./t2";
 
 export const INDEX_FILE = "index.md";
+
+export type Tier = "t1" | "t2";
 
 export interface CompileResult {
   changed: boolean;
   seq: number;
   stats: GraphStats;
   delta: GraphDelta | null;
-  /** Advisory lines the CLI relays (the Python engine uses these for T2
-   * degradation notices). Always empty in 0.1 chunk 1 — no T2 module yet. */
+  /** Advisory lines the CLI relays — T2 degradation notices and enabling
+   * instructions (spec/30). */
   warnings: string[];
 }
 
@@ -39,36 +42,22 @@ function prospectiveIndex(root: string, docs: Document[]): [string, string | nul
   return [applyIndexSection(disk, block), disk];
 }
 
-function atomicWrite(path: string, data: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = join(dirname(path), `.bp-tmp-${randomBytes(8).toString("hex")}`);
-  try {
-    writeFileSync(tmp, data, "utf8");
-    renameSync(tmp, path);
-  } catch (err) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      /* already gone */
-    }
-    throw err;
-  }
+function generator(): { impl: string; name: string; version: string } {
+  return { impl: "node", name: "brainpick", version: VERSION };
 }
 
-/** Python's `Path.read_text(encoding="utf-8")` — including text mode's
- * universal-newline translation, which the byte comparisons depend on. */
-function readTextOrNull(path: string): string | null {
-  try {
-    if (!statSync(path).isFile()) return null;
-  } catch {
-    return null;
-  }
-  return readFileSync(path, "utf8").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-export function runCompile(root: string, full = false): CompileResult {
+export async function runCompile(
+  root: string,
+  full = false,
+  only: readonly Tier[] | null = null,
+  config: Config | null = null,
+): Promise<CompileResult> {
   const bp = join(root, ".brainpick");
+  const cfg = config ?? loadConfig(root);
+  const wanted = new Set<Tier>(only ?? ["t1", "t2"]);
+  if (wanted.size === 1 && wanted.has("t2")) return compileT2Only(bp, cfg);
 
+  const warnings: string[] = [];
   let docs = scan(root);
   const [indexText, diskIndex] = prospectiveIndex(root, docs);
   const indexChanged = indexText !== diskIndex;
@@ -79,7 +68,8 @@ export function runCompile(root: string, full = false): CompileResult {
 
   const graph = buildGraph(docs);
   const graphText = canonicalJson(graph as unknown as JsonValue);
-  const docsText = canonicalJsonl(buildDocsRecords(docs) as unknown as JsonValue[]);
+  const records = buildDocsRecords(docs);
+  const docsText = canonicalJsonl(records as unknown as JsonValue[]);
 
   const oldManifestText = readTextOrNull(join(bp, "manifest.json"));
   const oldManifest = oldManifestText ? (JSON.parse(oldManifestText) as Record<string, unknown>) : null;
@@ -93,13 +83,33 @@ export function runCompile(root: string, full = false): CompileResult {
     readTextOrNull(join(bp, "t1", "docs.jsonl")) === docsText
   );
 
-  // This engine is chunk-1 T1-only: it behaves exactly like the Python
-  // engine with the vectors module off — tiers.t2 is always "off".
-  const tiers = { t1: "fresh", t2: "off", t3: "off" };
-  const artifactsChanged = t1Changed;
+  // T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
+  const [enabled, instruction] = await t2Gate(cfg);
+  let t2Status: string;
+  let t2Changed: boolean;
+  if (!wanted.has("t2")) {
+    t2Changed = false;
+    if (!enabled) t2Status = "off";
+    else if (!t1Changed && oldTiers["t2"] === "fresh") t2Status = "fresh";
+    else t2Status = "stale"; // --only t1 skipped T2 while its inputs moved
+  } else if (enabled) {
+    const outcome = await runT2Stage(bp, records, cfg.models.embedding, full);
+    t2Status = outcome.status;
+    t2Changed = outcome.changed;
+    if (outcome.warning) warnings.push(outcome.warning);
+  } else {
+    t2Status = "off";
+    t2Changed = false;
+    if (instruction && oldTiers["t2"] !== "off") {
+      warnings.push(instruction); // said once: the next manifest records t2 = off
+    }
+  }
+
+  const tiers = { t1: "fresh", t2: t2Status, t3: "off" };
+  const artifactsChanged = t1Changed || t2Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {
-    return { changed: false, seq: oldManifest!["seq"] as number, stats: graph.stats, delta: null, warnings: [] };
+    return { changed: false, seq: oldManifest!["seq"] as number, stats: graph.stats, delta: null, warnings };
   }
 
   atomicWrite(join(bp, "t1", "graph.json"), graphText);
@@ -115,7 +125,7 @@ export function runCompile(root: string, full = false): CompileResult {
     bundle_root: ".",
     compiled_at: utcNowSeconds(),
     files,
-    generator: { impl: "node", name: "brainpick", version: VERSION },
+    generator: generator(),
     index_md: {
       content_hash: indexDoc ? indexDoc.sha256 : null,
       managed: "section",
@@ -134,13 +144,72 @@ export function runCompile(root: string, full = false): CompileResult {
     for (const p of [...Object.keys(oldFiles), ...Object.keys(files)]) {
       if (oldFiles[p]?.sha256 !== files[p]?.sha256) changedPaths.add(p);
     }
-    delta.cause = { paths: [...changedPaths].sort(cmpStr), tier: "t1" };
+    delta.cause = { paths: [...changedPaths].sort(cmpStr), tier: t1Changed ? "t1" : "t2" };
     delta.seq = seq;
   }
 
-  return { changed: !unchanged, seq, stats: graph.stats, delta, warnings: [] };
+  return { changed: !unchanged, seq, stats: graph.stats, delta, warnings };
 }
 
+/** `--only t2`: refresh vectors from the already-compiled docs substrate.
+ *
+ * Chunks derive from t1/docs.jsonl (spec/30), so T1 artifacts and the file
+ * map stay exactly as the last full compile left them. */
+async function compileT2Only(bp: string, config: Config): Promise<CompileResult> {
+  const oldManifestText = readTextOrNull(join(bp, "manifest.json"));
+  const docsText = readTextOrNull(join(bp, "t1", "docs.jsonl"));
+  const graphText = readTextOrNull(join(bp, "t1", "graph.json"));
+  if (oldManifestText === null || docsText === null || graphText === null) {
+    return {
+      changed: false,
+      seq: 0,
+      stats: {} as GraphStats,
+      delta: null,
+      warnings: ["nothing compiled yet — run: brainpick compile"],
+    };
+  }
+  const oldManifest = JSON.parse(oldManifestText) as Record<string, unknown>;
+  const stats = ((JSON.parse(graphText) as Record<string, unknown>)["stats"] ?? {}) as GraphStats;
+  const records = docsText
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as { path: string; text: string; reserved: boolean });
+
+  const warnings: string[] = [];
+  const [enabled, instruction] = await t2Gate(config);
+  let t2Status: string;
+  let t2Changed: boolean;
+  if (enabled) {
+    const outcome = await runT2Stage(bp, records, config.models.embedding);
+    t2Status = outcome.status;
+    t2Changed = outcome.changed;
+    if (outcome.warning) warnings.push(outcome.warning);
+  } else {
+    t2Status = "off";
+    t2Changed = false;
+    const oldTiers = (oldManifest["tiers"] ?? {}) as Record<string, string>;
+    if (instruction && oldTiers["t2"] !== "off") warnings.push(instruction);
+  }
+
+  const tiers = { ...((oldManifest["tiers"] ?? {}) as Record<string, string>) };
+  tiers["t2"] = t2Status;
+  if (!t2Changed && deepEqual(tiers, oldManifest["tiers"])) {
+    return { changed: false, seq: oldManifest["seq"] as number, stats, delta: null, warnings };
+  }
+
+  const manifest = { ...oldManifest };
+  manifest["tiers"] = tiers;
+  manifest["seq"] = (oldManifest["seq"] as number) + (t2Changed ? 1 : 0);
+  manifest["compiled_at"] = utcNowSeconds();
+  manifest["generator"] = generator();
+  atomicWrite(join(bp, "manifest.json"), canonicalJson(manifest as unknown as JsonValue));
+  return { changed: true, seq: manifest["seq"] as number, stats, delta: null, warnings };
+}
+
+/** The commit gate — deliberately T1-only: it must stay deterministic and
+ * model-free (spec/10). T2 staleness (vectors lagging the chunks) is reported
+ * by `status`/`doctor` instead, so a missing embedding backend can never
+ * block a commit. */
 export function checkFresh(root: string): Freshness {
   const bp = join(root, ".brainpick");
   if (readTextOrNull(join(bp, "manifest.json")) === null) {

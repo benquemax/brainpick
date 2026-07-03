@@ -3,7 +3,7 @@
  * dev server proxies /api to 127.0.0.1:4747, production is served by the
  * engine itself.
  */
-import type { DocResponse, GraphPayload, SearchResponse } from '../graph/types';
+import type { DocResponse, GraphPayload, SearchMode, SearchResponse } from '../graph/types';
 
 export interface GraphFetchResult {
   graph: GraphPayload;
@@ -32,8 +32,13 @@ export async function fetchGraph(bustCache = false, fallbackSeq = 0): Promise<Gr
   return { graph, seq };
 }
 
-export async function fetchSearch(query: string, limit = 12, signal?: AbortSignal): Promise<SearchResponse> {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&mode=auto&limit=${limit}`, { signal });
+export async function fetchSearch(
+  query: string,
+  mode: SearchMode = 'auto',
+  limit = 12,
+  signal?: AbortSignal,
+): Promise<SearchResponse> {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&mode=${mode}&limit=${limit}`, { signal });
   if (!res.ok) throw new Error(`GET /api/search -> ${res.status}`);
   return (await res.json()) as SearchResponse;
 }

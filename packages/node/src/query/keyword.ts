@@ -11,12 +11,16 @@ export const K1 = 1.2;
 export const B = 0.75;
 export const SNIPPET_WINDOW = 240;
 
+/** The retriever that produced a hit (spec/50; under fusion, the
+ * highest-contributing one). */
+export type HitSource = "keyword" | "semantic" | "graph";
+
 export interface SearchHit {
   description: string | null;
   path: string;
   score: number;
   snippet: string | null;
-  source: "keyword";
+  source: HitSource;
   title: string;
 }
 

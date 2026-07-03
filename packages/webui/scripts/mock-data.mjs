@@ -1,13 +1,10 @@
 /**
  * Mock data for the standalone dev server, hand-derived from
- * spec/fixtures/bundles/kotiaurinko/ (10 documents, saaret island, one
- * ghost link to olematon.md).
- *
- * Spec note (reported upstream): 20-t1-artifacts.md prose says edges come
- * from every document body, but its example shows aurinko.md with in:3,
- * which would exclude index.md's navigation links. This mock includes the
- * reserved index.md edges and counts them in in/out; only `orphan` treats
- * reserved-source links as navigation, per the normative orphan rule.
+ * spec/fixtures/bundles/kotiaurinko/ and kept in lockstep with its golden
+ * t1/graph.json (10 documents, 20 edges, saaret island, one ghost link to
+ * olematon.md, yksinainen.md as the only orphan). Reserved index.md edges
+ * count in edges/in/out; only `orphan` treats reserved-source links as
+ * navigation, per the normative orphan rule (spec/20).
  *
  * Plain ESM, no dependencies — consumed by scripts/mock-server.mjs (node)
  * and by the vitest suite (typed via mock-data.d.mts).
@@ -62,15 +59,14 @@ export function initialGraph() {
       description: 'The star everything in this bundle orbits.',
       tags: ['tähti'],
       in: 4,
-      out: 2,
+      out: 3,
     }),
     node('index.md', 'Kotiaurinko', { type: null, reserved: true, in: 0, out: 8 }),
     node('komeetta.md', 'Komeetta', {
       description: 'A visitor with a tail, seen only every few decades — pöllämystynyt matkalainen.',
       tags: ['vierailija'],
-      in: 1,
+      in: 2,
       out: 1,
-      orphan: true,
     }),
     node('kuu.md', 'Kuu', { tags: ['kuu'], timestamp: '2026-06-15T08:30:00Z', in: 3, out: 1 }),
     node('log.md', 'Update log', { type: null, reserved: true }),
@@ -109,17 +105,20 @@ export function initialGraph() {
     }),
   ];
 
+  // index.md links each concept twice — the hand-written preamble plus the
+  // generated section — hence count: 2 on every index edge (golden parity).
   const edges = [
+    edge('aurinko.md', 'komeetta.md', 'Komeetta'),
     edge('aurinko.md', 'kuu.md', 'kuu', { kind: 'wikilink' }),
     edge('aurinko.md', 'planeetat.md', 'Planeetat'),
-    edge('index.md', 'aurinko.md', 'Aurinko'),
-    edge('index.md', 'komeetta.md', 'Komeetta'),
-    edge('index.md', 'kuu.md', 'Kuu'),
-    edge('index.md', 'maa.md', 'Maa'),
-    edge('index.md', 'planeetat.md', 'Planeetat'),
-    edge('index.md', 'saaret/atolli.md', 'Atolli'),
-    edge('index.md', 'saaret/laguuni.md', 'Laguuni'),
-    edge('index.md', 'yksinainen.md', 'Yksinäinen'),
+    edge('index.md', 'aurinko.md', 'Aurinko', { count: 2 }),
+    edge('index.md', 'komeetta.md', 'Komeetta', { count: 2 }),
+    edge('index.md', 'kuu.md', 'Kuu', { count: 2 }),
+    edge('index.md', 'maa.md', 'Maa', { count: 2 }),
+    edge('index.md', 'planeetat.md', 'Planeetat', { count: 2 }),
+    edge('index.md', 'saaret/atolli.md', 'Atolli', { count: 2 }),
+    edge('index.md', 'saaret/laguuni.md', 'Laguuni', { count: 2 }),
+    edge('index.md', 'yksinainen.md', 'Yksinäinen', { count: 2 }),
     edge('komeetta.md', 'aurinko.md', 'Aurinko', { count: 2 }),
     edge('kuu.md', 'maa.md', 'Maa'),
     edge('maa.md', 'kuu.md', 'Kuu'),
@@ -136,7 +135,7 @@ export function initialGraph() {
     edges,
     ghosts: [{ source: 'saaret/laguuni.md', target: 'olematon.md' }],
     islands: [['saaret/atolli.md', 'saaret/laguuni.md']],
-    stats: { docs: 10, edges: 19, ghosts: 1, islands: 1, orphans: 2, tags: 8 },
+    stats: { docs: 10, edges: 20, ghosts: 1, islands: 1, orphans: 1, tags: 8 },
     tags: tagsFromNodes(nodes),
   };
 }
@@ -256,7 +255,7 @@ export function mockDocs() {
     doc('aurinko.md', 'Aurinko', {
       description: 'The star everything in this bundle orbits.',
       tags: ['tähti'],
-      text: '# Aurinko\n\nThe sun sits at the center. The [Planeetat](planeetat.md) circle it, and\neven the [[kuu]] answers to its light.\n',
+      text: '# Aurinko\n\nThe sun sits at the center. The [Planeetat](planeetat.md) circle it, and\neven the [[kuu]] answers to its light. A [Komeetta](komeetta.md) visits\nwhen it pleases.\n',
     }),
     doc('index.md', 'Kotiaurinko', {
       type: null,

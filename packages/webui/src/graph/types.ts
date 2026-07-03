@@ -106,6 +106,13 @@ export interface SearchResponse {
   degraded_from: string | null;
 }
 
+/**
+ * GET /api/search `mode` values (spec/50). Unknown modes fall back to auto
+ * server-side; `graph` answers keyword-degraded until T3 lands.
+ */
+export const SEARCH_MODES = ['auto', 'keyword', 'semantic', 'graph'] as const;
+export type SearchMode = (typeof SEARCH_MODES)[number];
+
 /** GET /api/docs/{path} response. */
 export interface DocResponse {
   path: string;

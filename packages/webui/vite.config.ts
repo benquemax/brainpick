@@ -5,8 +5,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // The brainpick server binds 127.0.0.1:4747 (spec/50-rest-api.md); the mock
 // server (scripts/mock-server.mjs) binds the same port so `dev` and
-// `dev:mock` share this proxy.
-const API_TARGET = 'http://127.0.0.1:4747';
+// `dev:mock` share this proxy. BP_API_TARGET overrides it when 4747 is
+// already taken (e.g. a real engine running alongside dev:mock).
+const API_TARGET = process.env.BP_API_TARGET ?? 'http://127.0.0.1:4747';
 
 export default defineConfig({
   plugins: [

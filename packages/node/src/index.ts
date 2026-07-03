@@ -33,6 +33,61 @@ export {
   type GraphNode,
   type GraphStats,
 } from "./compile/t1";
-export { checkFresh, INDEX_FILE, runCompile, type CompileResult, type Freshness } from "./compile/pipeline";
+export {
+  checkFresh,
+  INDEX_FILE,
+  runCompile,
+  type CompileResult,
+  type Freshness,
+  type Tier,
+} from "./compile/pipeline";
+export {
+  buildChunks,
+  chunkDocument,
+  fingerprint,
+  MAX_CHUNK,
+  OVERLAP,
+  runT2Stage,
+  slugify,
+  t2Gate,
+  type Chunk,
+  type ChunkSource,
+  type T2Result,
+} from "./compile/t2";
+export {
+  defaultConfig,
+  loadConfig,
+  type Config,
+  type EmbeddingConfig,
+  type ModelsConfig,
+  type ModulesConfig,
+} from "./config";
 export { diffGraphs, type GraphDelta, type RemovedEdge } from "./deltas";
-export { search, type SearchHit } from "./query/keyword";
+export {
+  BATCH_SIZE,
+  EmbeddingUnavailable,
+  makeEmbedder,
+  MOCK_DIM,
+  MockEmbedder,
+  OllamaEmbedder,
+  OpenAICompatEmbedder,
+  type Embedder,
+} from "./embed";
+export { search, type HitSource, type SearchHit } from "./query/keyword";
+export {
+  KNOWN_MODES,
+  resolveMode,
+  RRF_K,
+  rrfFuse,
+  runSearch,
+  type SearchBody,
+  type SemanticFn,
+} from "./query/router";
+export { loadEmbeddingRecord, semanticSearch, SemanticUnavailable } from "./query/vectors";
+export {
+  lancedbAvailable,
+  TABLE,
+  VectorStore,
+  VectorStoreUnavailable,
+  type ChunkRow,
+} from "./vectorstore";

@@ -12,6 +12,8 @@ import type { UIState } from '../state/store';
 import { buildSeeds, diffGraph } from '../layout/simShared';
 import type { FromWorker, GraphMessage, WorkerLink } from '../layout/messages';
 import { colorForId } from './colors';
+import { buildGhostAnchors, type GhostAnchor } from './ghosts';
+import { GHOST_GLOW } from './tuning';
 
 export interface DyingNode {
   x: number;
@@ -45,6 +47,8 @@ export class GraphRuntime {
   activityAt: Float32Array = new Float32Array(0); // scene seconds; -1 = none
   edgePairs: Uint32Array = new Uint32Array(0);
   edgeCount = 0;
+  /** Ghost links whose source is live: index + phantom offset (scene/ghosts). */
+  ghostAnchors: GhostAnchor[] = [];
   /** Node indices sorted by degree descending (label priority). */
   labelOrder: number[] = [];
   dying: DyingNode[] = [];
@@ -222,6 +226,7 @@ export class GraphRuntime {
     this.activityAt = activityAt;
     this.edgePairs = Uint32Array.from(pairs);
     this.edgeCount = links.length;
+    this.ghostAnchors = buildGhostAnchors(state.ghosts, index, GHOST_GLOW.phantomDistance);
     this.labelOrder = ids
       .map((_, i) => i)
       .sort((a, b) => (degrees[b] ?? 0) - (degrees[a] ?? 0) || (ids[a] as string).localeCompare(ids[b] as string));

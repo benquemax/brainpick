@@ -25,6 +25,10 @@ henxels:
     run_before_commit: "cd packages/python && uv run --extra dev pytest -q"
     why: "Tests define the feature set; the feature set must always work (principle 12)."
 
+  - henxel: "The WHOLE feature set works before every push — every engine, every suite, e2e included"
+    run_before_push: "npm test -w packages/node && npm test -w packages/webui && npm run e2e -w packages/webui"
+    why: "The push gate is the full regression armor; nothing reaches the remote with a broken feature set."
+
   # --- the OKF wiki (okf-llm-wiki template) --------------------------------
   # The bundle in docs/ is brainpick's own LLM wiki AND its dogfood corpus.
   # It follows the Open Knowledge Format:

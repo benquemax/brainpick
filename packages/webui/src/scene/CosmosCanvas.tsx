@@ -2,6 +2,7 @@
 import { Canvas } from '@react-three/fiber';
 import { CameraRig } from './CameraRig';
 import { EdgesLayer } from './EdgesLayer';
+import { GhostEdgesLayer } from './GhostEdgesLayer';
 import { LabelsLayer } from './LabelsLayer';
 import { NodesLayer } from './NodesLayer';
 import { PointerControls } from './PointerControls';
@@ -24,6 +25,7 @@ export function CosmosCanvas({
     >
       <color attach="background" args={['#04060c']} />
       <EdgesLayer runtime={runtime} />
+      <GhostEdgesLayer runtime={runtime} />
       <NodesLayer runtime={runtime} />
       <CameraRig runtime={runtime} />
       <PointerControls runtime={runtime} />

@@ -48,6 +48,33 @@ describe('mock graph (kotiaurinko-derived)', () => {
     const docPaths = mockDocs().map((d) => d.path).sort();
     expect(docPaths).toEqual(nodeIds);
   });
+
+  it('matches the current kotiaurinko golden: aurinko→komeetta exists, 20 edges, 1 orphan', () => {
+    const graph = initialGraph();
+    expect(graph.stats).toEqual({ docs: 10, edges: 20, ghosts: 1, islands: 1, orphans: 1, tags: 8 });
+    const link = graph.edges.find((e) => e.source === 'aurinko.md' && e.target === 'komeetta.md');
+    expect(link).toMatchObject({ kind: 'link', label: 'Komeetta' });
+    const komeetta = graph.nodes.find((n) => n.id === 'komeetta.md');
+    expect(komeetta?.orphan).toBe(false); // aurinko links back since the fixture fix
+    expect(komeetta?.in).toBe(2);
+    const aurinko = graph.nodes.find((n) => n.id === 'aurinko.md');
+    expect(aurinko?.out).toBe(3);
+    const orphans = graph.nodes.filter((n) => n.orphan).map((n) => n.id);
+    expect(orphans).toEqual(['yksinainen.md']);
+    // the compiled index links each concept twice (preamble + generated section)
+    for (const e of graph.edges.filter((x) => x.source === 'index.md')) {
+      expect(e.count).toBe(2);
+    }
+  });
+
+  it('keeps the aurinko doc text in step with the fixture (the komeetta sentence)', () => {
+    const aurinko = mockDocs().find((d) => d.path === 'aurinko.md');
+    expect(aurinko?.text).toContain('[Komeetta](komeetta.md)');
+  });
+
+  it('keeps the ghost link laguuni→olematon for the phantom-node rendering', () => {
+    expect(initialGraph().ghosts).toEqual([{ source: 'saaret/laguuni.md', target: 'olematon.md' }]);
+  });
 });
 
 describe('mock scripted deltas', () => {
