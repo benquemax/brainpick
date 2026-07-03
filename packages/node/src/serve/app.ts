@@ -9,6 +9,16 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
+import {
+  AUTH_REQUIRED_ERROR,
+  AuthProvider,
+  authActive,
+  LOGIN_HTML,
+  SESSION_COOKIE,
+  verifySession,
+  verifyToken,
+  type AuthStore,
+} from "../auth";
 import { loadConfig, type Config } from "../config";
 import { createMcpServer, WRITES_OFF_REFUSAL } from "../mcp";
 import { PACKAGE_ROOT } from "../version";
@@ -85,24 +95,77 @@ function isFile(path: string): boolean {
   }
 }
 
-/** On non-localhost binds, MCP endpoints require the configured bearer token (spec/80). */
-function bearerGate(token: string) {
+function isMcpPath(path: string): boolean {
+  return (
+    path === "/mcp" || path === "/sse" || path === "/messages" ||
+    path.startsWith("/mcp/") || path.startsWith("/sse/") || path.startsWith("/messages/")
+  );
+}
+
+function sessionCookie(req: Request): string {
+  const header = req.headers.cookie ?? "";
+  for (const chunk of header.split(";")) {
+    const trimmed = chunk.trim();
+    const cut = trimmed.indexOf("=");
+    if (cut !== -1 && trimmed.slice(0, cut) === SESSION_COOKIE) return trimmed.slice(cut + 1);
+  }
+  return "";
+}
+
+function requestAuthorized(auth: AuthStore, path: string, req: Request): boolean {
+  const bearer = req.headers.authorization ?? "";
+  if (bearer.startsWith("Bearer ") && verifyToken(auth, bearer.slice("Bearer ".length))) return true;
+  if (verifySession(auth, sessionCookie(req))) return true;
+  if (path === "/api/live") {
+    // EventSource cannot set headers (spec/80)
+    const raw = req.query["token"];
+    const token = typeof raw === "string" ? raw : Array.isArray(raw) && typeof raw[0] === "string" ? raw[0] : "";
+    if (verifyToken(auth, token)) return true;
+  }
+  return false;
+}
+
+/** spec/80 enforcement: once tokens or a password exist, /api/* and /mcp demand a
+ * Bearer token or a session cookie (/api/live also takes ?token=); the static UI asks
+ * for a login only when a password is set. Without an auth file the legacy
+ * non-localhost [serve] token rule still guards MCP — superseded by real tokens.
+ * stdio MCP never passes through here: it is local by construction, never gated. */
+function authGate(provider: AuthProvider, legacyToken: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (req.path === "/mcp" || req.path.startsWith("/mcp/") ||
-        req.path === "/sse" || req.path.startsWith("/sse/") ||
-        req.path === "/messages" || req.path.startsWith("/messages/")) {
-      if (req.headers.authorization !== `Bearer ${token}`) {
+    const path = req.path;
+    const auth = provider.current();
+    if (!authActive(auth)) {
+      if (legacyToken !== "" && isMcpPath(path) && req.headers.authorization !== `Bearer ${legacyToken}`) {
         res.status(401).json({ error: "missing or wrong bearer token — send Authorization: Bearer <token>" });
         return;
       }
+      next();
+      return;
+    }
+    if (path === "/api/login" || path === "/api/logout") {
+      next(); // the way in (and out) stays reachable
+      return;
+    }
+    if (path === "/api" || path.startsWith("/api/") || isMcpPath(path)) {
+      if (requestAuthorized(auth!, path, req)) {
+        next();
+        return;
+      }
+      res.status(401).set("WWW-Authenticate", "Bearer").json({ error: AUTH_REQUIRED_ERROR });
+      return;
+    }
+    if (auth!.password !== null && (req.method === "GET" || req.method === "HEAD") &&
+        !verifySession(auth, sessionCookie(req))) {
+      res.status(200).type("html").send(LOGIN_HTML); // spec/50: / serves the login page, no session yet
+      return;
     }
     next();
   };
 }
 
-function httpWriteRefusal(config: Config): string | null {
+function httpWriteRefusal(config: Config, authConfigured: boolean): string | null {
   if (config.serve.writes === "off") return WRITES_OFF_REFUSAL;
-  if (!isLocalHost(config.serve.host) && !config.serve.token) {
+  if (!isLocalHost(config.serve.host) && !config.serve.token && !authConfigured) {
     return "brain_write over a non-localhost bind needs [serve] token set in brainpick.toml";
   }
   return null;
@@ -139,14 +202,14 @@ export async function buildApp(
   app.disable("x-powered-by");
   app.set("etag", false); // /api/graph hand-rolls its ETag from seq (spec/50)
 
-  if (!isLocalHost(cfg.serve.host) && cfg.serve.token) {
-    app.use(bearerGate(cfg.serve.token));
-  }
+  const authProvider = new AuthProvider(bundleRoot);
+  const legacyToken = !isLocalHost(cfg.serve.host) ? cfg.serve.token : "";
+  app.use(authGate(authProvider, legacyToken));
 
-  app.use(apiRouter(state));
+  app.use(apiRouter(state, authProvider));
 
   const transports = cfg.serve.transports.length > 0 ? cfg.serve.transports : ["streamable-http"];
-  const writeRefusal = httpWriteRefusal(cfg);
+  const writeRefusal = httpWriteRefusal(cfg, authActive(authProvider.current()));
   const jsonBody = express.json({ limit: "8mb" });
   const sseSessions = new Map<string, SSEServerTransport>();
 

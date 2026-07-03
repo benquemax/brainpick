@@ -255,6 +255,126 @@ def test_mcp_bearer_gate_on_nonlocal_bind(kotiaurinko):
         assert allowed.status_code != 401
 
 
+# -- auth (spec/80 + spec/50): open by default; tokens gate /api and /mcp; the
+# -- password gates the static UI behind a login page and a session cookie.
+
+AUTH_401 = ("authentication required — send Authorization: Bearer <token> "
+            "(create one: brainpick token create) or log in")
+
+
+def test_auth_open_by_default_serves_everything(kotiaurinko):
+    with TestClient(make_app(kotiaurinko)) as client:
+        assert client.get("/api/status").status_code == 200
+        assert client.post("/mcp", json={}).status_code != 401
+        page = client.get("/")
+        assert page.status_code == 200
+        assert 'id="login"' not in page.text  # no password → no login page
+
+
+def test_token_gates_api_and_mcp_until_revoked(kotiaurinko):
+    from brainpick.auth import create_token, revoke_token
+
+    with TestClient(make_app(kotiaurinko)) as client:
+        token_id, secret = create_token(kotiaurinko, name="hermes")  # picked up live
+        _, second_secret = create_token(kotiaurinko, name="vartija")
+
+        denied = client.get("/api/status")
+        assert denied.status_code == 401
+        assert denied.headers["www-authenticate"] == "Bearer"
+        assert denied.json() == {"error": AUTH_401}
+        assert client.get("/api/status", headers={"Authorization": "Bearer bp_" + "0" * 32}) \
+            .status_code == 401
+        allowed = client.get("/api/status", headers={"Authorization": f"Bearer {secret}"})
+        assert allowed.status_code == 200
+
+        mcp_denied = client.post("/mcp", json={})
+        assert mcp_denied.status_code == 401
+        assert mcp_denied.json() == {"error": AUTH_401}
+        mcp_allowed = client.post("/mcp", json={}, headers={"Authorization": f"Bearer {secret}"})
+        assert mcp_allowed.status_code != 401
+
+        page = client.get("/")  # tokens without a password never lock the UI (spec/80)
+        assert page.status_code == 200
+        assert 'id="login"' not in page.text
+
+        revoke_token(kotiaurinko, token_id)  # a running server notices without a restart
+        assert client.get("/api/status", headers={"Authorization": f"Bearer {secret}"}) \
+            .status_code == 401
+        assert client.get("/api/status", headers={"Authorization": f"Bearer {second_secret}"}) \
+            .status_code == 200
+
+        # revoking the LAST token reopens the brain — tokenless + passwordless
+        # stays a first-class setup (spec/80), never a lock-out
+        for record in list(app_tokens(kotiaurinko)):
+            revoke_token(kotiaurinko, record["id"])
+        assert client.get("/api/status").status_code == 200
+
+
+def app_tokens(root):
+    from brainpick.auth import list_tokens
+
+    return list_tokens(root)
+
+
+def test_live_stream_accepts_query_token(kotiaurinko):
+    from brainpick.auth import create_token
+
+    _, secret = create_token(kotiaurinko, name="event-source")
+    app = make_app(kotiaurinko)
+    with running_server(app) as base_url:
+        denied = httpx.get(f"{base_url}/api/live")
+        assert denied.status_code == 401
+        assert denied.json() == {"error": AUTH_401}
+        with open_live_stream(base_url, params={"token": secret}) as lines:
+            assert next_event(lines)["event"] == "hello"  # EventSource cannot set headers
+        assert httpx.get(f"{base_url}/api/live", params={"token": "bp_" + "f" * 32}) \
+            .status_code == 401
+
+
+def test_password_login_flow(kotiaurinko):
+    from brainpick.auth import SESSION_COOKIE, set_password
+
+    set_password(kotiaurinko, "kotiaurinko")
+    with TestClient(make_app(kotiaurinko)) as client:
+        page = client.get("/")
+        assert page.status_code == 200
+        assert 'id="login"' in page.text  # spec/50: the login page, not the UI
+        assert client.get("/graph/deep-link").text == page.text  # every static path asks
+        assert client.get("/api/status").status_code == 401
+
+        wrong = client.post("/api/login", json={"password": "väärä"})
+        assert wrong.status_code == 401
+        assert wrong.json() == {"error": "wrong password — try again"}
+        assert client.post("/api/login", json={}).status_code == 400
+
+        right = client.post("/api/login", json={"password": "kotiaurinko"})
+        assert right.status_code == 204
+        cookie = right.headers["set-cookie"]
+        assert cookie.startswith(f"{SESSION_COOKIE}=")
+        assert "HttpOnly" in cookie and "Max-Age=43200" in cookie  # 12 h session
+
+        page = client.get("/")  # the TestClient jar now carries the session
+        assert page.status_code == 200
+        assert 'id="login"' not in page.text
+        assert client.get("/api/status").status_code == 200  # the cookie opens /api too
+
+        out = client.post("/api/logout")
+        assert out.status_code == 204
+        assert "Max-Age=0" in out.headers["set-cookie"]
+        assert client.get("/api/status").status_code == 401
+        assert 'id="login"' in client.get("/").text
+
+
+def test_login_without_password_is_an_instruction(kotiaurinko):
+    from brainpick.auth import create_token
+
+    create_token(kotiaurinko)  # tokens only — the UI stays open, /api wants the token
+    with TestClient(make_app(kotiaurinko)) as client:
+        refused = client.post("/api/login", json={"password": "mikä tahansa"})
+        assert refused.status_code == 400
+        assert "brainpick password set" in refused.json()["error"]
+
+
 def test_live_stream_delivers_deltas(kotiaurinko):
     app = make_app(kotiaurinko)
     with running_server(app) as base_url:

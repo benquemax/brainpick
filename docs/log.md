@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Created: the brain learned to lock its door — tokens for agents, a password
+  for humans, and open-by-choice stays first-class.
 - Updated: the cosmos gained a NAVIGATOR — a live directory tree for when you
   know exactly what you are looking for, desktop panel and mobile drawer
   alike.

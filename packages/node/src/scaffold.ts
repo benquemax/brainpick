@@ -3,15 +3,17 @@
  *
  * Henxels-family voice: a box banner and colors on a TTY, plain lines in pipes, and
  * every error is an instruction. init never rewrites what it does not own — existing
- * configs and henxels.yaml get paste-able fragments, not edits. The one thing init
- * DOES own is brainpick.local.toml (spec/80 layering): detected endpoints are
- * machine-local, written there, and kept out of git.
+ * configs and henxels.yaml get paste-able fragments, not edits. The two things init
+ * DOES own are brainpick.local.toml (spec/80 layering: detected endpoints are
+ * machine-local, written there, and kept out of git) and the .brainpick-auth.json
+ * gitignore line (spec/80 auth: secrets must never enter git).
  */
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 import { parse as parseToml } from "smol-toml";
 
+import { AUTH_FILE, authActive, ensureGitignored, loadAuth } from "./auth";
 import { checkFresh, runCompile } from "./compile/pipeline";
 import { CONFIG_FILE, LOCAL_CONFIG_FILE, loadConfig } from "./config";
 import {
@@ -407,6 +409,13 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
     voice.step(".brainpick/");
   }
 
+  // spec/80: secrets must never enter git — the auth commands append this line
+  // themselves, and init pre-teaches it (like the brainpick.local.toml line above).
+  const authIgnored = ensureGitignored(root);
+  if (authIgnored !== null) {
+    voice.line("✓", `gitignore: ${AUTH_FILE} added to ${authIgnored} (secrets stay off the record)`);
+  }
+
   // 6 — compile T1
   const result = await runCompile(root);
   const stats = result.stats;
@@ -519,6 +528,27 @@ export async function runDoctor(root: string, options: DoctorOptions = {}): Prom
   } else {
     const reason = verdict.reason.split(" — ")[0]!;
     emit("✗", `artifacts: ${reason}`, `run: brainpick compile --root ${root}`);
+  }
+
+  // auth (spec/80): optional, open by default — stdio MCP is never gated either way
+  let authStore = null;
+  let authCorrupt = false;
+  try {
+    authStore = loadAuth(root);
+  } catch {
+    authCorrupt = true;
+    emit("✗", `auth: ${AUTH_FILE} is not valid JSON`,
+      "fix or delete it — the server fails closed meanwhile");
+  }
+  if (!authCorrupt) {
+    if (authActive(authStore)) {
+      const count = authStore!.tokens.length;
+      const plural = count === 1 ? "" : "s";
+      const passwordState = authStore!.password !== null ? "set" : "absent";
+      emit("✓", `auth: ${count} token${plural} · password ${passwordState} — stdio MCP stays ungated`);
+    } else {
+      emit("○", "auth: open — no auth configured (brainpick token create / password set lock it)");
+    }
   }
 
   // T2 vectors: store installed, backend configured, tier state (spec/30) — optional, never ✗

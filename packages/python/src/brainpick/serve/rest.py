@@ -6,6 +6,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from brainpick import SPEC_VERSION, __version__
+from brainpick.auth import clear_session_cookie_header, session_cookie_header, verify_password
 from brainpick.core.frontmatter import split_frontmatter
 from brainpick.query.router import run_search
 from brainpick.serve.state import bfs_neighborhood, jsonable, suggest_paths
@@ -123,6 +124,35 @@ async def neighbors_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(body)
 
 
+async def login(request: Request) -> Response:
+    """POST /api/login {password} → 204 + signed session cookie, 401 on mismatch (spec/50)."""
+    store = request.app.state.auth.current()
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    password = body.get("password") if isinstance(body, dict) else None
+    if not isinstance(password, str):
+        return JSONResponse({"error": 'send JSON: {"password": "…"}'}, status_code=400)
+    if store is None or store.password is None:
+        return JSONResponse(
+            {"error": "no password is set on this brain — set one first: brainpick password set"},
+            status_code=400,
+        )
+    if not verify_password(store, password):
+        return JSONResponse({"error": "wrong password — try again"}, status_code=401)
+    response = Response(status_code=204)
+    response.headers["Set-Cookie"] = session_cookie_header(store)
+    return response
+
+
+async def logout(request: Request) -> Response:
+    """POST /api/logout — clears the session (spec/50); always succeeds."""
+    response = Response(status_code=204)
+    response.headers["Set-Cookie"] = clear_session_cookie_header()
+    return response
+
+
 async def api_not_found(request: Request) -> JSONResponse:
     return JSONResponse({
         "error": (
@@ -140,4 +170,6 @@ def api_routes() -> list[Route]:
         Route("/api/docs/{path:path}", doc_detail),
         Route("/api/search", search_endpoint),
         Route("/api/neighbors", neighbors_endpoint),
+        Route("/api/login", login, methods=["POST"]),
+        Route("/api/logout", logout, methods=["POST"]),
     ]

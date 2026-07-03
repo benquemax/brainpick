@@ -1,5 +1,38 @@
 /** brainpick — pick your agent's brain. The native Node engine's library surface. */
 export { SPEC_VERSION, VERSION } from "./version";
+export {
+  AUTH_FILE,
+  AUTH_REQUIRED_ERROR,
+  AuthProvider,
+  authActive,
+  authPath,
+  clearPassword,
+  clearSessionCookieHeader,
+  createToken,
+  ensureGitignored,
+  listTokens,
+  loadAuth,
+  LOGIN_HTML,
+  makeSessionCookie,
+  revokeToken,
+  runPasswordClear,
+  runPasswordSetValue,
+  runTokenCreate,
+  runTokenList,
+  runTokenRevoke,
+  saveAuth,
+  scryptHash,
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  sessionCookieHeader,
+  setPassword,
+  verifyPassword,
+  verifySession,
+  verifyToken,
+  type AuthStore,
+  type HashRecord,
+  type TokenRecord,
+} from "./auth";
 export { canonicalJson, canonicalJsonl, cmpStr, sha256Hex, type JsonValue } from "./core/canonical";
 export { splitFrontmatter } from "./core/frontmatter";
 export { extractLinks, type RawLink } from "./core/links";

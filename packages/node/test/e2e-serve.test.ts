@@ -326,6 +326,162 @@ test("mcp bearer gate on nonlocal bind", async () => {
   expect(allowed.status).not.toBe(401);
 });
 
+// -- auth (spec/80 + spec/50): open by default; tokens gate /api and /mcp; the
+// -- password gates the static UI behind a login page and a session cookie.
+
+const AUTH_401 =
+  "authentication required — send Authorization: Bearer <token> " +
+  "(create one: brainpick token create) or log in";
+
+test("auth open by default serves everything", async () => {
+  const { base } = await serve(await makeApp(copyBundle()));
+  expect((await getJson(`${base}/api/status`)).status).toBe(200);
+  const mcp = await fetch(`${base}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  await mcp.text();
+  expect(mcp.status).not.toBe(401);
+  const page = await fetch(`${base}/`);
+  expect(page.status).toBe(200);
+  expect(await page.text()).not.toContain('id="login"'); // no password → no login page
+});
+
+test("token gates api and mcp until revoked", async () => {
+  const { createToken, listTokens, revokeToken } = await import("../src/auth");
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const [tokenId, secret] = createToken(root, "hermes"); // picked up live
+  const [, secondSecret] = createToken(root, "vartija");
+
+  const denied = await getJson(`${base}/api/status`);
+  expect(denied.status).toBe(401);
+  expect(denied.headers.get("www-authenticate")).toBe("Bearer");
+  expect(denied.body).toEqual({ error: AUTH_401 });
+  const wrong = await getJson(`${base}/api/status`, { Authorization: "Bearer bp_" + "0".repeat(32) });
+  expect(wrong.status).toBe(401);
+  const allowed = await getJson(`${base}/api/status`, { Authorization: `Bearer ${secret}` });
+  expect(allowed.status).toBe(200);
+
+  const mcpDenied = await fetch(`${base}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  expect(mcpDenied.status).toBe(401);
+  expect(await mcpDenied.json()).toEqual({ error: AUTH_401 });
+  const mcpAllowed = await fetch(`${base}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", Authorization: `Bearer ${secret}` },
+    body: "{}",
+  });
+  await mcpAllowed.text();
+  expect(mcpAllowed.status).not.toBe(401);
+
+  const page = await fetch(`${base}/`); // tokens without a password never lock the UI (spec/80)
+  expect(page.status).toBe(200);
+  expect(await page.text()).not.toContain('id="login"');
+
+  revokeToken(root, tokenId); // a running server notices without a restart
+  expect((await getJson(`${base}/api/status`, { Authorization: `Bearer ${secret}` })).status).toBe(401);
+  expect((await getJson(`${base}/api/status`, { Authorization: `Bearer ${secondSecret}` })).status).toBe(200);
+
+  // revoking the LAST token reopens the brain — tokenless + passwordless
+  // stays a first-class setup (spec/80), never a lock-out
+  for (const record of listTokens(root)) revokeToken(root, record.id);
+  expect((await getJson(`${base}/api/status`)).status).toBe(200);
+});
+
+test("live stream accepts query token", async () => {
+  const { createToken } = await import("../src/auth");
+  const root = copyBundle();
+  const [, secret] = createToken(root, "event-source");
+  const { base } = await serve(await makeApp(root));
+
+  const denied = await getJson(`${base}/api/live`);
+  expect(denied.status).toBe(401);
+  expect(denied.body).toEqual({ error: AUTH_401 });
+
+  const controller = new AbortController();
+  const res = await fetch(`${base}/api/live?token=${secret}`, { signal: controller.signal });
+  expect(res.status).toBe(200); // EventSource cannot set headers
+  const reader = new SseReader(res.body!);
+  expect((await reader.nextEvent())["event"]).toBe("hello");
+  controller.abort();
+
+  expect((await getJson(`${base}/api/live?token=bp_${"f".repeat(32)}`)).status).toBe(401);
+});
+
+test("password login flow", async () => {
+  const { SESSION_COOKIE, setPassword } = await import("../src/auth");
+  const root = copyBundle();
+  setPassword(root, "kotiaurinko");
+  const { base } = await serve(await makeApp(root));
+
+  const page = await fetch(`${base}/`);
+  expect(page.status).toBe(200);
+  const pageText = await page.text();
+  expect(pageText).toContain('id="login"'); // spec/50: the login page, not the UI
+  const deep = await fetch(`${base}/graph/deep-link`);
+  expect(await deep.text()).toBe(pageText); // every static path asks
+  expect((await getJson(`${base}/api/status`)).status).toBe(401);
+
+  const wrong = await fetch(`${base}/api/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: "väärä" }),
+  });
+  expect(wrong.status).toBe(401);
+  expect(await wrong.json()).toEqual({ error: "wrong password — try again" });
+  const empty = await fetch(`${base}/api/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  await empty.text();
+  expect(empty.status).toBe(400);
+
+  const right = await fetch(`${base}/api/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: "kotiaurinko" }),
+  });
+  expect(right.status).toBe(204);
+  const cookie = right.headers.get("set-cookie")!;
+  expect(cookie.startsWith(`${SESSION_COOKIE}=`)).toBe(true);
+  expect(cookie).toContain("HttpOnly");
+  expect(cookie).toContain("Max-Age=43200"); // 12 h session
+  const session = cookie.split(";")[0]!;
+
+  const ui = await fetch(`${base}/`, { headers: { Cookie: session } });
+  expect(ui.status).toBe(200);
+  expect(await ui.text()).not.toContain('id="login"');
+  expect((await getJson(`${base}/api/status`, { Cookie: session })).status).toBe(200); // /api too
+
+  const out = await fetch(`${base}/api/logout`, { method: "POST", headers: { Cookie: session } });
+  await out.text();
+  expect(out.status).toBe(204);
+  expect(out.headers.get("set-cookie")).toContain("Max-Age=0");
+  expect((await getJson(`${base}/api/status`)).status).toBe(401);
+  const locked = await fetch(`${base}/`);
+  expect(await locked.text()).toContain('id="login"');
+});
+
+test("login without password is an instruction", async () => {
+  const { createToken } = await import("../src/auth");
+  const root = copyBundle();
+  createToken(root); // tokens only — the UI stays open, /api wants the token
+  const { base } = await serve(await makeApp(root));
+  const refused = await fetch(`${base}/api/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: "mikä tahansa" }),
+  });
+  expect(refused.status).toBe(400);
+  expect(((await refused.json()) as { error: string }).error).toContain("brainpick password set");
+});
+
 test("live stream delivers deltas", { timeout: 30_000 }, async () => {
   const root = copyBundle();
   const running = await serve(await makeApp(root));

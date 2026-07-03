@@ -167,13 +167,15 @@ def test_init_suggests_gitignore_lines_without_editing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert ".brainpick/" in out
     assert "brainpick.local.toml" in out  # the machine-local layer stays personal
-    assert gitignore.read_text(encoding="utf-8") == "node_modules/\n"  # suggested, not edited
+    # artifacts/endpoints stay suggestions; the auth line is the one edit (spec/80 secrets)
+    assert gitignore.read_text(encoding="utf-8") == "node_modules/\n.brainpick-auth.json\n"
+    assert ".brainpick-auth.json added" in out
 
 
 def test_init_suggests_only_the_missing_gitignore_line(tmp_path, capsys):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    (repo / ".gitignore").write_text(".brainpick/\n", encoding="utf-8")
+    (repo / ".gitignore").write_text(".brainpick/\n.brainpick-auth.json\n", encoding="utf-8")
     bundle = typed_bundle(repo / "wiki")
     assert run_init(bundle, env={}, probes=NO_BACKENDS) == 0
     out = capsys.readouterr().out
@@ -184,10 +186,12 @@ def test_init_suggests_only_the_missing_gitignore_line(tmp_path, capsys):
 def test_init_skips_gitignore_suggestion_when_covered(tmp_path, capsys):
     repo = tmp_path / "repo"
     (repo / ".git").mkdir(parents=True)
-    (repo / ".gitignore").write_text(".brainpick/\n**/brainpick.local.toml\n", encoding="utf-8")
+    covered = ".brainpick/\n**/brainpick.local.toml\n.brainpick-auth.json\n"
+    (repo / ".gitignore").write_text(covered, encoding="utf-8")
     bundle = typed_bundle(repo / "wiki")
     assert run_init(bundle, env={}, probes=NO_BACKENDS) == 0
     assert ".gitignore" not in capsys.readouterr().out
+    assert (repo / ".gitignore").read_text(encoding="utf-8") == covered
 
 
 def test_init_prints_the_henxels_freshness_gate(kotiaurinko, capsys):
@@ -307,3 +311,25 @@ def test_doctor_reports_found_backends(kotiaurinko, capsys):
     out = capsys.readouterr().out
     assert "✓ ollama: nomic-embed-text:latest at http://127.0.0.1:11434" in out
     assert "lm studio: not reachable" in out
+
+
+def test_doctor_auth_line_walks_the_states(kotiaurinko, capsys):
+    from brainpick.auth import auth_path, create_token, set_password
+
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    capsys.readouterr()
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    assert "○ auth: open — no auth configured" in capsys.readouterr().out
+
+    create_token(kotiaurinko, name="hermes")
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    assert "✓ auth: 1 token · password absent" in capsys.readouterr().out
+
+    create_token(kotiaurinko)
+    set_password(kotiaurinko, "kotiaurinko")
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    assert "✓ auth: 2 tokens · password set" in capsys.readouterr().out
+
+    auth_path(kotiaurinko).write_text("broken {", encoding="utf-8")
+    assert run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS) == 1
+    assert "✗ auth: .brainpick-auth.json is not valid JSON" in capsys.readouterr().out

@@ -170,6 +170,68 @@ program
     });
   });
 
+const token = program.command("token").description("manage bearer tokens for agents (spec/80 auth)");
+
+token
+  .command("create")
+  .description("mint a token — the secret prints exactly once")
+  .option("--name <name>", "a label for the token (e.g. the agent's name)")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .action(async (opts: { name?: string; root: string }) => {
+    const { runTokenCreate } = await import("./auth");
+    process.exitCode = runTokenCreate(opts.root, { name: opts.name ?? null });
+  });
+
+token
+  .command("list")
+  .description("list tokens (ids and names — never secrets)")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .action(async (opts: { root: string }) => {
+    const { runTokenList } = await import("./auth");
+    process.exitCode = runTokenList(opts.root);
+  });
+
+token
+  .command("revoke <id>")
+  .description("revoke a token by id — it stops working immediately")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .action(async (id: string, opts: { root: string }) => {
+    const { runTokenRevoke } = await import("./auth");
+    process.exitCode = runTokenRevoke(opts.root, id);
+  });
+
+const password = program.command("password").description("manage the web UI password (spec/80 auth)");
+
+password
+  .command("set")
+  .description("set the password (TTY prompt, or --stdin for pipes)")
+  .option("--stdin", "read the password from stdin")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .action(async (opts: { stdin?: boolean; root: string }) => {
+    const { promptHidden, readStdinLine, runPasswordSetValue } = await import("./auth");
+    let value: string;
+    if (opts.stdin) {
+      value = await readStdinLine();
+    } else {
+      value = await promptHidden("new password: ");
+      if ((await promptHidden("repeat it: ")) !== value) {
+        console.log("the two entries differ — nothing changed");
+        process.exitCode = 1;
+        return;
+      }
+    }
+    process.exitCode = runPasswordSetValue(opts.root, value);
+  });
+
+password
+  .command("clear")
+  .description("remove the password — the UI opens without a login")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .action(async (opts: { root: string }) => {
+    const { runPasswordClear } = await import("./auth");
+    process.exitCode = runPasswordClear(opts.root);
+  });
+
 program
   .command("init")
   .description("detect the bundle and backends, write config, compile T1")

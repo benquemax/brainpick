@@ -3,8 +3,14 @@
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { Router, type Request, type Response } from "express";
+import express, { Router, type NextFunction, type Request, type Response } from "express";
 
+import {
+  clearSessionCookieHeader,
+  sessionCookieHeader,
+  verifyPassword,
+  type AuthProvider,
+} from "../auth";
 import type { GraphStats } from "../compile/t1";
 import { splitFrontmatter } from "../core/frontmatter";
 import { runSearch } from "../query/router";
@@ -47,8 +53,54 @@ function docFrontmatter(state: ServeState, path: string): [Record<string, unknow
   return [meta, record.text];
 }
 
-export function apiRouter(state: ServeState): Router {
+export function apiRouter(state: ServeState, auth: AuthProvider): Router {
   const router = Router();
+  const jsonBody = express.json({ limit: "64kb" });
+  // Starlette treats an unparseable login body as a missing password (400 with the
+  // same instruction) — mirror that instead of express.json's default HTML error.
+  const forgivingJson = (req: Request, res: Response, next: NextFunction): void => {
+    jsonBody(req, res, (err?: unknown) => {
+      if (err !== undefined && err !== null) req.body = null;
+      next();
+    });
+  };
+
+  // POST /api/login {password} → 204 + signed session cookie, 401 on mismatch (spec/50)
+  router.post("/api/login", forgivingJson, (req: Request, res: Response) => {
+    const store = auth.current();
+    const body: unknown = req.body;
+    const password =
+      typeof body === "object" && body !== null && !Array.isArray(body)
+        ? (body as Record<string, unknown>)["password"]
+        : undefined;
+    if (typeof password !== "string") {
+      res.status(400).json({ error: 'send JSON: {"password": "…"}' });
+      return;
+    }
+    if (store === null || store.password === null) {
+      res.status(400).json({
+        error: "no password is set on this brain — set one first: brainpick password set",
+      });
+      return;
+    }
+    if (!verifyPassword(store, password)) {
+      res.status(401).json({ error: "wrong password — try again" });
+      return;
+    }
+    res.status(204).set("Set-Cookie", sessionCookieHeader(store)).end();
+  });
+
+  // POST /api/logout — clears the session (spec/50); always succeeds
+  router.post("/api/logout", (_req: Request, res: Response) => {
+    res.status(204).set("Set-Cookie", clearSessionCookieHeader()).end();
+  });
+
+  // Starlette's Route(methods=["POST"]) answers other verbs with 405 — mirror it
+  const methodNotAllowed = (_req: Request, res: Response): void => {
+    res.status(405).set("Allow", "POST").type("text/plain").send("Method Not Allowed");
+  };
+  router.all("/api/login", methodNotAllowed);
+  router.all("/api/logout", methodNotAllowed);
 
   router.get("/api/health", (_req: Request, res: Response) => {
     res.json({ impl: "node", name: "brainpick", spec_version: SPEC_VERSION, version: VERSION });

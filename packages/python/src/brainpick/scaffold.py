@@ -3,7 +3,9 @@ compile, glow — and never interrogate.
 
 Henxels-family voice: a box banner and colors on a TTY, plain lines in pipes, and
 every error is an instruction. init never rewrites what it does not own — existing
-configs, .gitignore, and henxels.yaml get paste-able fragments, not edits.
+configs, .gitignore, and henxels.yaml get paste-able fragments, not edits. The one
+exception is the `.brainpick-auth.json` gitignore line (spec/80): secrets must never
+enter git, so init appends it itself, exactly like the auth commands do.
 """
 from __future__ import annotations
 
@@ -350,6 +352,14 @@ def run_init(
         for line in missing:
             voice.step(line)
 
+    # spec/80: secrets must never enter git — the auth commands append this line
+    # themselves, and init pre-teaches it (the one .gitignore edit init makes).
+    from brainpick.auth import AUTH_FILE, ensure_gitignored
+
+    ignored = ensure_gitignored(root)
+    if ignored is not None:
+        voice.line("✓", f"gitignore: {AUTH_FILE} added to {ignored} (secrets stay off the record)")
+
     # 6 — compile T1
     result = run_compile(root)
     stats = result.stats
@@ -426,6 +436,23 @@ def run_doctor(
     else:
         reason = verdict.reason.split(" — ")[0]
         emit("✗", f"artifacts: {reason}", f"run: brainpick compile --root {root}")
+
+    # auth (spec/80): optional, open by default — stdio MCP is never gated either way
+    from brainpick.auth import AUTH_FILE, auth_active, load_auth
+
+    try:
+        auth_store = load_auth(root)
+    except ValueError:
+        emit("✗", f"auth: {AUTH_FILE} is not valid JSON",
+             "fix or delete it — the server fails closed meanwhile")
+    else:
+        if auth_active(auth_store):
+            count = len(auth_store.tokens)
+            plural = "" if count == 1 else "s"
+            password = "set" if auth_store.password is not None else "absent"
+            emit("✓", f"auth: {count} token{plural} · password {password} — stdio MCP stays ungated")
+        else:
+            emit("○", "auth: open — no auth configured (brainpick token create / password set lock it)")
 
     # T2 vectors: extra installed, backend configured, tier state (spec/30) — optional, never ✗
     with warnings.catch_warnings():

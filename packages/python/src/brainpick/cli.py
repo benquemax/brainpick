@@ -94,6 +94,36 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return run_doctor(Path(args.root))
 
 
+def _cmd_token_create(args: argparse.Namespace) -> int:
+    from brainpick.auth import run_token_create
+
+    return run_token_create(Path(args.root), name=args.name)
+
+
+def _cmd_token_list(args: argparse.Namespace) -> int:
+    from brainpick.auth import run_token_list
+
+    return run_token_list(Path(args.root))
+
+
+def _cmd_token_revoke(args: argparse.Namespace) -> int:
+    from brainpick.auth import run_token_revoke
+
+    return run_token_revoke(Path(args.root), args.token_id)
+
+
+def _cmd_password_set(args: argparse.Namespace) -> int:
+    from brainpick.auth import run_password_set
+
+    return run_password_set(Path(args.root), use_stdin=args.stdin)
+
+
+def _cmd_password_clear(args: argparse.Namespace) -> int:
+    from brainpick.auth import run_password_clear
+
+    return run_password_clear(Path(args.root))
+
+
 def _cmd_mcp(args: argparse.Namespace) -> int:
     # stdio is the protocol channel: nothing may print to stdout here
     from brainpick.config import load_config
@@ -151,6 +181,30 @@ def main(argv: list[str] | None = None) -> int:
     p_doctor = sub.add_parser("doctor", help="diagnose config, bundle, artifacts, backends, and UI")
     p_doctor.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_doctor.set_defaults(func=_cmd_doctor)
+
+    p_token = sub.add_parser("token", help="manage bearer tokens for agents (spec/80 auth)")
+    token_sub = p_token.add_subparsers(dest="token_command", required=True)
+    t_create = token_sub.add_parser("create", help="mint a token — the secret prints exactly once")
+    t_create.add_argument("--name", default=None, help="a label for the token (e.g. the agent's name)")
+    t_create.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    t_create.set_defaults(func=_cmd_token_create)
+    t_list = token_sub.add_parser("list", help="list tokens (ids and names — never secrets)")
+    t_list.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    t_list.set_defaults(func=_cmd_token_list)
+    t_revoke = token_sub.add_parser("revoke", help="revoke a token by id — it stops working immediately")
+    t_revoke.add_argument("token_id", metavar="<id>", help="the token id (brainpick token list)")
+    t_revoke.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    t_revoke.set_defaults(func=_cmd_token_revoke)
+
+    p_password = sub.add_parser("password", help="manage the web UI password (spec/80 auth)")
+    password_sub = p_password.add_subparsers(dest="password_command", required=True)
+    pw_set = password_sub.add_parser("set", help="set the password (TTY prompt, or --stdin for pipes)")
+    pw_set.add_argument("--stdin", action="store_true", help="read the password from stdin")
+    pw_set.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    pw_set.set_defaults(func=_cmd_password_set)
+    pw_clear = password_sub.add_parser("clear", help="remove the password — the UI opens without a login")
+    pw_clear.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    pw_clear.set_defaults(func=_cmd_password_clear)
 
     args = parser.parse_args(argv)
     return args.func(args)

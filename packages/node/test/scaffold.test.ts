@@ -139,14 +139,15 @@ test("init adds brainpick.local.toml to an existing repo gitignore", async () =>
   const bundle = typedBundle(join(repo, "wiki"));
   const out = capture();
   expect(await runInit(bundle, { env: {}, probes: OLLAMA_FOUND, print: out.print })).toBe(0);
-  const gitignore = readFileSync(join(repo, ".gitignore"), "utf8");
-  expect(gitignore).toBe(".brainpick/\nbrainpick.local.toml\n");
+  const expected = ".brainpick/\nbrainpick.local.toml\n.brainpick-auth.json\n";
+  expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe(expected);
   expect(out.text()).toContain("gitignore: brainpick.local.toml added");
+  expect(out.text()).toContain("gitignore: .brainpick-auth.json added");
   // rerun: local config exists — left untouched, gitignore not duplicated
   const again = capture();
   expect(await runInit(bundle, { env: {}, probes: OLLAMA_FOUND, print: again.print })).toBe(0);
   expect(again.text()).toContain("brainpick.local.toml exists — left untouched");
-  expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe(".brainpick/\nbrainpick.local.toml\n");
+  expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe(expected);
 });
 
 test("init offers the pull when ollama is modelless", async () => {
@@ -193,18 +194,22 @@ test("init suggests gitignore line for .brainpick without editing it in", async 
   const out = capture();
   expect(await runInit(bundle, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
   expect(out.text()).toContain(".brainpick/");
-  expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe("node_modules/\n"); // suggested, not edited
+  // artifacts stay a suggestion; the auth line is the one edit (spec/80 secrets)
+  expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe("node_modules/\n.brainpick-auth.json\n");
+  expect(out.text()).toContain(".brainpick-auth.json added");
 });
 
 test("init skips gitignore suggestion when covered", async () => {
   const base = tempDir();
   const repo = join(base, "repo");
   mkdirSync(join(repo, ".git"), { recursive: true });
-  writeFileSync(join(repo, ".gitignore"), ".brainpick/\n", "utf8");
+  const covered = ".brainpick/\n.brainpick-auth.json\n";
+  writeFileSync(join(repo, ".gitignore"), covered, "utf8");
   const bundle = typedBundle(join(repo, "wiki"));
   const out = capture();
   expect(await runInit(bundle, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
   expect(out.text()).not.toContain(".gitignore");
+  expect(readFileSync(join(repo, ".gitignore"), "utf8")).toBe(covered);
 });
 
 test("init prints the henxels freshness gate", async () => {
@@ -321,4 +326,29 @@ test("doctor reports found backends", async () => {
   const text = out.text();
   expect(text).toContain("✓ ollama: nomic-embed-text:latest at http://127.0.0.1:11434");
   expect(text).toContain("lm studio: not reachable");
+});
+
+test("doctor auth line walks the states", async () => {
+  const { authPath, createToken, setPassword } = await import("../src/auth");
+  const root = copyBundle();
+  await runInit(root, { env: {}, probes: NO_BACKENDS, print: () => undefined });
+  const open = capture();
+  await runDoctor(root, { env: {}, probes: NO_BACKENDS, print: open.print });
+  expect(open.text()).toContain("○ auth: open — no auth configured");
+
+  createToken(root, "hermes");
+  const one = capture();
+  await runDoctor(root, { env: {}, probes: NO_BACKENDS, print: one.print });
+  expect(one.text()).toContain("✓ auth: 1 token · password absent");
+
+  createToken(root);
+  setPassword(root, "kotiaurinko");
+  const two = capture();
+  await runDoctor(root, { env: {}, probes: NO_BACKENDS, print: two.print });
+  expect(two.text()).toContain("✓ auth: 2 tokens · password set");
+
+  writeFileSync(authPath(root), "broken {", "utf8");
+  const broken = capture();
+  expect(await runDoctor(root, { env: {}, probes: NO_BACKENDS, print: broken.print })).toBe(1);
+  expect(broken.text()).toContain("✗ auth: .brainpick-auth.json is not valid JSON");
 });
