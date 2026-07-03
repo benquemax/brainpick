@@ -173,7 +173,10 @@ export function SearchOverlay() {
           );
         })}
       </div>
-      {meta?.degradedFrom != null && (
+      {/* AUTO's contract is "best available" — delivering keyword on a
+          T1-only brain is fulfilment, not degradation. The chip is for an
+          EXPLICIT mode the server could not honor. */}
+      {meta?.degradedFrom != null && mode !== 'auto' && (
         <div className="degraded-chip" role="status">
           {meta.degradedFrom} unavailable — {meta.usedModes.join(' + ')} answered
         </div>
