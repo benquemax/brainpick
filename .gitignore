@@ -33,3 +33,6 @@ packages/node/static/*
 # playwright e2e run output (packages/webui)
 test-results/
 playwright-report/
+
+# machine-local bundle config (personal endpoints — the shared layer is a parked design)
+docs/brainpick.toml
