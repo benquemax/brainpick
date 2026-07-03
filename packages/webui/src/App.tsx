@@ -5,6 +5,7 @@ import { uiStore, useUI } from './state/store';
 import { CameraCluster } from './ui/CameraCluster';
 import { DocPanel } from './ui/DocPanel';
 import { LensCluster } from './ui/LensCluster';
+import { NavigatorPanel } from './ui/NavigatorPanel';
 import { SearchOverlay } from './ui/SearchOverlay';
 import { StatusHUD } from './ui/StatusHUD';
 
@@ -35,6 +36,7 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
         else if (s.searchOpen || s.searchHits.length > 0) s.clearSearch();
         else if (s.lens.kind !== 'none') s.clearLens();
         else if (s.selection !== null) s.select(null);
+        else if (s.navigatorOpen) s.toggleNavigator();
       } else if (s.searchOpen) {
         // While the search overlay is up, letters/digits belong to the query
         // (even if focus briefly sits on a mode button) — no camera hotkeys.
@@ -49,6 +51,9 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       } else if (e.key === 'g' || e.key === 'G') {
         e.preventDefault();
         s.toggleGhosts();
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        s.toggleNavigator();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -63,11 +68,12 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <SearchButton />
       <SearchOverlay />
       <DocPanel />
+      <NavigatorPanel />
       <LensCluster />
       <CameraCluster />
       <div className="hint-bar">
-        <kbd>/</kbd> search · <kbd>0</kbd> overview · <kbd>1–3</kbd> views (<kbd>shift</kbd> saves) ·{' '}
-        <kbd>g</kbd> ghosts · click a node to read
+        <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>0</kbd> overview · <kbd>1–3</kbd> views (<kbd>shift</kbd>{' '}
+        saves) · <kbd>g</kbd> ghosts · click a node to read
       </div>
     </div>
   );

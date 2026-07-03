@@ -35,6 +35,23 @@ const NEW_DOC = [
   '',
 ].join('\n');
 
+// Written into saaret/ by the navigator live test — the tree must show the
+// join in the right directory without a reload. (The root-level uusi.md is
+// already spent by the earlier serial test.)
+const REEF_DOC = [
+  '---',
+  'type: Concept',
+  'title: Riutta',
+  'description: A reef just off the atoll.',
+  'timestamp: 2026-07-04T09:00:00Z',
+  '---',
+  '',
+  '# Riutta',
+  '',
+  'It shelters the [Atolli](atolli.md).',
+  '',
+].join('\n');
+
 function baseURL(): string {
   const url = process.env.BP_E2E_URL;
   if (!url) throw new Error('BP_E2E_URL missing — did global-setup run?');
@@ -211,4 +228,106 @@ test('PWA: the manifest is linked and served', async ({ page }) => {
   const manifest = await page.request.get(baseURL() + '/manifest.webmanifest');
   expect(manifest.status()).toBe(200);
   expect((await manifest.json()).name).toBe('brainpick');
+});
+
+test('the navigator opens via key n and the HUD button, mirroring the bundle tree', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.keyboard.press('n');
+  await expect(page.locator('.navigator-panel')).toBeVisible();
+  await page.waitForFunction(() => window.__bp_store.getState().navigatorOpen);
+
+  // the fixture tree: the saaret dir with its 2 docs, default-expanded (≤3 dirs)
+  const saaret = page.locator('.nav-dir', { hasText: 'saaret' });
+  await expect(saaret).toBeVisible();
+  await expect(saaret.locator('.nav-count')).toHaveText('2');
+  await expect(page.locator('.nav-doc', { hasText: /^Atolli$/ })).toBeVisible();
+  await expect(page.locator('.nav-doc', { hasText: /^Laguuni$/ })).toBeVisible();
+  // reserved docs stay listed but de-emphasized; the orphan carries its dot
+  await expect(page.locator('.nav-doc.reserved')).toHaveCount(2); // index.md + log.md
+  await expect(page.locator('.nav-doc', { hasText: /^Yksinäinen$/ }).locator('.orphan-dot')).toBeVisible();
+
+  await page.keyboard.press('n'); // the key toggles it shut again
+  await expect(page.locator('.navigator-panel')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'tree' }).click(); // the HUD way in
+  await expect(page.locator('.navigator-panel')).toBeVisible();
+});
+
+test('clicking a doc in the navigator selects it: doc panel, cosmos flight, tree highlight', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.keyboard.press('n');
+  await page.locator('.nav-doc', { hasText: /^Kuu$/ }).click();
+  await expect(page.locator('.doc-panel h2')).toHaveText('Kuu');
+  await expect(page.locator('.nav-doc.selected')).toHaveText('Kuu');
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.selection === 'kuu.md' && s.flyTo?.id === 'kuu.md';
+  });
+});
+
+test('navigator keyboard: arrows walk the focus ring, left/right fold dirs, enter selects', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.keyboard.press('n');
+  // opening hands focus to the first row — the saaret dir
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-path') === 'saaret');
+
+  await page.keyboard.press('ArrowLeft'); // collapse the dir
+  await expect(page.locator('.nav-doc', { hasText: /^Atolli$/ })).toHaveCount(0);
+  await page.keyboard.press('ArrowRight'); // unfold it again
+  await expect(page.locator('.nav-doc', { hasText: /^Atolli$/ })).toBeVisible();
+
+  await page.keyboard.press('ArrowDown'); // into the first child
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-path') === 'saaret/atolli.md');
+  await page.keyboard.press('Enter'); // select it
+  await expect(page.locator('.doc-panel h2')).toHaveText('Atolli');
+  await expect(page.locator('.navigator-panel')).toBeVisible(); // desktop keeps the panel open
+});
+
+test('a doc written into a directory joins the navigator tree live — no reload', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.keyboard.press('n');
+  const saaret = page.locator('.nav-dir', { hasText: 'saaret' });
+  await expect(saaret.locator('.nav-count')).toHaveText('2');
+
+  // Mutate the bundle on disk; the watcher recompiles and the delta lands.
+  writeFileSync(path.join(bundleDir(), 'saaret', 'riutta.md'), REEF_DOC, 'utf-8');
+  await expect(page.locator('.nav-doc', { hasText: /^Riutta$/ })).toBeVisible({ timeout: 30_000 });
+  await expect(saaret.locator('.nav-count')).toHaveText('3');
+});
+
+test.describe('mobile', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('the navigator is a slide-in drawer: opens, rows tap-select, ✕ closes', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.getByRole('button', { name: 'tree' }).tap();
+    await expect(page.locator('.navigator-panel')).toBeVisible();
+    await expect(page.locator('.nav-scrim')).toBeVisible();
+
+    // tapping a doc selects it AND steps the drawer aside (it covers the doc panel)
+    await page.locator('.nav-doc', { hasText: /^Maa$/ }).tap();
+    await expect(page.locator('.doc-panel h2')).toHaveText('Maa');
+    await expect(page.locator('.navigator-panel')).toHaveCount(0);
+    await page.waitForFunction(() => window.__bp_store.getState().selection === 'maa.md');
+
+    // the doc sheet covers the bottom clusters on phones — dismiss it first
+    await page.locator('.doc-panel .close').tap();
+    await expect(page.locator('.doc-panel')).toHaveCount(0);
+
+    // reopen; the ✕ closes it too
+    await page.getByRole('button', { name: 'tree' }).tap();
+    await expect(page.locator('.navigator-panel')).toBeVisible();
+    await page.getByRole('button', { name: 'close navigator' }).tap();
+    await expect(page.locator('.navigator-panel')).toHaveCount(0);
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphDelta, GraphNode, GraphPayload, SearchHit } from '../graph/types';
 import { createUIStore } from './store';
+import { treeForGraph, type TreeDir } from './tree';
 
 function makeNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
   return {
@@ -332,5 +333,56 @@ describe('hud panel', () => {
     expect(store.getState().hudPanel).toBe('tags');
     store.getState().setHudPanel(null);
     expect(store.getState().hudPanel).toBeNull();
+  });
+});
+
+describe('navigator', () => {
+  it('starts closed; toggleNavigator flips it open and shut', () => {
+    const store = createUIStore();
+    expect(store.getState().navigatorOpen).toBe(false);
+    store.getState().toggleNavigator();
+    expect(store.getState().navigatorOpen).toBe(true);
+    store.getState().toggleNavigator();
+    expect(store.getState().navigatorOpen).toBe(false);
+  });
+
+  it('the tree derives from the graph state and is memoized between deltas', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(
+      { ...payload, nodes: [makeNode('kuu.md', { title: 'Kuu' }), makeNode('saaret/atolli.md', { title: 'Atolli' })] },
+      10,
+    );
+    const s = store.getState();
+    const tree = treeForGraph(s.nodes, s.seq);
+    expect(tree.docCount).toBe(2);
+    expect(tree.children.map((e) => e.name)).toEqual(['saaret', 'kuu.md']);
+    // no graph change -> the same object (no rebuild between renders)
+    expect(treeForGraph(store.getState().nodes, store.getState().seq)).toBe(tree);
+  });
+
+  it('a join delta grows the tree in the right dir; a leave delta shrinks it', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(
+      { ...payload, nodes: [makeNode('kuu.md', { title: 'Kuu' }), makeNode('saaret/atolli.md', { title: 'Atolli' })] },
+      10,
+    );
+    const before = treeForGraph(store.getState().nodes, store.getState().seq);
+
+    store.getState().ingestDelta(
+      delta(11, { added: { nodes: [makeNode('saaret/uusi.md', { title: 'Uusi' })], edges: [] } }),
+    );
+    let s = store.getState();
+    let tree = treeForGraph(s.nodes, s.seq);
+    expect(tree).not.toBe(before); // the delta invalidated the memo
+    let saaret = tree.children.find((e) => e.name === 'saaret') as TreeDir;
+    expect(saaret.docCount).toBe(2);
+    expect(saaret.children.map((e) => e.name)).toEqual(['atolli.md', 'uusi.md']);
+
+    store.getState().ingestDelta(delta(12, { removed: { nodes: ['saaret/uusi.md'], edges: [] } }));
+    s = store.getState();
+    tree = treeForGraph(s.nodes, s.seq);
+    saaret = tree.children.find((e) => e.name === 'saaret') as TreeDir;
+    expect(saaret.docCount).toBe(1);
+    expect(saaret.children.map((e) => e.name)).toEqual(['atolli.md']);
   });
 });

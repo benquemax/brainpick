@@ -86,6 +86,9 @@ export interface UIState extends GraphSlice {
 
   hudPanel: HudPanel;
 
+  /** NAVIGATOR: the directory-tree panel (desktop) / drawer (mobile). */
+  navigatorOpen: boolean;
+
   ingestHello(hello: HelloEvent): void;
   ingestDelta(delta: GraphDelta, now?: number): void;
   ingestSnapshot(graph: GraphPayload, seq: number, now?: number): void;
@@ -117,6 +120,7 @@ export interface UIState extends GraphSlice {
   requestOverview(): void;
 
   setHudPanel(panel: HudPanel): void;
+  toggleNavigator(): void;
 }
 
 export type UIStoreApi = StoreApi<UIState>;
@@ -196,6 +200,8 @@ export function createUIStore(): UIStoreApi {
       bookmarkSaveRequest: null,
 
       hudPanel: null,
+
+      navigatorOpen: false,
 
       ingestHello(hello) {
         set({ tiers: hello.tiers, serverSeq: hello.seq });
@@ -360,6 +366,10 @@ export function createUIStore(): UIStoreApi {
 
       setHudPanel(hudPanel) {
         set({ hudPanel });
+      },
+
+      toggleNavigator() {
+        set({ navigatorOpen: !get().navigatorOpen });
       },
     };
   });

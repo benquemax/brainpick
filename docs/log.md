@@ -1,5 +1,11 @@
 # Update log
 
+## 2026-07-04
+
+- Updated: the cosmos gained a NAVIGATOR — a live directory tree for when you
+  know exactly what you are looking for, desktop panel and mobile drawer
+  alike.
+
 ## 2026-07-03
 
 - Updated: full engine parity — the Node engine now serves too: REST, live
