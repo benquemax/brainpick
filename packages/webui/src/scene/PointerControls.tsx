@@ -9,7 +9,7 @@
  *    the screen and the nearest dot under the finger wins (front-most on ties), so
  *    tapping a dot in the hologram opens its article exactly like in the cosmos.
  */
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
 import * as THREE from 'three';
 import { pickNearest, pickNearest3D, type Projected } from './pick';
@@ -25,7 +25,11 @@ const BRAIN_MIN_PICK_PX = 16;
 
 export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
   const gl = useThree((s) => s.gl);
-  const camera = useThree((s) => s.camera);
+  // Read the R3F state getter, not a snapshot of the camera: the render camera
+  // swaps ortho⇄perspective across every brain morph, and picking MUST use the
+  // exact camera the scene was drawn with this frame. Capturing `state.camera`
+  // in the effect closure risks a stale pick during the swap (clicks miss).
+  const get = useThree((s) => s.get);
 
   useEffect(() => {
     const el = gl.domElement;
@@ -36,7 +40,7 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
     const ndc = new THREE.Vector3();
 
     // --- COSMOS: flat nearest-node scan in world space. ---
-    const pickAt = (e: PointerEvent): number => {
+    const pickAt = (e: PointerEvent, camera: THREE.Camera): number => {
       const rect = el.getBoundingClientRect();
       const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
@@ -63,7 +67,7 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
     };
 
     // --- BRAIN: project each morphed node to the screen; nearest dot wins. ---
-    const pickAt3D = (e: PointerEvent): number => {
+    const pickAt3D = (e: PointerEvent, camera: THREE.Camera): number => {
       const rect = el.getBoundingClientRect();
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
@@ -86,8 +90,16 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       return pickNearest3D(runtime.liveCount, project, px, py, BRAIN_MIN_PICK_PX);
     };
 
-    const pick = (e: PointerEvent): number =>
-      runtime.store.getState().morphActive ? pickAt3D(e) : pickAt(e);
+    // Dispatch by the ACTUAL render camera, not by morphActive: during the swap
+    // (morph just settled but the perspective camera has not yet handed back to
+    // the ortho one) render and pick must still agree, or the flat dots become
+    // unclickable. Ortho → flat scan; perspective → 3D projection scan.
+    const pick = (e: PointerEvent): number => {
+      const camera = get().camera;
+      return (camera as THREE.OrthographicCamera).isOrthographicCamera
+        ? pickAt(e, camera)
+        : pickAt3D(e, camera);
+    };
 
     let down: { x: number; y: number; t: number } | null = null;
 
@@ -138,7 +150,20 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       el.removeEventListener('pointerup', onUp);
       el.removeEventListener('pointerleave', onLeave);
     };
-  }, [gl, camera, runtime]);
+  }, [gl, get, runtime]);
+
+  // e2e/debug: mirror the ACTUAL render camera (state.camera, read live inside
+  // the frame loop) so a test can assert the flat cosmos is drawn by the ortho
+  // camera with a viewport-matched frustum (no perspective stretch).
+  useFrame((state) => {
+    const cam = state.camera as THREE.OrthographicCamera & THREE.PerspectiveCamera;
+    const ortho = cam.isOrthographicCamera === true;
+    const viewportAspect = state.size.height > 0 ? state.size.width / state.size.height : 1;
+    const frustumAspect = ortho
+      ? (cam.right - cam.left) / (cam.top - cam.bottom || 1)
+      : cam.aspect;
+    runtime.activeCamera = { ortho, zoom: cam.zoom ?? 1, frustumAspect, viewportAspect };
+  });
 
   return null;
 }

@@ -28,6 +28,25 @@ function brainRadius(): number {
   return BRAIN.scale * Math.max(...bounds.max.map(Math.abs), ...bounds.min.map(Math.abs));
 }
 
+/**
+ * Re-derive an orthographic camera's frustum for the current viewport — the same
+ * left/right/top/bottom R3F assigns in its own resize handler. R3F only refreshes
+ * the frustum of the ACTIVE render camera on resize, so a resize while the brain's
+ * perspective camera is active leaves the ortho cosmos frustum stale; we call this
+ * when handing rendering back so the flat map is never horizontally stretched.
+ */
+function refreshOrthoFrustum(cam: THREE.Camera, width: number, height: number): void {
+  // `manual` is R3F's opt-out flag (it is set true only if the camera was given a
+  // frustum prop); the cosmos camera has none, so R3F owns its frustum and so may we.
+  const o = cam as THREE.OrthographicCamera & { manual?: boolean };
+  if (!o.isOrthographicCamera || o.manual || width === 0 || height === 0) return;
+  o.left = width / -2;
+  o.right = width / 2;
+  o.top = height / 2;
+  o.bottom = height / -2;
+  o.updateProjectionMatrix();
+}
+
 export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
   const gl = useThree((s) => s.gl);
   const set = useThree((s) => s.set);
@@ -102,7 +121,15 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
       controls.dispose();
       controlsRef.current = null;
       runtime.projectNodeToScreen = null;
-      set({ camera: prevCamera }); // hand the ortho cosmos camera back
+      // Hand the ortho cosmos camera back with a frustum matched to the CURRENT
+      // viewport. R3F only refreshes the ACTIVE camera's frustum on resize, so a
+      // resize while the perspective brain camera was active left the ortho one
+      // stale — restore it AND re-derive its frustum, or the flat map returns
+      // horizontally stretched. PointerControls picks with whatever camera is
+      // active, so render and pick stay in agreement across the swap.
+      const vp = get().size;
+      refreshOrthoFrustum(prevCamera, vp.width, vp.height);
+      set({ camera: prevCamera });
     };
     // Created once for the life of the mount; resize is handled separately.
     // eslint-disable-next-line react-hooks/exhaustive-deps

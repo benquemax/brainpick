@@ -30,6 +30,19 @@ declare global {
       brainPositions: Float32Array;
       /** Set while brain mode is mounted: project a node to client pixels. */
       projectNodeToScreen: ((i: number) => { x: number; y: number } | null) | null;
+      positions: Float32Array;
+      /**
+       * Live mirror of the ACTIVE render camera (PointerControls refreshes it each
+       * frame). After the brain→cosmos return the flat cosmos MUST be drawn by the
+       * ortho camera with `frustumAspect` matching `viewportAspect` — a stale ortho
+       * frustum (a resize during brain mode) is the horizontal-stretch regression.
+       */
+      activeCamera: {
+        ortho: boolean;
+        zoom: number;
+        frustumAspect: number;
+        viewportAspect: number;
+      } | null;
     };
   }
 }
@@ -615,6 +628,76 @@ test.describe('holographic brain', () => {
     await page.waitForTimeout(900);
     const b1 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
     expect(Math.abs(b1 - b0)).toBeLessThan(0.03); // paused by the gesture
+  });
+
+  test('returning from brain restores the flat camera cleanly: no stretch, dots clickable again', async ({ page }) => {
+    // The regression this guards (Hologrammi V): the brain→cosmos return left the
+    // ortho cosmos camera behind. If the viewport changed while the perspective
+    // brain camera was active, R3F only refreshed THAT camera's frustum, so the
+    // ortho camera came back with a stale aspect (the flat dots rendered stretched)
+    // and picking read the wrong camera (clicks missed). We force the exact
+    // conditions: resize DURING brain mode, then return.
+    await page.setViewportSize({ width: 1000, height: 720 });
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return rt.liveCount > 0 && rt.activeCamera !== null && rt.positions.length >= rt.liveCount * 2;
+    });
+
+    // Fresh cosmos: the ortho camera draws it with a viewport-matched frustum.
+    await page.waitForFunction(() => {
+      const c = window.__bp_runtime.activeCamera!;
+      return c.ortho && Math.abs(c.frustumAspect - c.viewportAspect) < 0.02;
+    });
+
+    // Into the brain, then RESIZE to a very different aspect while it is on screen
+    // (this is what leaves the ortho frustum stale on the buggy build).
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return window.__bp_store.getState().mode === 'brain' && rt.brainReady && rt.morph > 0.9;
+    });
+    await page.setViewportSize({ width: 720, height: 1000 });
+    await page.waitForFunction(() => Math.abs(window.__bp_runtime.activeCamera!.viewportAspect - 0.72) < 0.05);
+
+    // Back to the cosmos; let the morph settle fully.
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      return s.mode === 'cosmos' && !s.morphActive && window.__bp_runtime.morph < 0.02;
+    });
+    await page.waitForFunction(() => window.__bp_runtime.activeCamera!.ortho === true);
+
+    // (b) STRETCH SENTINEL: the flat cosmos is drawn by the ortho camera and its
+    // frustum aspect matches the (resized) viewport — round dots, no stretch.
+    const cam = await page.evaluate(() => window.__bp_runtime.activeCamera!);
+    expect(cam.ortho).toBe(true);
+    expect(Math.abs(cam.frustumAspect - cam.viewportAspect)).toBeLessThan(0.02);
+
+    // (a) CLICKABLE AGAIN: a doc node clicked where it renders opens its article.
+    // The ortho camera is centered on the origin, so screen = centre + world·zoom
+    // holds exactly once the frustum matches the viewport (the fix).
+    const target = await page.evaluate(() => {
+      const rt = window.__bp_runtime;
+      const z = rt.activeCamera!.zoom;
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      for (let i = 0; i < rt.liveCount; i++) {
+        const id = rt.ids[i]!;
+        if (!id.endsWith('.md')) continue;
+        const x = Math.round(W / 2 + (rt.positions[i * 2] ?? 0) * z);
+        const y = Math.round(H / 2 - (rt.positions[i * 2 + 1] ?? 0) * z);
+        if (x > 90 && y > 110 && x < W - 90 && y < H - 150) return { id, x, y };
+      }
+      return null;
+    });
+    expect(target, 'a doc dot was on screen to click').not.toBeNull();
+
+    await page.mouse.click(target!.x, target!.y);
+    await page.waitForFunction((id) => window.__bp_store.getState().selection === id, target!.id);
+    await expect(page.locator('.doc-panel')).toBeVisible();
+    await expect(page.locator('.doc-panel h2')).toBeVisible();
   });
 });
 

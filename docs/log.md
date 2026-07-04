@@ -2,6 +2,7 @@
 
 ## 2026-07-04
 
+- Fixed: returning from brain to cosmos restores the flat camera cleanly — no more horizontal stretch, and clicking a dot opens its article again.
 - Updated: the brain fills its volume — nodes spread through the 3D form (no more flat-sheet look) and it turns slowly on its axis like a galaxy.
 - Updated: the hologram got its anatomy and its manners — the form reads as a real brain (elongated front-to-back, tapered occipital, temporal lobes, a subtle top fissure — no more two-cheeks look); clicking a dot in the 3D brain opens its article again; the return to the flat cosmos eases instead of snapping; and a cosmos drag pans straight.
 - Updated: the brain is real — the cosmos morphs into a floating holographic brain, procedural SDF form, topic clusters gathered into lobes, spun and pinched with your fingers.

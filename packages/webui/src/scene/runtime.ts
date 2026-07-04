@@ -105,6 +105,20 @@ export class GraphRuntime {
    * is mounted (it owns the perspective camera); null in the flat cosmos.
    */
   projectNodeToScreen: ((i: number) => { x: number; y: number } | null) | null = null;
+  /**
+   * e2e/debug: a per-frame mirror of the ACTIVE R3F render camera — the exact
+   * camera the scene was drawn with this frame (PointerControls refreshes it).
+   * `ortho` tells the flat cosmos camera from the perspective brain camera; a
+   * flat cosmos rendered by a perspective camera is the return-morph regression.
+   * `frustumAspect` (ortho (right-left)/(top-bottom)) must equal `viewportAspect`
+   * or the dots are horizontally stretched — the stretch sentinel.
+   */
+  activeCamera: {
+    ortho: boolean;
+    zoom: number;
+    frustumAspect: number;
+    viewportAspect: number;
+  } | null = null;
   private brainEpoch = -1;
   private brainCount = -1;
   private lastMode: ViewMode = 'cosmos';
