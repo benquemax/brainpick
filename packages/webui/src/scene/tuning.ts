@@ -60,3 +60,32 @@ export const GHOST_GLOW = {
 
 /** Per-frame lerp factor easing the dim uniform toward its target. */
 export const DIM_EASE = 0.14;
+
+/**
+ * GPU performance budget — how much the cosmos is allowed to render so weak /
+ * mobile GPUs stay smooth. A detected tier (scene/gpuTier.ts) picks a node
+ * cap; beyond it, degree-ranked culling + per-directory cluster aggregation
+ * keep the view honest (state/budget.ts). Numbers live here with the rest of
+ * the visual constants.
+ *
+ * NOTE: config carries `[ui] max_nodes_mobile` (default 8000), but no engine
+ * ships it to the client today (neither /api/status nor the SSE hello include
+ * a ui block — verified 2026-07-04). Until one does, the cap is derived here;
+ * `mid` deliberately equals that 8000 default so the two agree by design.
+ */
+export const GPU_BUDGET = {
+  /** Node-count cap per tier — the most nodes drawn before aggregation. */
+  nodeBudget: { low: 2_500, mid: 8_000, high: 40_000 },
+  /** devicePixelRatio ceiling per tier — weak GPUs render fewer pixels. */
+  dprCap: { low: 1, mid: 1.5, high: 2 },
+  /** Label ceiling per tier, capping semanticZoom's own zoom-driven budget. */
+  labelBudget: { low: 32, mid: 96, high: 144 },
+  /** Additive halo ("bloom") on per tier — off trims overdraw on weak GPUs. */
+  bloomEnabled: { low: false, mid: true, high: true },
+  /** Halo-strength multiplier when a tier disables bloom (a soft core stays). */
+  bloomDisabledScale: 0.35,
+  /** Upper bound the manual "show more" control may raise the budget to. */
+  budgetCeiling: 40_000,
+  /** Factor the budget grows by on each "show more" press. */
+  showMoreFactor: 2,
+} as const;

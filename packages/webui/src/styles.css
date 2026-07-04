@@ -231,6 +231,39 @@ button {
   animation: blink 0.9s ease-in-out infinite;
 }
 
+/* ---- GPU budget line (only shown while the view is capped) -------------- */
+
+.hud-budget {
+  gap: 8px;
+}
+
+.hud-budget-label {
+  color: var(--amber);
+  font-size: 11px;
+}
+
+.hud-more {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--cyan);
+  background: rgba(75, 225, 255, 0.08);
+  border: 1px solid rgba(75, 225, 255, 0.4);
+  border-radius: 4px;
+  padding: 2px 8px;
+  min-height: 24px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.hud-more:hover,
+.hud-more:focus-visible {
+  color: var(--text);
+  border-color: rgba(75, 225, 255, 0.7);
+  background: rgba(75, 225, 255, 0.16);
+}
+
 /* ---- search overlay ----------------------------------------------------- */
 
 .search-overlay {

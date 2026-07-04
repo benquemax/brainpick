@@ -35,7 +35,8 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
 
     const state = runtime.store.getState();
     const zoomRatio = (camera as THREE.OrthographicCamera).zoom / (runtime.fitZoom || 1);
-    const budget = labelBudget(zoomRatio);
+    // Semantic-zoom budget, capped by the GPU tier's label ceiling.
+    const budget = Math.min(labelBudget(zoomRatio), state.gpu.labelBudget);
 
     // Selection and hover are always labeled, then by degree.
     const forced: number[] = [];

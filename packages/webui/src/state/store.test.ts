@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { GraphDelta, GraphNode, GraphPayload, SearchHit } from '../graph/types';
+import type { GraphDelta, GraphEdge, GraphNode, GraphPayload, SearchHit } from '../graph/types';
 import { createUIStore } from './store';
+import { budgetedGraph, isClusterId } from './budget';
 import { treeForGraph, type TreeDir } from './tree';
+import { tierFor } from '../scene/gpuTier';
+import { GPU_BUDGET } from '../scene/tuning';
 
 function makeNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
   return {
@@ -384,5 +387,111 @@ describe('navigator', () => {
     saaret = tree.children.find((e) => e.name === 'saaret') as TreeDir;
     expect(saaret.docCount).toBe(1);
     expect(saaret.children.map((e) => e.name)).toEqual(['atolli.md']);
+  });
+});
+
+/** A synthetic graph across a few dirs, degrees rising with index. */
+function bigPayload(n: number): GraphPayload {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  for (let i = 0; i < n; i++) {
+    const dir = i % 4 === 0 ? '' : `dir${i % 4}`;
+    const id = dir === '' ? `root${i}.md` : `${dir}/n${i}.md`;
+    nodes.push(makeNode(id, { in: i % 5, out: i % 3 }));
+  }
+  for (let i = 1; i < n; i++) {
+    const a = nodes[i - 1] as GraphNode;
+    const b = nodes[i] as GraphNode;
+    edges.push({ source: a.id, target: b.id, kind: 'link', label: null, count: 1 });
+  }
+  return {
+    nodes,
+    edges,
+    ghosts: [],
+    islands: [],
+    stats: { docs: n, edges: edges.length, ghosts: 0, islands: 0, orphans: 0, tags: 0 },
+    tags: {},
+  };
+}
+
+describe('GPU budget', () => {
+  it('starts on the default (high) tier so nothing is capped by accident', () => {
+    const store = createUIStore();
+    const s = store.getState();
+    expect(s.gpu.tier).toBe('high');
+    expect(s.nodeBudget).toBe(GPU_BUDGET.nodeBudget.high);
+    expect(s.expandedDirs.size).toBe(0);
+  });
+
+  it('initGpu adopts a detected tier and its node budget', () => {
+    const store = createUIStore();
+    store.getState().initGpu(tierFor('low'));
+    const s = store.getState();
+    expect(s.gpu.tier).toBe('low');
+    expect(s.nodeBudget).toBe(GPU_BUDGET.nodeBudget.low);
+  });
+
+  it('setNodeBudget clamps to [1, ceiling]; raiseBudget grows by the factor', () => {
+    const store = createUIStore();
+    store.getState().setNodeBudget(0);
+    expect(store.getState().nodeBudget).toBe(1);
+    store.getState().setNodeBudget(10_000_000);
+    expect(store.getState().nodeBudget).toBe(GPU_BUDGET.budgetCeiling);
+    store.getState().setNodeBudget(100);
+    store.getState().raiseBudget();
+    expect(store.getState().nodeBudget).toBe(100 * GPU_BUDGET.showMoreFactor);
+  });
+
+  it('a small brain is never capped: the budgeted view is a pure passthrough', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10); // 2 docs
+    const s = store.getState();
+    const view = budgetedGraph(s.nodes, s.edges, s.seq, s.nodeBudget, s.expandedDirs);
+    expect(view.aggregated.size).toBe(0);
+    expect(view.renderNodes).toHaveLength(2);
+    expect(s.nodeBudget).toBeGreaterThanOrEqual(s.nodes.size);
+  });
+
+  it('a 500-node graph under a small budget aggregates; "show more" un-caps it', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(bigPayload(500), 1);
+    store.getState().setNodeBudget(50);
+    let s = store.getState();
+    let view = budgetedGraph(s.nodes, s.edges, s.seq, s.nodeBudget, s.expandedDirs);
+    expect(view.totalNodes).toBe(500);
+    expect(view.shownNodes).toBe(50); // top-50 by degree
+    expect(view.aggregated.size).toBeGreaterThan(0); // per-dir proxies
+    expect(view.renderNodes.some((node) => isClusterId(node.id))).toBe(true);
+
+    // Raise the cap above the node count -> honesty restored, no proxies.
+    store.getState().setNodeBudget(1000);
+    s = store.getState();
+    view = budgetedGraph(s.nodes, s.edges, s.seq, s.nodeBudget, s.expandedDirs);
+    expect(view.aggregated.size).toBe(0);
+    expect(view.shownNodes).toBe(500);
+  });
+
+  it('expandDir reveals a dir and drops its proxy; collapseDir puts it back', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(bigPayload(500), 1);
+    store.getState().setNodeBudget(50);
+    const proxyDir = 'dir1';
+
+    let s = store.getState();
+    let view = budgetedGraph(s.nodes, s.edges, s.seq, s.nodeBudget, s.expandedDirs);
+    const proxyId = [...view.aggregated.keys()].find((id) => id.startsWith(proxyDir));
+    expect(proxyId).toBeDefined();
+
+    store.getState().expandDir(proxyDir);
+    s = store.getState();
+    expect(s.expandedDirs.has(proxyDir)).toBe(true);
+    view = budgetedGraph(s.nodes, s.edges, s.seq, s.nodeBudget, s.expandedDirs);
+    // every dir1 doc is now rendered as a real node; no dir1 proxy remains
+    const dir1Real = view.renderNodes.filter((node) => node.id.startsWith(`${proxyDir}/`) && !isClusterId(node.id));
+    expect(dir1Real.length).toBeGreaterThan(0);
+    expect([...view.aggregated.keys()].some((id) => id.startsWith(proxyDir) && isClusterId(id))).toBe(false);
+
+    store.getState().collapseDir(proxyDir);
+    expect(store.getState().expandedDirs.has(proxyDir)).toBe(false);
   });
 });

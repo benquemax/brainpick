@@ -2,6 +2,9 @@
 
 ## 2026-07-04
 
+- Updated: the cosmos now fits the phone — GPU-tier node budgets with
+  degree-ranked culling and per-directory cluster aggregation, honest
+  'showing N of M' when it caps.
 - Created: brainpick meets agents where they live — a skill, one-command
   integrations, and a brain report that teaches graph-before-grep.
 - Created: the brain learned to lock its door — tokens for agents, a password

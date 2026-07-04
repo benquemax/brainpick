@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { GraphRuntime } from './runtime';
-import { DIM_EASE, glslFloat as f, NODE_GLOW } from './tuning';
+import { DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 iCosmos;
@@ -31,6 +31,7 @@ const VERTEX = /* glsl */ `
   varying vec3 vColor;
   varying float vIntensity;
   varying float vAlpha;
+  varying float vCluster;
 
   void main() {
     vec3 center = mix(iCosmos, iBrain, uMorph);
@@ -54,6 +55,7 @@ const VERTEX = /* glsl */ `
     }
 
     float reserved = step(0.5, mod(iFlags, 2.0));
+    float cluster = step(0.5, mod(floor(iFlags / 2.0), 2.0));
     float highlight = clamp(iHighlight, 0.0, 1.0);
     float scale = iRadius * grow * (1.0 - death)
       * (1.0 + ${f(NODE_GLOW.pulseScale)} * pulse + ${f(NODE_GLOW.highlightScale)} * highlight);
@@ -66,6 +68,7 @@ const VERTEX = /* glsl */ `
     vColor = iColor;
     vIntensity = bright;
     vAlpha = 1.0 - death;
+    vCluster = cluster;
 
     vec3 world = center + vec3(position.xy * scale, 0.0);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
@@ -74,19 +77,25 @@ const VERTEX = /* glsl */ `
 
 const FRAGMENT = /* glsl */ `
   precision highp float;
+  uniform float uBloom;
 
   varying vec2 vQuad;
   varying vec3 vColor;
   varying float vIntensity;
   varying float vAlpha;
+  varying float vCluster;
 
   void main() {
     float d = length(vQuad);
     if (d > 1.0) discard;
     // Hard-ish core with a restrained radial halo (tuning.ts owns the numbers).
     float core = smoothstep(0.32, 0.06, d);
-    float glow = exp(-d * d * ${f(NODE_GLOW.haloFalloff)}) * ${f(NODE_GLOW.haloStrength)};
-    float i = (core * ${f(NODE_GLOW.coreIntensity)} + glow) * vIntensity;
+    // Cluster proxies read as a hollow ring ("a container of many"), not a star.
+    float ring = smoothstep(0.12, 0.0, abs(d - 0.6));
+    float shape = mix(core, ring, vCluster);
+    // uBloom scales the wide additive halo — weak GPU tiers trim overdraw.
+    float glow = exp(-d * d * ${f(NODE_GLOW.haloFalloff)}) * ${f(NODE_GLOW.haloStrength)} * uBloom;
+    float i = (shape * ${f(NODE_GLOW.coreIntensity)} + glow) * vIntensity;
     gl_FragColor = vec4(vColor * i, i * vAlpha);
   }
 `;
@@ -120,7 +129,8 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
     radius[i] = runtime.radii[i] ?? 5;
     birth[i] = runtime.birth[i] ?? -1;
     activity[i] = runtime.activityAt[i] ?? -1;
-    flags[i] = runtime.reserved[i] ?? 0;
+    // bit 0 = reserved (index/log), bit 1 = cluster proxy ("+N more").
+    flags[i] = (runtime.reserved[i] ?? 0) | ((runtime.cluster[i] ?? 0) << 1);
   }
   for (let d = 0; d < runtime.dying.length; d++) {
     const i = live + d;
@@ -175,6 +185,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
           uTime: { value: 0 },
           uMorph: { value: 0 }, // 2D cosmos; the M3 brain layout animates this
           uDim: { value: 0 },
+          uBloom: { value: 1 }, // additive-halo strength; the GPU tier sets it
         },
         transparent: true,
         depthWrite: false,
@@ -239,6 +250,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     }
 
     material.uniforms.uTime!.value = runtime.now();
+    material.uniforms.uBloom!.value = s.gpu.bloomEnabled ? 1 : GPU_BUDGET.bloomDisabledScale;
     const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;
     dim.value += (dimTarget - (dim.value as number)) * DIM_EASE;

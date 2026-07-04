@@ -25,6 +25,8 @@ import type {
 } from '../graph/types';
 import { applyDelta, applySnapshot, emptyGraphSlice, type GraphSlice } from './applyDelta';
 import { lensNodeSet, NO_LENS, sameLens, type Lens } from './lens';
+import { DEFAULT_GPU_TIER, type GpuTier } from '../scene/gpuTier';
+import { GPU_BUDGET } from '../scene/tuning';
 
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
 
@@ -89,6 +91,13 @@ export interface UIState extends GraphSlice {
   /** NAVIGATOR: the directory-tree panel (desktop) / drawer (mobile). */
   navigatorOpen: boolean;
 
+  /** GPU performance tier (scene/gpuTier) — detected once at startup. */
+  gpu: GpuTier;
+  /** Active node render budget: the tier's cap, raised by "show more". */
+  nodeBudget: number;
+  /** Top-level dirs the user revealed by expanding a cluster proxy. */
+  expandedDirs: ReadonlySet<string>;
+
   ingestHello(hello: HelloEvent): void;
   ingestDelta(delta: GraphDelta, now?: number): void;
   ingestSnapshot(graph: GraphPayload, seq: number, now?: number): void;
@@ -121,6 +130,17 @@ export interface UIState extends GraphSlice {
 
   setHudPanel(panel: HudPanel): void;
   toggleNavigator(): void;
+
+  /** Adopt a detected GPU tier and its node budget (main.tsx, at startup). */
+  initGpu(gpu: GpuTier): void;
+  /** Override the render budget (clamped to [1, ceiling]). */
+  setNodeBudget(budget: number): void;
+  /** "Show more": raise the budget by the tuning factor, up to the ceiling. */
+  raiseBudget(): void;
+  /** Reveal a top-level dir's real docs, dropping its cluster proxy. */
+  expandDir(dir: string): void;
+  /** Re-collapse a previously expanded dir. */
+  collapseDir(dir: string): void;
 }
 
 export type UIStoreApi = StoreApi<UIState>;
@@ -202,6 +222,10 @@ export function createUIStore(): UIStoreApi {
       hudPanel: null,
 
       navigatorOpen: false,
+
+      gpu: DEFAULT_GPU_TIER,
+      nodeBudget: DEFAULT_GPU_TIER.nodeBudget,
+      expandedDirs: new Set<string>(),
 
       ingestHello(hello) {
         set({ tiers: hello.tiers, serverSeq: hello.seq });
@@ -370,6 +394,35 @@ export function createUIStore(): UIStoreApi {
 
       toggleNavigator() {
         set({ navigatorOpen: !get().navigatorOpen });
+      },
+
+      initGpu(gpu) {
+        set({ gpu, nodeBudget: gpu.nodeBudget });
+      },
+
+      setNodeBudget(budget) {
+        const clamped = Math.max(1, Math.min(GPU_BUDGET.budgetCeiling, Math.round(budget)));
+        if (clamped !== get().nodeBudget) set({ nodeBudget: clamped });
+      },
+
+      raiseBudget() {
+        get().setNodeBudget(get().nodeBudget * GPU_BUDGET.showMoreFactor);
+      },
+
+      expandDir(dir) {
+        const current = get().expandedDirs;
+        if (current.has(dir)) return;
+        const next = new Set(current);
+        next.add(dir);
+        set({ expandedDirs: next });
+      },
+
+      collapseDir(dir) {
+        const current = get().expandedDirs;
+        if (!current.has(dir)) return;
+        const next = new Set(current);
+        next.delete(dir);
+        set({ expandedDirs: next });
       },
     };
   });

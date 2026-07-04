@@ -8,6 +8,7 @@ import { useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
 import * as THREE from 'three';
 import { pickNearest } from './pick';
+import { dirOfClusterId, isClusterId } from '../state/budget';
 import type { GraphRuntime } from './runtime';
 
 const CLICK_SLOP_PX = 6;
@@ -51,7 +52,12 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       const i = pickAt(e);
       const s = runtime.store.getState();
       if (i >= 0) {
-        s.select(runtime.ids[i] ?? null, false); // camera stays — user is here
+        const id = runtime.ids[i] ?? null;
+        if (id !== null && isClusterId(id)) {
+          s.expandDir(dirOfClusterId(id)); // reveal the cluster's real docs
+        } else {
+          s.select(id, false); // camera stays — user is here
+        }
       } else {
         s.select(null);
       }

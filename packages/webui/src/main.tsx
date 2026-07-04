@@ -2,9 +2,14 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { fetchGraph } from './live/api';
 import { LiveConnection } from './live/connection';
+import { detectGpuTier, readGpuInputs } from './scene/gpuTier';
 import { GraphRuntime } from './scene/runtime';
 import { uiStore } from './state/store';
 import './styles.css';
+
+// Detect the GPU tier once, up front, so the very first render already uses
+// the right node budget, DPR cap and bloom setting (no post-hoc reflow).
+uiStore.getState().initGpu(detectGpuTier(readGpuInputs()));
 
 // Initial load: pull the current snapshot immediately (fast first paint);
 // the live connection re-verifies seq via `hello` and resyncs as needed.

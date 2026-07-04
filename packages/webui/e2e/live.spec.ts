@@ -303,8 +303,50 @@ test('a doc written into a directory joins the navigator tree live — no reload
   await expect(saaret.locator('.nav-count')).toHaveText('3');
 });
 
+test('GPU budget: a small brain is never capped — no proxies, no budget line (honesty)', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  // Nothing to cull on a tiny fixture: the budget line simply does not exist.
+  await expect(page.locator('.hud-budget')).toHaveCount(0);
+  const honest = await page.evaluate(() => {
+    const s = window.__bp_store.getState();
+    return { budget: s.nodeBudget, count: s.nodes.size, expanded: s.expandedDirs.size };
+  });
+  expect(honest.budget).toBeGreaterThanOrEqual(honest.count); // budget covers the whole brain
+  expect(honest.expanded).toBe(0);
+});
+
+test('GPU budget: capping the view aggregates culled docs and the HUD says "showing N of M"', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+  const total = await page.evaluate(() => window.__bp_store.getState().nodes.size);
+
+  // Force a cap well under the doc count (store injection hook) -> aggregation.
+  await page.evaluate(() => window.__bp_store.getState().setNodeBudget(4));
+  const line = page.locator('.hud-budget');
+  await expect(line).toBeVisible();
+  await expect(line).toContainText(new RegExp(`showing 4 of ${total} nodes`));
+
+  // "show more" (touch + keyboard reachable) raises the budget.
+  const before = await page.evaluate(() => window.__bp_store.getState().nodeBudget);
+  await page.getByRole('button', { name: 'show more' }).click();
+  const after = await page.evaluate(() => window.__bp_store.getState().nodeBudget);
+  expect(after).toBeGreaterThan(before);
+
+  // Raise it above the doc count -> honesty restored, the line disappears.
+  await page.evaluate(() => window.__bp_store.getState().setNodeBudget(9999));
+  await expect(page.locator('.hud-budget')).toHaveCount(0);
+});
+
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('GPU budget: the phone view is honest too — no budget line on a small brain', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+    await expect(page.locator('.hud-budget')).toHaveCount(0);
+  });
 
   test('the navigator is a slide-in drawer: opens, rows tap-select, ✕ closes', async ({ page }) => {
     await page.goto(baseURL() + '/');

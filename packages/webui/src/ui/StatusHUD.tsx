@@ -2,8 +2,9 @@
  * Status HUD: doc/edge/orphan counts, manifest seq, tier chips and the
  * connection state dot; a compile chip appears while a tier recompiles.
  */
-import { useEffect, useState } from 'react';
-import { useUI } from '../state/store';
+import { useEffect, useMemo, useState } from 'react';
+import { uiStore, useUI } from '../state/store';
+import { budgetedGraph } from '../state/budget';
 import type { TierName } from '../graph/types';
 
 const TIER_ORDER: TierName[] = ['t1', 't2', 't3'];
@@ -14,6 +15,18 @@ export function StatusHUD() {
   const tiers = useUI((s) => s.tiers);
   const connection = useUI((s) => s.connection);
   const compile = useUI((s) => s.compile);
+
+  // The GPU budget line appears ONLY when the view is actually capped — the
+  // memoized budgeted view is the exact one the scene renders (honest N of M).
+  const nodes = useUI((s) => s.nodes);
+  const edges = useUI((s) => s.edges);
+  const nodeBudget = useUI((s) => s.nodeBudget);
+  const expandedDirs = useUI((s) => s.expandedDirs);
+  const budget = useMemo(
+    () => budgetedGraph(nodes, edges, seq, nodeBudget, expandedDirs),
+    [nodes, edges, seq, nodeBudget, expandedDirs],
+  );
+  const capped = budget.aggregated.size > 0;
 
   // Show the last compile status briefly after it stops running.
   const [compileVisible, setCompileVisible] = useState(false);
@@ -54,6 +67,24 @@ export function StatusHUD() {
           </span>
         )}
       </div>
+      {capped && (
+        <div className="hud-row hud-budget">
+          <span
+            className="hud-budget-label"
+            title="GPU performance budget — culled docs are grouped into cluster proxies you can click to expand"
+          >
+            showing {budget.shownNodes} of {budget.totalNodes} nodes
+          </span>
+          <button
+            type="button"
+            className="hud-more"
+            title="raise the render budget (show more nodes)"
+            onClick={() => uiStore.getState().raiseBudget()}
+          >
+            show more
+          </button>
+        </div>
+      )}
     </div>
   );
 }

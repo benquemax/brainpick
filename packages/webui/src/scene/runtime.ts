@@ -11,6 +11,7 @@ import type { UIStoreApi } from '../state/store';
 import type { UIState } from '../state/store';
 import { buildSeeds, diffGraph } from '../layout/simShared';
 import type { FromWorker, GraphMessage, WorkerLink } from '../layout/messages';
+import { budgetedGraph, isClusterId } from '../state/budget';
 import { colorForId } from './colors';
 import { buildGhostAnchors, type GhostAnchor } from './ghosts';
 import { GHOST_GLOW } from './tuning';
@@ -43,6 +44,8 @@ export class GraphRuntime {
   radii: Float32Array = new Float32Array(0);
   degrees: Float32Array = new Float32Array(0);
   reserved: Uint8Array = new Uint8Array(0);
+  /** 1 for cluster-proxy nodes (aggregated "+N more"), 0 for real docs. */
+  cluster: Uint8Array = new Uint8Array(0);
   birth: Float32Array = new Float32Array(0); // scene seconds; -1 = no entrance animation
   activityAt: Float32Array = new Float32Array(0); // scene seconds; -1 = none
   edgePairs: Uint32Array = new Uint32Array(0);
@@ -52,6 +55,12 @@ export class GraphRuntime {
   /** Node indices sorted by degree descending (label priority). */
   labelOrder: number[] = [];
   dying: DyingNode[] = [];
+
+  /** GPU-budget summary for the current render (HUD reads the same via store). */
+  aggregated: Map<string, number> = new Map();
+  /** Real (non-proxy) docs drawn / total real docs — the "N of M" the HUD shows. */
+  shownNodes = 0;
+  totalNodes = 0;
 
   /** Bumped whenever the arrays above are rebuilt — scene re-uploads. */
   version = 0;
@@ -64,6 +73,8 @@ export class GraphRuntime {
   private prevEdgeKeys: string[] = [];
   private unsubscribe: (() => void) | null = null;
   private lastEpoch = -1;
+  private lastBudget = -1;
+  private lastExpandedDirs: ReadonlySet<string> | null = null;
   private dyingTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly clockStartMs = performance.now();
   private readonly epochStartMs = Date.now();
@@ -79,13 +90,20 @@ export class GraphRuntime {
       this.worker = null; // non-worker environment; positions stay at seeds
     }
     this.unsubscribe = store.subscribe((state) => {
-      if (state.epoch !== this.lastEpoch) {
-        this.lastEpoch = state.epoch;
+      // The rendered set depends on the graph (epoch) AND the GPU budget /
+      // revealed dirs — a "show more" or a proxy expand must re-cull too.
+      if (
+        state.epoch !== this.lastEpoch ||
+        state.nodeBudget !== this.lastBudget ||
+        state.expandedDirs !== this.lastExpandedDirs
+      ) {
         this.rebuild(state);
       }
     });
     const initial = store.getState();
     this.lastEpoch = initial.epoch;
+    this.lastBudget = initial.nodeBudget;
+    this.lastExpandedDirs = initial.expandedDirs;
     if (initial.nodes.size > 0) this.rebuild(initial);
   }
 
@@ -141,6 +159,18 @@ export class GraphRuntime {
   }
 
   private rebuild(state: UIState): void {
+    this.lastEpoch = state.epoch;
+    this.lastBudget = state.nodeBudget;
+    this.lastExpandedDirs = state.expandedDirs;
+
+    // Apply the GPU budget: below the cap this is a passthrough (identical
+    // set); above it, degree-ranked culling + per-dir cluster proxies. The HUD
+    // reads the same memoized view, so its "N of M" always matches the scene.
+    const view = budgetedGraph(state.nodes, state.edges, state.seq, state.nodeBudget, state.expandedDirs);
+    this.aggregated = view.aggregated;
+    this.shownNodes = view.shownNodes;
+    this.totalNodes = view.totalNodes;
+
     const prevIds = this.ids;
     const prevIndex = this.index;
     const prevPositions = this.positions;
@@ -150,7 +180,7 @@ export class GraphRuntime {
     const ids: string[] = [];
     const titles: string[] = [];
     const index = new Map<string, number>();
-    for (const node of state.nodes.values()) {
+    for (const node of view.renderNodes) {
       index.set(node.id, ids.length);
       ids.push(node.id);
       titles.push(node.title);
@@ -161,10 +191,11 @@ export class GraphRuntime {
     const radii = new Float32Array(n);
     const degrees = new Float32Array(n);
     const reserved = new Uint8Array(n);
+    const cluster = new Uint8Array(n);
     const birth = new Float32Array(n).fill(-1);
     const activityAt = new Float32Array(n).fill(-1);
 
-    for (const node of state.nodes.values()) {
+    for (const node of view.renderNodes) {
       const i = index.get(node.id) as number;
       const [r, g, b] = colorForId(node.id);
       colors[i * 3] = r;
@@ -174,6 +205,7 @@ export class GraphRuntime {
       degrees[i] = degree;
       radii[i] = radiusForDegree(degree);
       reserved[i] = node.reserved ? 1 : 0;
+      cluster[i] = isClusterId(node.id) ? 1 : 0;
       const join = state.joins.get(node.id);
       if (join) birth[i] = this.sceneTime(join.at);
       const activity = state.activity.get(node.id);
@@ -184,7 +216,7 @@ export class GraphRuntime {
     const edgeKeys: string[] = [];
     const pairs: number[] = [];
     const links: WorkerLink[] = [];
-    for (const edge of state.edges.values()) {
+    for (const edge of view.renderEdges) {
       const s = index.get(edge.source);
       const t = index.get(edge.target);
       if (s === undefined || t === undefined) continue;
@@ -222,6 +254,7 @@ export class GraphRuntime {
     this.radii = radii;
     this.degrees = degrees;
     this.reserved = reserved;
+    this.cluster = cluster;
     this.birth = birth;
     this.activityAt = activityAt;
     this.edgePairs = Uint32Array.from(pairs);
