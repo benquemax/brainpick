@@ -7,7 +7,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { GraphRuntime } from './runtime';
-import { DIM_EASE, EDGE_GLOW, glslFloat as f } from './tuning';
+import { DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 aBrain;
@@ -40,14 +40,27 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   const positions = new Float32Array(vertCount * 3);
   const colors = new Float32Array(vertCount * 3);
   for (let e = 0; e < runtime.edgeCount; e++) {
+    // kind: 0 doc link, 1 T3 relation, 2 virtual gravitation.
+    const kind = runtime.edgeKinds[e] ?? 0;
+    const weight = runtime.edgeWeights[e] ?? 1;
+    // Doc links: brightness 1 → byte-identical to before. Relations: scale by
+    // weight above a floor ("width by weight" in an additive-glow renderer).
+    const bright = kind === 1 ? ENTITY_EDGE.relationFloor + (1 - ENTITY_EDGE.relationFloor) * weight : 1;
     for (let end = 0; end < 2; end++) {
       const node = runtime.edgePairs[e * 2 + end] ?? 0;
       const v = e * 2 + end;
       positions[v * 3] = runtime.positions[node * 2] ?? 0;
       positions[v * 3 + 1] = runtime.positions[node * 2 + 1] ?? 0;
-      colors[v * 3] = runtime.colors[node * 3] ?? 0.6;
-      colors[v * 3 + 1] = runtime.colors[node * 3 + 1] ?? 0.8;
-      colors[v * 3 + 2] = runtime.colors[node * 3 + 2] ?? 1;
+      if (kind === 2) {
+        // Virtual entity→doc hints get their own faint cool tint, not the endpoint hue.
+        colors[v * 3] = ENTITY_EDGE.virtualTint[0] * ENTITY_EDGE.virtualBright;
+        colors[v * 3 + 1] = ENTITY_EDGE.virtualTint[1] * ENTITY_EDGE.virtualBright;
+        colors[v * 3 + 2] = ENTITY_EDGE.virtualTint[2] * ENTITY_EDGE.virtualBright;
+      } else {
+        colors[v * 3] = (runtime.colors[node * 3] ?? 0.6) * bright;
+        colors[v * 3 + 1] = (runtime.colors[node * 3 + 1] ?? 0.8) * bright;
+        colors[v * 3 + 2] = (runtime.colors[node * 3 + 2] ?? 1) * bright;
+      }
     }
   }
   const posAttr = new THREE.Float32BufferAttribute(positions, 3);

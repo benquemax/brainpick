@@ -238,6 +238,67 @@ export function applyDeltaToGraph(graph, delta) {
   };
 }
 
+/**
+ * The T3 entity layer (spec/40), hand-derived from
+ * spec/fixtures/expected/kotiaurinko/t3/{entities,relations}.jsonl so the mock
+ * server can drive the UI's entity/overlay layers with no backend.
+ */
+const ENTITIES = [
+  { id: 'aurinko', name: 'Aurinko', type: 'star', description: 'The star at the center that everything orbits.', source_docs: ['aurinko.md', 'komeetta.md', 'planeetat.md'] },
+  { id: 'komeetta', name: 'Komeetta', type: 'comet', description: 'A visitor with a tail that falls toward the star and races away.', source_docs: ['komeetta.md'] },
+  { id: 'kuu', name: 'Kuu', type: 'moon', description: 'The moon that raises the tides of the earth.', source_docs: ['aurinko.md', 'kuu.md', 'maa.md'] },
+  { id: 'maa', name: 'Maa', type: 'planet', description: 'The blue world with a companion, belonging to the worlds.', source_docs: ['kuu.md', 'maa.md', 'planeetat.md'] },
+  { id: 'planeetat', name: 'Planeetat', type: 'catalogue', description: 'The catalogue of worlds around the star.', source_docs: ['aurinko.md', 'maa.md', 'planeetat.md'] },
+  { id: 'vuorovesi', name: 'Vuorovesi', type: 'phenomenon', description: 'The tidal pull of the moon on the sea.', source_docs: ['kuu.md'] },
+];
+
+const RELATIONS = [
+  { src: 'kuu', dst: 'vuorovesi', weight: 0.7 },
+  { src: 'komeetta', dst: 'aurinko', weight: 0.6 },
+  { src: 'kuu', dst: 'maa', weight: 0.9 },
+  { src: 'maa', dst: 'planeetat', weight: 0.8 },
+  { src: 'planeetat', dst: 'aurinko', weight: 0.9 },
+];
+
+/** GET /api/graph?layer=entities — nodes {id,name,type,description,degree}. */
+export function entityGraph() {
+  const degree = new Map(ENTITIES.map((e) => [e.id, new Set()]));
+  for (const r of RELATIONS) {
+    degree.get(r.src)?.add(r.dst);
+    degree.get(r.dst)?.add(r.src);
+  }
+  return {
+    nodes: ENTITIES.map((e) => ({ id: e.id, name: e.name, type: e.type, description: e.description, degree: degree.get(e.id)?.size ?? 0 })),
+    edges: [...RELATIONS].sort((a, b) => a.src.localeCompare(b.src) || a.dst.localeCompare(b.dst)).map((r) => ({ src: r.src, dst: r.dst, weight: r.weight })),
+  };
+}
+
+/** GET /api/neighbors?id=<doc>&layer=entities — carries source_docs (grounding). */
+export function entityNeighbors(doc, depth = 1) {
+  const byId = new Map(ENTITIES.map((e) => [e.id, e]));
+  const adj = new Map(ENTITIES.map((e) => [e.id, []]));
+  for (const r of RELATIONS) {
+    adj.get(r.src)?.push(r.dst);
+    adj.get(r.dst)?.push(r.src);
+  }
+  const distance = new Map();
+  for (const e of ENTITIES) if (e.source_docs.includes(doc)) distance.set(e.id, 0);
+  let frontier = [...distance.keys()];
+  for (let hop = 1; hop <= depth; hop++) {
+    const reached = [];
+    for (const id of frontier) for (const n of adj.get(id) ?? []) if (!distance.has(n)) { distance.set(n, hop); reached.push(n); }
+    frontier = reached;
+  }
+  const nodes = [...distance.entries()]
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .map(([id, dist]) => {
+      const e = byId.get(id);
+      return { id, name: e.name, description: e.description, distance: dist, source_docs: [...e.source_docs] };
+    });
+  const edges = RELATIONS.filter((r) => distance.has(r.src) && distance.has(r.dst)).map((r) => ({ src: r.src, dst: r.dst }));
+  return { center: doc, nodes, edges };
+}
+
 /** Doc records backing /api/docs/{path} and /api/search. */
 export function mockDocs() {
   const doc = (path, title, over = {}) => ({

@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import * as THREE from 'three';
 import { pickNearest } from './pick';
 import { dirOfClusterId, isClusterId } from '../state/budget';
+import { bareEntityId, isEntityRenderId } from '../graph/entities';
 import type { GraphRuntime } from './runtime';
 
 const CLICK_SLOP_PX = 6;
@@ -55,6 +56,10 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
         const id = runtime.ids[i] ?? null;
         if (id !== null && isClusterId(id)) {
           s.expandDir(dirOfClusterId(id)); // reveal the cluster's real docs
+        } else if (id !== null && isEntityRenderId(id)) {
+          s.selectEntity(bareEntityId(id)); // open the entity panel
+        } else if (id !== null && s.layer === 'overlay') {
+          s.selectDocInOverlay(id); // select the doc AND light its entities
         } else {
           s.select(id, false); // camera stays — user is here
         }

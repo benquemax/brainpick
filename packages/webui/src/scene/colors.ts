@@ -2,6 +2,7 @@
  * Node coloring: deterministic hash of the top-level directory group to a
  * hue, rendered in the dark sci-fi palette (saturated, luminous, additive).
  */
+import { ENTITY_COLOR } from './tuning';
 
 /** Top-level directory of a bundle path; bundle-root docs group under ".". */
 export function groupOf(id: string): string {
@@ -62,4 +63,29 @@ export function colorForId(id: string): [number, number, number] {
 /** CSS color for HTML overlays (labels, chips) matching the node color. */
 export function cssColorForId(id: string): string {
   return `hsl(${hueForGroup(groupOf(id)).toFixed(1)}deg 85% 70%)`;
+}
+
+const entityCache = new Map<string, [number, number, number]>();
+
+/**
+ * The color of an entity node — the gold/amber family (tuning.ENTITY_COLOR),
+ * with a small per-type hue wander that stays inside the band. A distinct
+ * species from the doc palette (which spans the whole wheel by dir hash).
+ */
+export function entityColorForType(type: string | null): [number, number, number] {
+  const key = type && type.length > 0 ? type : 'entity';
+  let color = entityCache.get(key);
+  if (!color) {
+    const t = (fnv1a(key) % 4096) / 4096; // deterministic 0..1
+    const hue = ENTITY_COLOR.baseHue + (t - 0.5) * 2 * ENTITY_COLOR.hueSpread;
+    color = hslToRgb(hue, ENTITY_COLOR.saturation, ENTITY_COLOR.lightness);
+    entityCache.set(key, color);
+  }
+  return color;
+}
+
+/** A linear-ish RGB triple ([0,1]) as a CSS color — for labels of any family. */
+export function rgbToCss([r, g, b]: readonly [number, number, number]): string {
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
+  return `rgb(${c(r)} ${c(g)} ${c(b)})`;
 }

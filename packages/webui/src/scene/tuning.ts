@@ -41,6 +41,34 @@ export const EDGE_GLOW = {
   dimFactor: 0.22,
 } as const;
 
+/**
+ * The T3 entity layer's own visual family (spec/40, UI task): a coherent
+ * GOLD/AMBER band so extracted entities read instantly as a different species
+ * from the multicolored doc cloud — reinforced by a gem/diamond sprite (vs the
+ * doc disc). Per-type hue variation stays inside the band so the family holds.
+ */
+export const ENTITY_COLOR = {
+  /** Home hue of the entity family (gold). */
+  baseHue: 44,
+  /** ± hue wander per entity type, kept inside the warm band. */
+  hueSpread: 30,
+  saturation: 0.92,
+  lightness: 0.64,
+} as const;
+
+/**
+ * Entity/relation edges. A `relation` inherits its endpoints' gold and scales
+ * brightness by weight; a `virtual` (entity→source-doc gravitation) is barely
+ * there — a hint that pulls in the layout without cluttering the view.
+ */
+export const ENTITY_EDGE = {
+  /** Brightness floor so a weight≈0 relation is still faintly visible. */
+  relationFloor: 0.35,
+  /** Virtual gravitation lines: fainter than doc links, cool grey-blue. */
+  virtualBright: 0.5,
+  virtualTint: [0.42, 0.52, 0.7] as [number, number, number],
+} as const;
+
 export const GHOST_GLOW = {
   /** Ghost edges are quieter than real links — they are absences. */
   opacity: 0.34,

@@ -17,13 +17,16 @@ import { pathToFileURL } from 'node:url';
 import {
   BASE_SEQ,
   applyDeltaToGraph,
+  entityGraph,
+  entityNeighbors,
   initialGraph,
   mockDocs,
   nextDelta,
 } from './mock-data.mjs';
 
 const RING_LIMIT = 256;
-const TIERS = { t1: 'fresh', t2: 'off', t3: 'off' };
+// T3 is fresh in the mock so the entity/overlay layers are developable offline.
+const TIERS = { t1: 'fresh', t2: 'off', t3: 'fresh' };
 
 function sseFrame(event, data, id) {
   let out = `event: ${event}\n`;
@@ -210,8 +213,8 @@ export function createMockServer({ stepMs = 6000 } = {}) {
       });
     } else if (path === '/api/graph') {
       const layer = url.searchParams.get('layer') ?? 'links';
-      if (layer !== 'links') {
-        sendJson(res, 404, { error: `layer '${layer}' is not compiled — use layer=links until T3 lands` });
+      if (layer !== 'links' && layer !== 'entities') {
+        sendJson(res, 404, { error: `layer '${layer}' is not compiled — use layer=links or layer=entities` });
         return;
       }
       const etag = `"${seq}"`;
@@ -220,7 +223,23 @@ export function createMockServer({ stepMs = 6000 } = {}) {
         res.end();
         return;
       }
-      sendJson(res, 200, graph, { etag });
+      sendJson(res, 200, layer === 'entities' ? entityGraph() : graph, { etag });
+    } else if (path === '/api/neighbors') {
+      const center = url.searchParams.get('id') ?? '';
+      const layer = url.searchParams.get('layer') ?? 'links';
+      const depth = Math.max(1, Math.min(3, Number(url.searchParams.get('depth') ?? '1') || 1));
+      if (!graph.nodes.some((n) => n.id === center)) {
+        sendJson(res, 404, { error: `no node '${center}' in the graph`, suggestions: [] });
+        return;
+      }
+      if (layer === 'entities' || layer === 'both') {
+        const kg = entityNeighbors(center, depth);
+        const nodes = layer === 'both' ? kg.nodes.map((n) => ({ ...n, layer: 'entities' })) : kg.nodes;
+        const edges = layer === 'both' ? kg.edges.map((e) => ({ ...e, layer: 'entities' })) : kg.edges;
+        sendJson(res, 200, { center, nodes, edges });
+      } else {
+        sendJson(res, 200, { center, nodes: [], edges: [] });
+      }
     } else if (path.startsWith('/api/docs/')) {
       handleDocs(path.slice('/api/docs/'.length), res);
     } else if (path === '/api/search') {

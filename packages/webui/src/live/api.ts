@@ -4,6 +4,7 @@
  * engine itself.
  */
 import type { DocResponse, GraphPayload, SearchMode, SearchResponse } from '../graph/types';
+import type { EntityGraph, GraphLayer, NeighborsResponse } from '../graph/entities';
 
 export interface GraphFetchResult {
   graph: GraphPayload;
@@ -30,6 +31,48 @@ export async function fetchGraph(bustCache = false, fallbackSeq = 0): Promise<Gr
   const graph = (await res.json()) as GraphPayload;
   const seq = seqFromETag(res.headers.get('ETag')) ?? fallbackSeq;
   return { graph, seq };
+}
+
+/**
+ * The T3 entity layer (spec/40). Versioned by seq via ETag like layer=links.
+ * A 404 means T3 is not compiled — an availability signal, not an error, so it
+ * comes back as `{ ok: false, status: 404 }` for the caller to degrade on.
+ */
+export type EntityGraphFetch =
+  | { ok: true; graph: EntityGraph; seq: number }
+  | { ok: false; status: number };
+
+export async function fetchEntityGraph(bustCache = false, fallbackSeq = 0): Promise<EntityGraphFetch> {
+  const url = bustCache
+    ? `/api/graph?layer=entities&fresh=${Date.now()}`
+    : '/api/graph?layer=entities';
+  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  if (!res.ok) return { ok: false, status: res.status };
+  const graph = (await res.json()) as EntityGraph;
+  const seq = seqFromETag(res.headers.get('ETag')) ?? fallbackSeq;
+  return { ok: true, graph, seq };
+}
+
+/**
+ * A doc's entity neighborhood (spec/40 brain_neighbors). Unlike the graph
+ * layer, each entity here carries `source_docs` — the doc↔entity grounding the
+ * UI reconstructs from. Returns null on any transport/HTTP failure (grounding
+ * is best-effort; a miss just leaves that doc's ties undiscovered).
+ */
+export async function fetchNeighbors(
+  id: string,
+  layer: GraphLayer = 'entities',
+  depth = 1,
+  signal?: AbortSignal,
+): Promise<NeighborsResponse | null> {
+  const encoded = encodeURIComponent(id);
+  try {
+    const res = await fetch(`/api/neighbors?id=${encoded}&layer=${layer}&depth=${depth}`, { signal });
+    if (!res.ok) return null;
+    return (await res.json()) as NeighborsResponse;
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchSearch(

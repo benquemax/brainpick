@@ -1,10 +1,11 @@
 /**
  * End-to-end against the REAL Python engine (no mocks): global-setup copies the
- * kotiaurinko fixture to two tmp bundles and spawns `uv run brainpick serve` on
- * ephemeral ports — the primary with the mock embedder (T2 fresh: semantic
- * search answers from real vectors), the second without (T2 off: semantic
- * degrades honestly). Tests run serially — the primary bundle mutates on
- * purpose (test 2).
+ * kotiaurinko fixture to three tmp bundles and spawns `uv run brainpick serve`
+ * on ephemeral ports — the primary with the mock embedder (T2 fresh: semantic
+ * search answers from real vectors), a second without (T2 off: semantic
+ * degrades honestly), and a third with a staged T3 export (tiers.t3 fresh:
+ * /api/graph?layer=entities returns real entities). Tests run serially — the
+ * primary bundle mutates on purpose (test 2).
  *
  * Store-backed assertions read window.__bp_store (exposed by main.tsx): the
  * zustand store is the single source of truth, so tests assert state, not
@@ -18,6 +19,7 @@ import type { UIState } from '../src/state/store';
 declare global {
   interface Window {
     __bp_store: { getState(): UIState };
+    __bp_runtime: { ids: string[]; liveCount: number };
   }
 }
 
@@ -63,6 +65,15 @@ function t2lessURL(): string {
   if (!url) throw new Error('BP_E2E_URL_T2LESS missing — did global-setup run?');
   return url;
 }
+
+function t3URL(): string {
+  const url = process.env.BP_E2E_URL_T3;
+  if (!url) throw new Error('BP_E2E_URL_T3 missing — did global-setup run?');
+  return url;
+}
+
+/** The entity render-id marker (state/entities.ts ENTITY_MARK), for pixel-free asserts. */
+const ENTITY_MARK = '\u0000entity:';
 
 function bundleDir(): string {
   const dir = process.env.BP_E2E_BUNDLE;
@@ -339,8 +350,122 @@ test('GPU budget: capping the view aggregates culled docs and the HUD says "show
   await expect(page.locator('.hud-budget')).toHaveCount(0);
 });
 
+test('entity layer: the toggle switches to the extracted entity graph — gems, not docs', async ({ page }) => {
+  await page.goto(t3URL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('10 docs', { timeout: 30_000 });
+
+  // Availability is proven by the endpoint (200), not by tiers.t3 — a staged
+  // export serves entities even while the compiler still reports t3 off.
+  const entities = page.getByRole('radio', { name: 'entities' });
+  await expect(entities).toBeEnabled();
+  await entities.click();
+
+  // the entity graph loads (6 entities from the fixture) and the layer flips
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.layer === 'entities' && s.entityAvailability === 'available' && (s.entityGraph?.nodes.length ?? 0) === 6;
+  });
+
+  // the SCENE now draws entity render-nodes — distinct from the 10 docs
+  const rendered = await page.evaluate((mark) => {
+    const rt = window.__bp_runtime;
+    return {
+      count: rt.ids.length,
+      allEntities: rt.ids.every((id) => id.startsWith(mark)),
+      anyDoc: rt.ids.some((id) => id.endsWith('.md')),
+    };
+  }, ENTITY_MARK);
+  expect(rendered.count).toBe(6);
+  expect(rendered.allEntities).toBe(true);
+  expect(rendered.anyDoc).toBe(false);
+
+  await expect(page.locator('.layer-legend')).toContainText('entities');
+});
+
+test('entity layer: overlay draws BOTH the doc graph and the entity graph', async ({ page }) => {
+  await page.goto(t3URL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.getByRole('radio', { name: 'overlay' }).click();
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.layer === 'overlay' && s.entityAvailability === 'available';
+  });
+
+  const rendered = await page.evaluate((mark) => {
+    const rt = window.__bp_runtime;
+    const entities = rt.ids.filter((id) => id.startsWith(mark)).length;
+    return { docs: rt.ids.length - entities, entities };
+  }, ENTITY_MARK);
+  expect(rendered.docs).toBeGreaterThanOrEqual(10); // the doc graph is still there
+  expect(rendered.entities).toBe(6); // and the entity graph on top
+  await expect(page.locator('.layer-legend')).toContainText('docs');
+  await expect(page.locator('.layer-legend')).toContainText('mentions');
+});
+
+test('entity layer: selecting an entity shows its source docs; a source doc reaches the doc layer', async ({ page }) => {
+  await page.goto(t3URL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.getByRole('radio', { name: 'entities' }).click();
+  await page.waitForFunction(() => window.__bp_store.getState().entityAvailability === 'available');
+  // grounding (source docs) is reconstructed from /api/neighbors in the background
+  await page.waitForFunction(() => window.__bp_store.getState().grounding.has('aurinko'));
+
+  // selecting the entity — what a gem click does — opens the entity panel
+  await page.evaluate(() => window.__bp_store.getState().selectEntity('aurinko'));
+  const panel = page.locator('.entity-panel');
+  await expect(panel.locator('h2')).toHaveText('Aurinko');
+  await expect(panel).toContainText('star');
+  await expect(panel.getByRole('button', { name: 'aurinko.md' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'planeetat.md' })).toBeVisible();
+
+  // clicking a source doc jumps to the doc layer (overlay) and selects it
+  await panel.getByRole('button', { name: 'planeetat.md' }).click();
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.layer === 'overlay' && s.selection === 'planeetat.md' && s.entitySelection === null;
+  });
+});
+
+test('entity layer: a T3-less bundle degrades on select — toggle tags it, view stays links', async ({ page }) => {
+  await page.goto(t2lessURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('10 docs', { timeout: 30_000 });
+  await expect(page.locator('.hud-tiers')).toContainText('t3 off');
+
+  // Picking entities probes /api/graph?layer=entities → 404 → unavailable, and
+  // the view falls back to links (no crash, no error).
+  await page.getByRole('radio', { name: 'entities' }).click();
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.entityAvailability === 'unavailable' && s.layer === 'links';
+  });
+
+  const entities = page.getByRole('radio', { name: 'entities' });
+  await expect(entities).toBeDisabled();
+  await expect(entities).toContainText('T3 not compiled');
+
+  // links still render, and no entity chrome leaks into links mode
+  await expect(page.locator('canvas')).toBeVisible();
+  const count = await page.evaluate(() => window.__bp_runtime.ids.length);
+  expect(count).toBeGreaterThanOrEqual(10);
+  await expect(page.locator('.layer-legend')).toHaveCount(0);
+  await expect(page.locator('.entity-panel')).toHaveCount(0);
+});
+
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('the layer toggle + entity legend are reachable on a phone', async ({ page }) => {
+    await page.goto(t3URL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    const entities = page.getByRole('radio', { name: 'entities' });
+    await expect(entities).toBeVisible();
+    await entities.tap();
+    await page.waitForFunction(() => window.__bp_store.getState().layer === 'entities');
+    await expect(page.locator('.layer-legend')).toBeVisible();
+  });
 
   test('GPU budget: the phone view is honest too — no budget line on a small brain', async ({ page }) => {
     await page.goto(baseURL() + '/');

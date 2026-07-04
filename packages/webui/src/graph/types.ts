@@ -16,7 +16,13 @@ export interface GraphNode {
   reserved: boolean;
 }
 
-export type EdgeKind = 'link' | 'wikilink';
+/**
+ * `link`/`wikilink` are the T1 doc graph (spec/20). `relation`/`virtual` are
+ * synthetic kinds the entity layer feeds through the same render path: a
+ * `relation` is a T3 entity↔entity edge, a `virtual` is the weak entity→source-doc
+ * tie that lets an entity gravitate toward the docs that mention it (overlay).
+ */
+export type EdgeKind = 'link' | 'wikilink' | 'relation' | 'virtual';
 
 export interface GraphEdge {
   source: string;
@@ -24,6 +30,8 @@ export interface GraphEdge {
   kind: EdgeKind;
   label: string | null;
   count: number;
+  /** T3 relation weight in [0,1]; drives edge brightness. Absent = full (1). */
+  weight?: number;
 }
 
 export interface EdgeRef {

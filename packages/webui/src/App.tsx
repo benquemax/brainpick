@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { CosmosCanvas } from './scene/CosmosCanvas';
 import type { GraphRuntime } from './scene/runtime';
+import type { GraphLayer } from './graph/entities';
 import { uiStore, useUI } from './state/store';
 import { CameraCluster } from './ui/CameraCluster';
 import { DocPanel } from './ui/DocPanel';
+import { EntityPanel } from './ui/EntityPanel';
+import { LayerToggle } from './ui/LayerToggle';
 import { LensCluster } from './ui/LensCluster';
 import { NavigatorPanel } from './ui/NavigatorPanel';
 import { SearchOverlay } from './ui/SearchOverlay';
@@ -54,6 +57,13 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         s.toggleNavigator();
+      } else if (e.key === 'l' || e.key === 'L') {
+        e.preventDefault();
+        // Cycle links → entities → overlay, skipping the entity layers once a
+        // 404 has proven T3 absent (setLayer also guards this).
+        const order: GraphLayer[] = s.entityAvailability === 'unavailable' ? ['links'] : ['links', 'entities', 'overlay'];
+        const next = order[(order.indexOf(s.layer) + 1) % order.length] ?? 'links';
+        s.setLayer(next);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -65,15 +75,17 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <CosmosCanvas runtime={runtime} labelContainer={labelContainer} />
       <div className="labels-layer" ref={setLabelContainer} />
       <StatusHUD />
+      <LayerToggle />
       <SearchButton />
       <SearchOverlay />
       <DocPanel />
+      <EntityPanel />
       <NavigatorPanel />
       <LensCluster />
       <CameraCluster />
       <div className="hint-bar">
-        <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>0</kbd> overview · <kbd>1–3</kbd> views (<kbd>shift</kbd>{' '}
-        saves) · <kbd>g</kbd> ghosts · click a node to read
+        <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>l</kbd> layer · <kbd>0</kbd> overview · <kbd>1–3</kbd> views (
+        <kbd>shift</kbd> saves) · <kbd>g</kbd> ghosts · click a node to read
       </div>
     </div>
   );

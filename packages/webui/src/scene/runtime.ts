@@ -12,7 +12,9 @@ import type { UIState } from '../state/store';
 import { buildSeeds, diffGraph } from '../layout/simShared';
 import type { FromWorker, GraphMessage, WorkerLink } from '../layout/messages';
 import { budgetedGraph, isClusterId } from '../state/budget';
-import { colorForId } from './colors';
+import { activeRenderGraph } from '../state/entityModel';
+import { isEntityRenderId } from '../graph/entities';
+import { colorForId, entityColorForType } from './colors';
 import { buildGhostAnchors, type GhostAnchor } from './ghosts';
 import { GHOST_GLOW } from './tuning';
 
@@ -46,9 +48,15 @@ export class GraphRuntime {
   reserved: Uint8Array = new Uint8Array(0);
   /** 1 for cluster-proxy nodes (aggregated "+N more"), 0 for real docs. */
   cluster: Uint8Array = new Uint8Array(0);
+  /** 1 for entity nodes (T3 gem sprite), 0 for docs (disc). */
+  family: Uint8Array = new Uint8Array(0);
   birth: Float32Array = new Float32Array(0); // scene seconds; -1 = no entrance animation
   activityAt: Float32Array = new Float32Array(0); // scene seconds; -1 = none
   edgePairs: Uint32Array = new Uint32Array(0);
+  /** Per-edge brightness weight (relation weight / virtual hint / 1 for links). */
+  edgeWeights: Float32Array = new Float32Array(0);
+  /** Per-edge kind flag: 0 link, 1 relation, 2 virtual — EdgesLayer tints by it. */
+  edgeKinds: Uint8Array = new Uint8Array(0);
   edgeCount = 0;
   /** Ghost links whose source is live: index + phantom offset (scene/ghosts). */
   ghostAnchors: GhostAnchor[] = [];
@@ -75,6 +83,9 @@ export class GraphRuntime {
   private lastEpoch = -1;
   private lastBudget = -1;
   private lastExpandedDirs: ReadonlySet<string> | null = null;
+  private lastLayer: string | null = null;
+  private lastEntityEpoch = -1;
+  private lastAvailability: string | null = null;
   private dyingTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly clockStartMs = performance.now();
   private readonly epochStartMs = Date.now();
@@ -91,11 +102,16 @@ export class GraphRuntime {
     }
     this.unsubscribe = store.subscribe((state) => {
       // The rendered set depends on the graph (epoch) AND the GPU budget /
-      // revealed dirs — a "show more" or a proxy expand must re-cull too.
+      // revealed dirs — a "show more" or a proxy expand must re-cull too. The
+      // active LAYER (links/entities/overlay), the entity graph/grounding
+      // (entityEpoch) and its availability likewise change what is drawn.
       if (
         state.epoch !== this.lastEpoch ||
         state.nodeBudget !== this.lastBudget ||
-        state.expandedDirs !== this.lastExpandedDirs
+        state.expandedDirs !== this.lastExpandedDirs ||
+        state.layer !== this.lastLayer ||
+        state.entityEpoch !== this.lastEntityEpoch ||
+        state.entityAvailability !== this.lastAvailability
       ) {
         this.rebuild(state);
       }
@@ -104,6 +120,9 @@ export class GraphRuntime {
     this.lastEpoch = initial.epoch;
     this.lastBudget = initial.nodeBudget;
     this.lastExpandedDirs = initial.expandedDirs;
+    this.lastLayer = initial.layer;
+    this.lastEntityEpoch = initial.entityEpoch;
+    this.lastAvailability = initial.entityAvailability;
     if (initial.nodes.size > 0) this.rebuild(initial);
   }
 
@@ -162,11 +181,26 @@ export class GraphRuntime {
     this.lastEpoch = state.epoch;
     this.lastBudget = state.nodeBudget;
     this.lastExpandedDirs = state.expandedDirs;
+    this.lastLayer = state.layer;
+    this.lastEntityEpoch = state.entityEpoch;
+    this.lastAvailability = state.entityAvailability;
+
+    // Resolve the active layer into ONE render node/edge set — links (the doc
+    // graph, untouched), entities, or the overlay of both — then feed it
+    // through the SAME budget + scene path (no forked renderer, spec/40).
+    const active = activeRenderGraph({
+      layer: state.layer,
+      available: state.entityAvailability === 'available',
+      docNodes: state.nodes,
+      docEdges: state.edges,
+      entityGraph: state.entityGraph,
+      grounding: state.grounding,
+    });
 
     // Apply the GPU budget: below the cap this is a passthrough (identical
     // set); above it, degree-ranked culling + per-dir cluster proxies. The HUD
     // reads the same memoized view, so its "N of M" always matches the scene.
-    const view = budgetedGraph(state.nodes, state.edges, state.seq, state.nodeBudget, state.expandedDirs);
+    const view = budgetedGraph(active.nodes, active.edges, active.version, state.nodeBudget, state.expandedDirs);
     this.aggregated = view.aggregated;
     this.shownNodes = view.shownNodes;
     this.totalNodes = view.totalNodes;
@@ -192,12 +226,15 @@ export class GraphRuntime {
     const degrees = new Float32Array(n);
     const reserved = new Uint8Array(n);
     const cluster = new Uint8Array(n);
+    const family = new Uint8Array(n);
     const birth = new Float32Array(n).fill(-1);
     const activityAt = new Float32Array(n).fill(-1);
 
     for (const node of view.renderNodes) {
       const i = index.get(node.id) as number;
-      const [r, g, b] = colorForId(node.id);
+      // Entities are their own species: gold gem, doc paths keep the dir palette.
+      const entity = isEntityRenderId(node.id);
+      const [r, g, b] = entity ? entityColorForType(node.type) : colorForId(node.id);
       colors[i * 3] = r;
       colors[i * 3 + 1] = g;
       colors[i * 3 + 2] = b;
@@ -206,6 +243,7 @@ export class GraphRuntime {
       radii[i] = radiusForDegree(degree);
       reserved[i] = node.reserved ? 1 : 0;
       cluster[i] = isClusterId(node.id) ? 1 : 0;
+      family[i] = entity ? 1 : 0;
       const join = state.joins.get(node.id);
       if (join) birth[i] = this.sceneTime(join.at);
       const activity = state.activity.get(node.id);
@@ -213,15 +251,21 @@ export class GraphRuntime {
     }
 
     // Edges whose endpoints both exist, as index pairs + structural keys.
+    // edgeWeights carries per-edge brightness (relation weight, virtual hint,
+    // or 1 for doc links → identical to before); edgeKinds tints them.
     const edgeKeys: string[] = [];
     const pairs: number[] = [];
     const links: WorkerLink[] = [];
+    const weights: number[] = [];
+    const kinds: number[] = [];
     for (const edge of view.renderEdges) {
       const s = index.get(edge.source);
       const t = index.get(edge.target);
       if (s === undefined || t === undefined) continue;
       pairs.push(s, t);
       links.push({ source: s, target: t, count: edge.count });
+      weights.push(edge.weight ?? 1);
+      kinds.push(edge.kind === 'relation' ? 1 : edge.kind === 'virtual' ? 2 : 0);
       edgeKeys.push(`${edge.source}${edge.target}${edge.kind}${edge.count}`);
     }
 
@@ -255,9 +299,12 @@ export class GraphRuntime {
     this.degrees = degrees;
     this.reserved = reserved;
     this.cluster = cluster;
+    this.family = family;
     this.birth = birth;
     this.activityAt = activityAt;
     this.edgePairs = Uint32Array.from(pairs);
+    this.edgeWeights = Float32Array.from(weights);
+    this.edgeKinds = Uint8Array.from(kinds);
     this.edgeCount = links.length;
     this.ghostAnchors = buildGhostAnchors(state.ghosts, index, GHOST_GLOW.phantomDistance);
     this.labelOrder = ids

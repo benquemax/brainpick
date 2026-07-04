@@ -27,6 +27,9 @@ import { applyDelta, applySnapshot, emptyGraphSlice, type GraphSlice } from './a
 import { lensNodeSet, NO_LENS, sameLens, type Lens } from './lens';
 import { DEFAULT_GPU_TIER, type GpuTier } from '../scene/gpuTier';
 import { GPU_BUDGET } from '../scene/tuning';
+import type { EntityAvailability, EntityGraph, GraphLayer } from '../graph/entities';
+import { entityRenderId } from '../graph/entities';
+import { entityRenderIdsForDoc } from './entityModel';
 
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
 
@@ -65,6 +68,23 @@ export interface UIState extends GraphSlice {
 
   selection: string | null;
   hovered: string | null;
+
+  /** LAYER: which graph the cosmos shows — links (T1) ⇄ entities (T3) ⇄ overlay. */
+  layer: GraphLayer;
+  /** Fetch-side entity-layer state: available only once a T3 export is fetched. */
+  entityAvailability: EntityAvailability;
+  /** The last fetched entity graph (GET /api/graph?layer=entities), or null. */
+  entityGraph: EntityGraph | null;
+  /** Manifest seq the entity graph was fetched at (cache key); 0 = none. */
+  entitySeq: number;
+  /** Bumped whenever entityGraph/grounding changes — the scene re-culls. */
+  entityEpoch: number;
+  /** Selected ENTITY id (bare, e.g. "aurinko") — opens the entity panel. */
+  entitySelection: string | null;
+  /** entity id → its source_docs, reconstructed from /api/neighbors. */
+  grounding: ReadonlyMap<string, string[]>;
+  /** In overlay: the doc whose entities are lit (clicking a doc reveals them). */
+  docEntityFocus: string | null;
 
   searchOpen: boolean;
   searchQuery: string;
@@ -108,6 +128,21 @@ export interface UIState extends GraphSlice {
   /** Camera flight to a node without changing the selection (hover preview). */
   previewNode(id: string): void;
   setHovered(id: string | null): void;
+
+  /** Switch the rendered graph layer. links clears any entity chrome. */
+  setLayer(layer: GraphLayer): void;
+  /** Adopt a fetched entity graph — the layer becomes truly available. */
+  ingestEntityGraph(graph: EntityGraph, seq: number): void;
+  /** No T3 export (404 / tiers.t3 off): the toggle tags it, the view falls back. */
+  setEntityUnavailable(): void;
+  /** Merge freshly discovered entity→source_docs grounding. */
+  ingestGrounding(grounding: ReadonlyMap<string, string[]>): void;
+  /** Select an entity (opens the entity panel, flies to its render node). */
+  selectEntity(id: string | null): void;
+  /** Overlay: select a doc AND light up the entities grounded in it. */
+  selectDocInOverlay(path: string): void;
+  /** From the entity panel: reach a source doc in the doc layer (overlay + fly). */
+  selectSourceDoc(path: string): void;
 
   openSearch(): void;
   closeSearch(): void;
@@ -154,12 +189,16 @@ interface EmphasisSource {
   searchEmphasis: ReadonlySet<string>;
   lens: Lens;
   nodes: ReadonlyMap<string, GraphNode>;
+  /** Overlay: a selected doc whose grounded entities should light up. */
+  docEntityFocus: string | null;
+  grounding: ReadonlyMap<string, string[]>;
 }
 
 /**
- * Resolve the effective highlight + dim from the two emphasis drivers.
- * An open search with hits wins; otherwise an active lens; otherwise any
- * lingering search mark (a focused hit) stays lit without dimming.
+ * Resolve the effective highlight + dim from the emphasis drivers, by priority:
+ * an open search with hits wins; then an active lens; then an overlay doc's
+ * entities; otherwise any lingering search mark (a focused hit) stays lit
+ * without dimming. One mechanism, several drivers — the scene reads `highlight`.
  */
 function deriveEmphasis(src: EmphasisSource): { highlight: ReadonlySet<string>; dimOthers: boolean } {
   if (src.searchOpen && src.searchHits.length > 0) {
@@ -167,6 +206,10 @@ function deriveEmphasis(src: EmphasisSource): { highlight: ReadonlySet<string>; 
   }
   if (src.lens.kind !== 'none') {
     return { highlight: lensNodeSet(src.nodes, src.lens), dimOthers: true };
+  }
+  if (src.docEntityFocus !== null) {
+    const set = new Set<string>([src.docEntityFocus, ...entityRenderIdsForDoc(src.grounding, src.docEntityFocus)]);
+    return { highlight: set, dimOthers: true };
   }
   return { highlight: src.searchEmphasis, dimOthers: false };
 }
@@ -185,6 +228,8 @@ export function createUIStore(): UIStoreApi {
         searchEmphasis,
         lens: s.lens,
         nodes: s.nodes,
+        docEntityFocus: s.docEntityFocus,
+        grounding: s.grounding,
         ...over,
       });
     };
@@ -201,6 +246,15 @@ export function createUIStore(): UIStoreApi {
 
       selection: null,
       hovered: null,
+
+      layer: 'links',
+      entityAvailability: 'unknown',
+      entityGraph: null,
+      entitySeq: 0,
+      entityEpoch: 0,
+      entitySelection: null,
+      grounding: new Map<string, string[]>(),
+      docEntityFocus: null,
 
       searchOpen: false,
       searchQuery: '',
@@ -286,13 +340,14 @@ export function createUIStore(): UIStoreApi {
 
       select(id, fly = true) {
         if (id === null) {
-          set({ selection: null });
+          set({ selection: null, entitySelection: null, docEntityFocus: null, ...emphasisOf({ docEntityFocus: null }) });
           return;
         }
         const state = get();
         const flyTo =
           fly && state.nodes.has(id) ? { id, nonce: (state.flyTo?.nonce ?? 0) + 1 } : state.flyTo;
-        set({ selection: id, flyTo });
+        // Selecting a doc closes any entity selection / overlay focus.
+        set({ selection: id, entitySelection: null, docEntityFocus: null, flyTo, ...emphasisOf({ docEntityFocus: null }) });
       },
 
       previewNode(id) {
@@ -303,6 +358,80 @@ export function createUIStore(): UIStoreApi {
 
       setHovered(hovered) {
         set({ hovered });
+      },
+
+      setLayer(layer) {
+        const state = get();
+        if (state.layer === layer) return;
+        // A confirmed-unavailable entity layer can't be entered — nothing to show.
+        if (layer !== 'links' && state.entityAvailability === 'unavailable') return;
+        if (layer === 'links') {
+          // links mode shows no entity chrome — drop selection/focus.
+          set({ layer, entitySelection: null, docEntityFocus: null, ...emphasisOf({ docEntityFocus: null }) });
+        } else {
+          set({ layer });
+        }
+      },
+
+      ingestEntityGraph(graph, seq) {
+        set({
+          entityGraph: graph,
+          entitySeq: seq,
+          entityAvailability: 'available',
+          entityEpoch: get().entityEpoch + 1,
+        });
+      },
+
+      setEntityUnavailable() {
+        // No T3 export (404): fall the view back to links and drop entity chrome.
+        set({
+          entityAvailability: 'unavailable',
+          entityGraph: null,
+          entitySeq: 0,
+          entitySelection: null,
+          docEntityFocus: null,
+          layer: 'links',
+          entityEpoch: get().entityEpoch + 1,
+          ...emphasisOf({ docEntityFocus: null }),
+        });
+      },
+
+      ingestGrounding(grounding) {
+        const next = new Map(get().grounding);
+        for (const [id, docs] of grounding) next.set(id, docs);
+        // Pass the fresh map into the emphasis derivation — get() still holds the old one.
+        set({ grounding: next, entityEpoch: get().entityEpoch + 1, ...emphasisOf({ grounding: next }) });
+      },
+
+      selectEntity(id) {
+        if (id === null) {
+          set({ entitySelection: null });
+          return;
+        }
+        const state = get();
+        set({
+          entitySelection: id,
+          selection: null,
+          docEntityFocus: null,
+          flyTo: { id: entityRenderId(id), nonce: (state.flyTo?.nonce ?? 0) + 1 },
+          ...emphasisOf({ docEntityFocus: null }),
+        });
+      },
+
+      selectDocInOverlay(path) {
+        const state = get();
+        set({
+          selection: path,
+          entitySelection: null,
+          docEntityFocus: path,
+          flyTo: state.nodes.has(path) ? { id: path, nonce: (state.flyTo?.nonce ?? 0) + 1 } : state.flyTo,
+          ...emphasisOf({ docEntityFocus: path }),
+        });
+      },
+
+      selectSourceDoc(path) {
+        get().setLayer('overlay');
+        get().select(path, true);
       },
 
       openSearch() {

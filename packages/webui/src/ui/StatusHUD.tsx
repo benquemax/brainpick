@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { uiStore, useUI } from '../state/store';
 import { budgetedGraph } from '../state/budget';
+import { activeRenderGraph } from '../state/entityModel';
 import type { TierName } from '../graph/types';
 
 const TIER_ORDER: TierName[] = ['t1', 't2', 't3'];
@@ -17,15 +18,23 @@ export function StatusHUD() {
   const compile = useUI((s) => s.compile);
 
   // The GPU budget line appears ONLY when the view is actually capped — the
-  // memoized budgeted view is the exact one the scene renders (honest N of M).
+  // memoized budgeted view is the exact one the scene renders (honest N of M),
+  // for whichever LAYER is active (links, entities or overlay).
   const nodes = useUI((s) => s.nodes);
   const edges = useUI((s) => s.edges);
   const nodeBudget = useUI((s) => s.nodeBudget);
   const expandedDirs = useUI((s) => s.expandedDirs);
-  const budget = useMemo(
-    () => budgetedGraph(nodes, edges, seq, nodeBudget, expandedDirs),
-    [nodes, edges, seq, nodeBudget, expandedDirs],
-  );
+  const layer = useUI((s) => s.layer);
+  const available = useUI((s) => s.entityAvailability === 'available');
+  const entityGraph = useUI((s) => s.entityGraph);
+  const grounding = useUI((s) => s.grounding);
+  const entityEpoch = useUI((s) => s.entityEpoch);
+  const budget = useMemo(() => {
+    const active = activeRenderGraph({ layer, available, docNodes: nodes, docEdges: edges, entityGraph, grounding });
+    return budgetedGraph(active.nodes, active.edges, active.version, nodeBudget, expandedDirs);
+    // entityEpoch changes with grounding/graph — keep it in the deps so the line re-derives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layer, available, nodes, edges, entityGraph, grounding, entityEpoch, nodeBudget, expandedDirs]);
   const capped = budget.aggregated.size > 0;
 
   // Show the last compile status briefly after it stops running.

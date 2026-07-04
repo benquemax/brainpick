@@ -32,6 +32,7 @@ const VERTEX = /* glsl */ `
   varying float vIntensity;
   varying float vAlpha;
   varying float vCluster;
+  varying float vEntity;
 
   void main() {
     vec3 center = mix(iCosmos, iBrain, uMorph);
@@ -56,6 +57,8 @@ const VERTEX = /* glsl */ `
 
     float reserved = step(0.5, mod(iFlags, 2.0));
     float cluster = step(0.5, mod(floor(iFlags / 2.0), 2.0));
+    float entity = step(0.5, mod(floor(iFlags / 4.0), 2.0));
+    vEntity = entity;
     float highlight = clamp(iHighlight, 0.0, 1.0);
     float scale = iRadius * grow * (1.0 - death)
       * (1.0 + ${f(NODE_GLOW.pulseScale)} * pulse + ${f(NODE_GLOW.highlightScale)} * highlight);
@@ -84,18 +87,25 @@ const FRAGMENT = /* glsl */ `
   varying float vIntensity;
   varying float vAlpha;
   varying float vCluster;
+  varying float vEntity;
 
   void main() {
-    float d = length(vQuad);
+    // Docs are discs (L2), entities are gems (L1 diamond) — the two families
+    // read apart at a glance even before color registers.
+    float dCircle = length(vQuad);
+    float dDiamond = abs(vQuad.x) + abs(vQuad.y);
+    float d = mix(dCircle, dDiamond, vEntity);
     if (d > 1.0) discard;
     // Hard-ish core with a restrained radial halo (tuning.ts owns the numbers).
     float core = smoothstep(0.32, 0.06, d);
     // Cluster proxies read as a hollow ring ("a container of many"), not a star.
     float ring = smoothstep(0.12, 0.0, abs(d - 0.6));
     float shape = mix(core, ring, vCluster);
+    // A vertical facet highlight sells the gem as a cut stone.
+    float facet = vEntity * smoothstep(0.05, 0.0, abs(vQuad.x)) * smoothstep(0.95, 0.1, dDiamond) * 0.6;
     // uBloom scales the wide additive halo — weak GPU tiers trim overdraw.
     float glow = exp(-d * d * ${f(NODE_GLOW.haloFalloff)}) * ${f(NODE_GLOW.haloStrength)} * uBloom;
-    float i = (shape * ${f(NODE_GLOW.coreIntensity)} + glow) * vIntensity;
+    float i = (shape * ${f(NODE_GLOW.coreIntensity)} + facet + glow) * vIntensity;
     gl_FragColor = vec4(vColor * i, i * vAlpha);
   }
 `;
@@ -129,8 +139,8 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
     radius[i] = runtime.radii[i] ?? 5;
     birth[i] = runtime.birth[i] ?? -1;
     activity[i] = runtime.activityAt[i] ?? -1;
-    // bit 0 = reserved (index/log), bit 1 = cluster proxy ("+N more").
-    flags[i] = (runtime.reserved[i] ?? 0) | ((runtime.cluster[i] ?? 0) << 1);
+    // bit 0 = reserved (index/log), bit 1 = cluster proxy, bit 2 = entity (T3 gem).
+    flags[i] = (runtime.reserved[i] ?? 0) | ((runtime.cluster[i] ?? 0) << 1) | ((runtime.family[i] ?? 0) << 2);
   }
   for (let d = 0; d < runtime.dying.length; d++) {
     const i = live + d;

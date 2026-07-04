@@ -7,7 +7,8 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { cssColorForId } from './colors';
+import { rgbToCss } from './colors';
+import { entityRenderId } from '../graph/entities';
 import { labelBudget } from './semanticZoom';
 import type { GraphRuntime } from './runtime';
 
@@ -38,9 +39,10 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
     // Semantic-zoom budget, capped by the GPU tier's label ceiling.
     const budget = Math.min(labelBudget(zoomRatio), state.gpu.labelBudget);
 
-    // Selection and hover are always labeled, then by degree.
+    // Selection (doc OR entity) and hover are always labeled, then by degree.
+    const focusId = state.entitySelection !== null ? entityRenderId(state.entitySelection) : state.selection;
     const forced: number[] = [];
-    for (const id of [state.selection, state.hovered]) {
+    for (const id of [focusId, state.hovered]) {
       if (id !== null) {
         const i = runtime.index.get(id);
         if (i !== undefined) forced.push(i);
@@ -79,8 +81,9 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
       const title = runtime.titles[i] ?? id;
       if (div.textContent !== title) div.textContent = title;
       div.style.transform = `translate3d(${px.toFixed(1)}px, ${(py - (runtime.radii[i] ?? 6) * (camera as THREE.OrthographicCamera).zoom * 0.34 - 6).toFixed(1)}px, 0)`;
-      div.style.color = cssColorForId(id);
-      const focus = state.selection === id || state.hovered === id;
+      // Color from the render buffer so entity (gold) and doc labels both match.
+      div.style.color = rgbToCss([runtime.colors[i * 3] ?? 0.8, runtime.colors[i * 3 + 1] ?? 0.8, runtime.colors[i * 3 + 2] ?? 1]);
+      const focus = focusId === id || state.hovered === id;
       const hl = state.highlight.has(id);
       div.classList.toggle('focus', focus);
       div.classList.toggle('hl', hl);

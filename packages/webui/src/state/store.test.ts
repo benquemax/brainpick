@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphDelta, GraphEdge, GraphNode, GraphPayload, SearchHit } from '../graph/types';
+import type { EntityGraph } from '../graph/entities';
+import { entityRenderId } from '../graph/entities';
 import { createUIStore } from './store';
 import { budgetedGraph, isClusterId } from './budget';
 import { treeForGraph, type TreeDir } from './tree';
@@ -493,5 +495,146 @@ describe('GPU budget', () => {
 
     store.getState().collapseDir(proxyDir);
     expect(store.getState().expandedDirs.has(proxyDir)).toBe(false);
+  });
+});
+
+const ENTITY_GRAPH: EntityGraph = {
+  nodes: [
+    { id: 'aurinko', name: 'Aurinko', type: 'star', description: 'The star.', degree: 1 },
+    { id: 'kuu', name: 'Kuu', type: 'moon', description: 'The moon.', degree: 1 },
+  ],
+  edges: [{ src: 'kuu', dst: 'aurinko', weight: 0.9 }],
+};
+
+describe('entity layer', () => {
+  it('defaults to the links layer with entities not yet available', () => {
+    const s = createUIStore().getState();
+    expect(s.layer).toBe('links');
+    expect(s.entityAvailability).toBe('unknown');
+    expect(s.entityGraph).toBeNull();
+    expect(s.entitySelection).toBeNull();
+  });
+
+  it('setLayer switches layers; back to links clears entity chrome', () => {
+    const store = createUIStore();
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 7);
+    store.getState().setLayer('entities');
+    store.getState().selectEntity('aurinko');
+    expect(store.getState().layer).toBe('entities');
+    expect(store.getState().entitySelection).toBe('aurinko');
+    store.getState().setLayer('links');
+    expect(store.getState().layer).toBe('links');
+    expect(store.getState().entitySelection).toBeNull();
+    expect(store.getState().docEntityFocus).toBeNull();
+  });
+
+  it('ingestEntityGraph marks the layer available and bumps the entity epoch', () => {
+    const store = createUIStore();
+    const before = store.getState().entityEpoch;
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 42);
+    const s = store.getState();
+    expect(s.entityAvailability).toBe('available');
+    expect(s.entityGraph?.nodes.length).toBe(2);
+    expect(s.entitySeq).toBe(42);
+    expect(s.entityEpoch).toBe(before + 1);
+  });
+
+  it('setEntityUnavailable degrades honestly — no graph, falls back to links', () => {
+    const store = createUIStore();
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 5);
+    store.getState().setLayer('entities');
+    store.getState().setEntityUnavailable();
+    const s = store.getState();
+    expect(s.entityAvailability).toBe('unavailable');
+    expect(s.entityGraph).toBeNull();
+    expect(s.entitySelection).toBeNull();
+    expect(s.layer).toBe('links'); // the view falls back
+  });
+
+  it('setLayer refuses to enter an entity layer once it is unavailable', () => {
+    const store = createUIStore();
+    store.getState().setEntityUnavailable();
+    store.getState().setLayer('entities');
+    expect(store.getState().layer).toBe('links');
+    store.getState().setLayer('overlay');
+    expect(store.getState().layer).toBe('links');
+  });
+
+  it('selectEntity opens the entity panel and flies to the entity render node', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 10);
+    store.getState().select('a.md'); // a doc is selected first
+    store.getState().selectEntity('kuu');
+    const s = store.getState();
+    expect(s.entitySelection).toBe('kuu');
+    expect(s.selection).toBeNull(); // doc selection closed
+    expect(s.flyTo?.id).toBe(entityRenderId('kuu'));
+  });
+
+  it('select() clears a lingering entity selection', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 10);
+    store.getState().selectEntity('kuu');
+    store.getState().select('a.md');
+    expect(store.getState().entitySelection).toBeNull();
+    expect(store.getState().selection).toBe('a.md');
+  });
+
+  it('overlay: selecting a doc lights up the entities grounded in it', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 10);
+    store.getState().ingestGrounding(new Map([['kuu', ['a.md']], ['aurinko', ['b.md']]]));
+    store.getState().setLayer('overlay');
+    store.getState().selectDocInOverlay('a.md');
+    const s = store.getState();
+    expect(s.docEntityFocus).toBe('a.md');
+    expect(s.dimOthers).toBe(true);
+    expect(s.highlight.has(entityRenderId('kuu'))).toBe(true); // grounded in a.md
+    expect(s.highlight.has('a.md')).toBe(true); // the doc itself stays lit
+    expect(s.highlight.has(entityRenderId('aurinko'))).toBe(false); // grounded elsewhere
+  });
+
+  it('grounding arriving after a doc focus refreshes the lit entity set', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 10);
+    store.getState().setLayer('overlay');
+    store.getState().selectDocInOverlay('a.md');
+    expect(store.getState().highlight.has(entityRenderId('kuu'))).toBe(false); // no grounding yet
+    store.getState().ingestGrounding(new Map([['kuu', ['a.md']]]));
+    expect(store.getState().highlight.has(entityRenderId('kuu'))).toBe(true);
+  });
+
+  it('an open search overrides the overlay doc focus, then hands it back', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 10);
+    store.getState().ingestGrounding(new Map([['kuu', ['a.md']]]));
+    store.getState().setLayer('overlay');
+    store.getState().selectDocInOverlay('a.md');
+    store.getState().openSearch();
+    store.getState().setSearchHits([
+      { path: 'b.md', title: 'B', description: null, score: 1, snippet: null, source: 'keyword' },
+    ]);
+    expect([...store.getState().highlight]).toEqual(['b.md']); // search wins
+    store.getState().clearSearch();
+    expect(store.getState().highlight.has(entityRenderId('kuu'))).toBe(true); // doc focus restored
+  });
+
+  it('selectSourceDoc jumps to the doc layer (overlay) and flies to the doc', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().ingestEntityGraph(ENTITY_GRAPH, 10);
+    store.getState().setLayer('entities');
+    store.getState().selectEntity('kuu');
+    store.getState().selectSourceDoc('a.md');
+    const s = store.getState();
+    expect(s.layer).toBe('overlay');
+    expect(s.selection).toBe('a.md');
+    expect(s.entitySelection).toBeNull();
+    expect(s.flyTo?.id).toBe('a.md');
   });
 });
