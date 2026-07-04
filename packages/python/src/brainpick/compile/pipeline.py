@@ -3,6 +3,7 @@ byte-stable on no-ops, delta-emitting on change."""
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,9 +11,11 @@ from pathlib import Path
 from brainpick import SPEC_VERSION, __version__
 from brainpick.compile.t1 import (
     apply_index_section,
+    apply_report_section,
     build_docs_records,
     build_graph,
     render_index_block,
+    render_report_block,
 )
 from brainpick.compile.t2 import run_t2_stage, t2_gate
 from brainpick.config import Config, load_config
@@ -49,6 +52,34 @@ def _prospective_index(root: Path, docs) -> tuple[str, str | None]:
 
 def _read_or_none(path: Path) -> str | None:
     return path.read_text(encoding="utf-8") if path.is_file() else None
+
+
+def _refresh_report(root: Path, graph: dict, tiers: dict) -> None:
+    """Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
+    already live — the bundle root, and the repo root above it when the bundle is
+    a subdir. Never creates the file; writes only when the block actually changed."""
+    from brainpick.detect import find_repo_root
+
+    candidates = [root]
+    repo = find_repo_root(root)
+    if repo is not None and repo != root:
+        candidates.append(repo)
+
+    seen: set[Path] = set()
+    for base in candidates:
+        agents = base / "AGENTS.md"
+        resolved = agents.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        existing = _read_or_none(agents)
+        if existing is None:
+            continue
+        bundle_display = os.path.relpath(root, base).replace(os.sep, "/")
+        block = render_report_block(graph, tiers, bundle_display)
+        updated = apply_report_section(existing, block)
+        if updated is not None and updated != existing:
+            _atomic_write(agents, updated.encode("utf-8"))
 
 
 def _generator() -> dict:
@@ -119,6 +150,9 @@ def run_compile(
             warnings.append(instruction)  # said once: the next manifest records t2 = off
 
     tiers = {"t1": "fresh", "t2": t2_status, "t3": "off"}
+    # The opt-in AGENTS.md brain report rides along on every compile so it stays
+    # true even when nothing else changed (e.g. the markers were just installed).
+    _refresh_report(root, graph, tiers)
     artifacts_changed = t1_changed or t2_changed
     unchanged = not artifacts_changed and old_manifest is not None and old_tiers == tiers
     if unchanged and not full:

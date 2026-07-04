@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Created: brainpick meets agents where they live — a skill, one-command
+  integrations, and a brain report that teaches graph-before-grep.
 - Created: the brain learned to lock its door — tokens for agents, a password
   for humans, and open-by-choice stays first-class.
 - Updated: the cosmos gained a NAVIGATOR — a live directory tree for when you

@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from brainpick.compile.pipeline import check_fresh, run_compile
-from brainpick.compile.t1 import build_docs_records
+from brainpick.compile.t1 import build_docs_records, render_report_block
 from brainpick.compile.t2 import build_chunks
 from brainpick.core.bundle import scan
 from brainpick.core.canonical import canonical_jsonl
@@ -120,6 +120,18 @@ def test_query(case, tmp_path):
         records = build_docs_records(scan(root))
         hits = search(records, case["query"], limit=case["limit"])
     assert {h["path"] for h in hits} == set(case["expect_paths"])
+
+
+@pytest.mark.parametrize("case", _cases("report"), ids=_case_ids("report"))
+def test_report_golden(case, tmp_path):
+    root = _bundle_copy(tmp_path, case["bundle"])
+    run_compile(root)
+    bp = root / ".brainpick"
+    graph = json.loads((bp / "t1" / "graph.json").read_text(encoding="utf-8"))
+    tiers = json.loads((bp / "manifest.json").read_text(encoding="utf-8"))["tiers"]
+    actual = render_report_block(graph, tiers) + "\n"
+    expected = (EXPECTED / case["bundle"] / case["artifact"]).read_text(encoding="utf-8")
+    assert actual == expected, f"{case['artifact']} drifted from golden"
 
 
 @pytest.mark.parametrize("case", _cases("delta"), ids=_case_ids("delta"))

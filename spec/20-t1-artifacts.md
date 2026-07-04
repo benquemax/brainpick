@@ -118,6 +118,20 @@ docs' `description` fields, not this block._
   — the bytes strictly between the begin-line's trailing LF and the
   end-line, exclusive.
 
+## Generated AGENTS.md brain report (opt-in)
+
+When a bundle's repo has an `AGENTS.md` containing the markers
+`<!-- brainpick:begin report (hash:…) -->` / `<!-- brainpick:end report -->`
+(installed by `brainpick integrate`), compile refreshes the block between
+them — same fence mechanics as the index (hash stamp over the body; absent
+markers → never touched; the file itself is never created by compile).
+Body (normative order, one line each unless noted): a one-line directive
+("consult brain_search/`brainpick search` BEFORE grepping this bundle"),
+counts (docs · links · tags · orphans · ghosts), tier status, top 5 hub
+documents by total degree (`- title (path) — in/out`), orphans list (≤5),
+and the bundle root. Deterministic; cross-engine byte-identical (a
+conformance golden accompanies the first implementation).
+
 ## Advisory T1 artifacts
 
 - `t1/layout.json`: 2D positions, 3D brain positions, community

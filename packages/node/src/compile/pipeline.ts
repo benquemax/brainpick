@@ -1,14 +1,24 @@
 /** The compile pipeline (spec/10): scan → T1 → T2 → artifacts, hash-incremental,
  * byte-stable on no-ops, delta-emitting on change. */
-import { join } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 import { loadConfig, type Config } from "../config";
 import { scan, type Document } from "../core/bundle";
 import { canonicalJson, canonicalJsonl, cmpStr, type JsonValue } from "../core/canonical";
 import { atomicWrite, readTextOrNull } from "../core/fs";
 import { deepEqual, diffGraphs, type GraphDelta } from "../deltas";
+import { findRepoRoot } from "../detect";
 import { SPEC_VERSION, VERSION } from "../version";
-import { applyIndexSection, buildDocsRecords, buildGraph, renderIndexBlock, type GraphStats } from "./t1";
+import {
+  applyIndexSection,
+  applyReportSection,
+  buildDocsRecords,
+  buildGraph,
+  renderIndexBlock,
+  renderReportBlock,
+  type Graph,
+  type GraphStats,
+} from "./t1";
 import { runT2Stage, t2Gate } from "./t2";
 
 export const INDEX_FILE = "index.md";
@@ -44,6 +54,29 @@ function prospectiveIndex(root: string, docs: Document[]): [string, string | nul
 
 function generator(): { impl: string; name: string; version: string } {
   return { impl: "node", name: "brainpick", version: VERSION };
+}
+
+/** Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
+ * already live — the bundle root, and the repo root above it when the bundle is
+ * a subdir. Never creates the file; writes only when the block actually changed. */
+function refreshReport(root: string, graph: Graph, tiers: Record<string, unknown>): void {
+  const bundleRoot = resolve(root);
+  const candidates = [bundleRoot];
+  const repo = findRepoRoot(bundleRoot);
+  if (repo !== null && repo !== bundleRoot) candidates.push(repo);
+
+  const seen = new Set<string>();
+  for (const base of candidates) {
+    const agents = join(base, "AGENTS.md");
+    if (seen.has(agents)) continue;
+    seen.add(agents);
+    const existing = readTextOrNull(agents);
+    if (existing === null) continue;
+    const bundleDisplay = (relative(base, bundleRoot) || ".").split(sep).join("/");
+    const block = renderReportBlock(graph, tiers, bundleDisplay);
+    const updated = applyReportSection(existing, block);
+    if (updated !== null && updated !== existing) atomicWrite(agents, updated);
+  }
 }
 
 export async function runCompile(
@@ -106,6 +139,9 @@ export async function runCompile(
   }
 
   const tiers = { t1: "fresh", t2: t2Status, t3: "off" };
+  // The opt-in AGENTS.md brain report rides along on every compile so it stays
+  // true even when nothing else changed (e.g. the markers were just installed).
+  refreshReport(root, graph, tiers);
   const artifactsChanged = t1Changed || t2Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {

@@ -22,7 +22,8 @@
   },
   "files": [
     "dist",
-    "static"
+    "static",
+    "skill"
   ],
   "scripts": {
     "build": "tsup",

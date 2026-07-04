@@ -13,7 +13,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { scan } from "../src/core/bundle";
 import { canonicalJsonl, type JsonValue } from "../src/core/canonical";
 import { checkFresh, runCompile } from "../src/compile/pipeline";
-import { buildDocsRecords, type DocRecord } from "../src/compile/t1";
+import { buildDocsRecords, renderReportBlock, type DocRecord, type Graph } from "../src/compile/t1";
 import { buildChunks } from "../src/compile/t2";
 import { search, type SearchHit } from "../src/query/keyword";
 import { runSearch } from "../src/query/router";
@@ -147,6 +147,21 @@ describe("conformance", () => {
             hits = search(records, c.query!, c.limit!);
           }
           expect(new Set(hits.map((h) => h.path))).toEqual(new Set(c.expect_paths!));
+        });
+        break;
+
+      case "report":
+        test(c.id, async () => {
+          const root = copyBundle(c.bundle);
+          await runCompile(root);
+          const bp = join(root, ".brainpick");
+          const graph = JSON.parse(readFileSync(join(bp, "t1", "graph.json"), "utf8")) as Graph;
+          const tiers = (
+            JSON.parse(readFileSync(join(bp, "manifest.json"), "utf8")) as { tiers: Record<string, string> }
+          ).tiers;
+          const actual = renderReportBlock(graph, tiers) + "\n";
+          const expected = readFileSync(join(EXPECTED, c.bundle, c.artifact!), "utf8");
+          expect(actual, `${c.artifact} drifted from golden`).toBe(expected);
         });
         break;
 

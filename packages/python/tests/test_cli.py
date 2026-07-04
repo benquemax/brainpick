@@ -1,5 +1,6 @@
 """CLI wiring: the serve/mcp/compile/init/doctor subcommands exist and describe themselves."""
 import io
+import json
 
 import pytest
 
@@ -9,6 +10,8 @@ from brainpick.cli import main
 @pytest.mark.parametrize("argv", [
     ["serve", "--help"], ["mcp", "--help"], ["compile", "--help"],
     ["init", "--help"], ["doctor", "--help"],
+    ["search", "--help"], ["read", "--help"], ["neighbors", "--help"],
+    ["overview", "--help"], ["integrate", "--help"],
     ["token", "--help"], ["token", "create", "--help"], ["token", "list", "--help"],
     ["token", "revoke", "--help"], ["password", "--help"], ["password", "set", "--help"],
     ["password", "clear", "--help"],
@@ -38,6 +41,50 @@ def test_flags_are_registered(capsys):
     with pytest.raises(SystemExit):
         main(["doctor", "--help"])
     assert "--root" in capsys.readouterr().out
+
+
+# -- the four query mirrors (spec/70 payloads in the terminal) --------------------
+
+
+def test_cli_query_mirror_selfheals_when_uncompiled(kotiaurinko, capsys):
+    assert main(["search", "aurinko", "--root", str(kotiaurinko)]) == 0  # never crashes
+    err = capsys.readouterr().err
+    assert "no compiled brain" in err and "brainpick compile" in err
+
+
+def test_cli_search_plain_and_json(kotiaurinko, capsys):
+    main(["compile", "--root", str(kotiaurinko)])
+    capsys.readouterr()
+    assert main(["search", "aurinko", "--root", str(kotiaurinko)]) == 0
+    assert "aurinko.md" in capsys.readouterr().out
+    assert main(["search", "aurinko", "--root", str(kotiaurinko), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["hits"][0]["path"] == "aurinko.md"
+    assert "used_modes" in payload
+
+
+def test_cli_read_neighbors_overview(kotiaurinko, capsys):
+    main(["compile", "--root", str(kotiaurinko)])
+    capsys.readouterr()
+    assert main(["read", "kuu", "--root", str(kotiaurinko)]) == 0
+    assert "Kuu" in capsys.readouterr().out
+    assert main(["neighbors", "kuu", "--root", str(kotiaurinko), "--json"]) == 0
+    neighbors = json.loads(capsys.readouterr().out)
+    assert neighbors["center"] == "kuu.md"
+    assert main(["overview", "--root", str(kotiaurinko)]) == 0
+    assert "counts:" in capsys.readouterr().out
+
+
+def test_cli_query_notes_a_stale_brain_but_still_answers(kotiaurinko, capsys):
+    main(["compile", "--root", str(kotiaurinko)])
+    kuu = kotiaurinko / "kuu.md"
+    kuu.write_text(kuu.read_text(encoding="utf-8") + "\nAn edit that outpaces the artifacts.\n",
+                   encoding="utf-8")
+    capsys.readouterr()
+    assert main(["search", "aurinko", "--root", str(kotiaurinko)]) == 0
+    captured = capsys.readouterr()
+    assert "stale" in captured.err                 # the compile instruction
+    assert "aurinko.md" in captured.out            # still answers on the held artifacts
 
 
 def test_cli_init_runs_the_choreography(kotiaurinko, monkeypatch, capsys):

@@ -170,6 +170,68 @@ program
     });
   });
 
+// -- the four query mirrors (spec/70 payloads in the terminal) ---------------------
+
+/** Print a mirror's result: `out` to stdout (results / JSON), `err` to stderr. */
+function emit(result: { out?: string; err?: string }): void {
+  if (result.err) console.error(result.err);
+  if (result.out !== undefined) console.log(result.out);
+}
+
+program
+  .command("search <query>")
+  .description("search the compiled brain (the brain_search tool, in the terminal)")
+  .option("--mode <mode>", "auto | keyword | semantic | graph (unknown falls back to auto)", "auto")
+  .option("--limit <n>", "max hits (default: 8)", intOption, 8)
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--json", "print the raw MCP payload as JSON")
+  .action(async (query: string, opts: { mode: string; limit: number; root: string; json?: boolean }) => {
+    const { searchMirror } = await import("./query/mirrors");
+    emit(await searchMirror(resolve(opts.root), query, opts.mode, opts.limit, Boolean(opts.json)));
+  });
+
+program
+  .command("read <doc>")
+  .description("read one doc from the brain (path, stem, or approximate title)")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--json", "print the raw MCP payload as JSON")
+  .action(async (doc: string, opts: { root: string; json?: boolean }) => {
+    const { readMirror } = await import("./query/mirrors");
+    emit(await readMirror(resolve(opts.root), doc, Boolean(opts.json)));
+  });
+
+program
+  .command("neighbors <doc>")
+  .description("walk the link graph around a doc")
+  .option("--depth <n>", "hops to walk, 1–3 (default: 1)", intOption, 1)
+  .option("--layer <layer>", "links | entities | both (entities degrades to links until T3)", "links")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--json", "print the raw MCP payload as JSON")
+  .action(async (doc: string, opts: { depth: number; layer: string; root: string; json?: boolean }) => {
+    const { neighborsMirror } = await import("./query/mirrors");
+    emit(await neighborsMirror(resolve(opts.root), doc, opts.depth, opts.layer, Boolean(opts.json)));
+  });
+
+program
+  .command("overview")
+  .description("one screen of the whole brain: counts, tiers, every doc")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--json", "print the raw MCP payload as JSON")
+  .action(async (opts: { root: string; json?: boolean }) => {
+    const { overviewMirror } = await import("./query/mirrors");
+    emit(await overviewMirror(resolve(opts.root), Boolean(opts.json)));
+  });
+
+program
+  .command("integrate <target>")
+  .description("install brainpick into an agent harness (skill, MCP, report)")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--dry-run", "print what integrate would do without writing anything")
+  .action(async (target: string, opts: { root: string; dryRun?: boolean }) => {
+    const { runIntegrate } = await import("./integrate");
+    process.exitCode = await runIntegrate(target, opts.root, { dryRun: opts.dryRun ?? false });
+  });
+
 const token = program.command("token").description("manage bearer tokens for agents (spec/80 auth)");
 
 token

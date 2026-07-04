@@ -97,7 +97,7 @@ export function isFancy(env: Env = process.env, stream: { isTTY?: boolean } = pr
 }
 
 /** ✓/○/✗ lines — colored on a TTY, identical but plain in pipes. */
-class Voice {
+export class Voice {
   readonly fancy: boolean;
   private readonly print: Print;
 

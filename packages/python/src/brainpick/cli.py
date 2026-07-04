@@ -124,6 +124,101 @@ def _cmd_password_clear(args: argparse.Namespace) -> int:
     return run_password_clear(Path(args.root))
 
 
+def _held_state(root: Path, config):
+    """Load the compiled brain read-only (never compiles). Returns (state, None)
+    or (None, instruction) so the query mirrors self-heal instead of crashing."""
+    from brainpick.serve.state import ServeState
+
+    bp = root / ".brainpick"
+    needed = (bp / "manifest.json", bp / "t1" / "graph.json", bp / "t1" / "docs.jsonl")
+    if not all(path.is_file() for path in needed):
+        return None, f"no compiled brain at {root} — run: brainpick compile --root {root}"
+    state = ServeState(root, config)
+    state.reload_artifacts()
+    return state, None
+
+
+def _emit_uncompiled(instruction: str, as_json: bool) -> int:
+    from brainpick.query.present import to_json
+
+    if as_json:
+        print(to_json({"error": instruction, "hint": "compile the brain, then retry"}))
+    else:
+        print(instruction, file=sys.stderr)
+    return 0
+
+
+def _note_if_stale(root: Path) -> None:
+    if not check_fresh(root).fresh:
+        print(f"note: the brain is stale — run: brainpick compile --root {root}", file=sys.stderr)
+
+
+def _query_setup(args: argparse.Namespace):
+    """Shared prelude for the four query mirrors: resolve, load, warn if stale."""
+    from brainpick.config import load_config
+
+    root = Path(args.root).resolve()
+    state, instruction = _held_state(root, load_config(root))
+    if state is None:
+        return None, _emit_uncompiled(instruction, args.json)
+    _note_if_stale(root)
+    return state, 0
+
+
+def _cmd_search(args: argparse.Namespace) -> int:
+    state, code = _query_setup(args)
+    if state is None:
+        return code
+    from brainpick.mcp_server import search_payload
+    from brainpick.query.present import present_search, to_json
+
+    payload = search_payload(state, args.query, mode=args.mode, limit=args.limit)
+    print(to_json(payload) if args.json else present_search(payload, args.query))
+    return 0
+
+
+def _cmd_read(args: argparse.Namespace) -> int:
+    state, code = _query_setup(args)
+    if state is None:
+        return code
+    from brainpick.mcp_server import read_payload
+    from brainpick.query.present import present_read, to_json
+
+    payload = read_payload(state, args.doc)
+    print(to_json(payload) if args.json else present_read(payload))
+    return 0
+
+
+def _cmd_neighbors(args: argparse.Namespace) -> int:
+    state, code = _query_setup(args)
+    if state is None:
+        return code
+    from brainpick.mcp_server import neighbors_payload
+    from brainpick.query.present import present_neighbors, to_json
+
+    payload = neighbors_payload(state, args.doc, depth=args.depth, layer=args.layer)
+    print(to_json(payload) if args.json else present_neighbors(payload))
+    return 0
+
+
+def _cmd_overview(args: argparse.Namespace) -> int:
+    state, code = _query_setup(args)
+    if state is None:
+        return code
+    from brainpick.mcp_server import overview_payload
+    from brainpick.query.present import present_overview, to_json
+
+    payload = overview_payload(state)
+    print(to_json(payload) if args.json else present_overview(payload))
+    return 0
+
+
+def _cmd_integrate(args: argparse.Namespace) -> int:
+    from brainpick.integrate import run_integrate
+
+    return run_integrate(args.target, Path(args.root), dry_run=args.dry_run)
+
+
 def _cmd_mcp(args: argparse.Namespace) -> int:
     # stdio is the protocol channel: nothing may print to stdout here
     from brainpick.config import load_config
@@ -169,6 +264,45 @@ def main(argv: list[str] | None = None) -> int:
     p_mcp = sub.add_parser("mcp", help="speak MCP over stdio (for agent hosts)")
     p_mcp.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_mcp.set_defaults(func=_cmd_mcp)
+
+    # The four query mirrors — the same router/state the MCP tools and REST use,
+    # in plain terminal form (add --json for the raw MCP payload).
+    p_search = sub.add_parser("search", help="search the compiled brain (the brain_search tool, in the terminal)")
+    p_search.add_argument("query", help="the search query")
+    p_search.add_argument("--mode", default="auto",
+                          help="auto | keyword | semantic | graph (unknown falls back to auto)")
+    p_search.add_argument("--limit", type=int, default=8, help="max hits (default: 8)")
+    p_search.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_search.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
+    p_search.set_defaults(func=_cmd_search)
+
+    p_read = sub.add_parser("read", help="read one doc from the brain (path, stem, or approximate title)")
+    p_read.add_argument("doc", help="a path (kuu.md), a stem (kuu), or an approximate title")
+    p_read.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_read.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
+    p_read.set_defaults(func=_cmd_read)
+
+    p_neighbors = sub.add_parser("neighbors", help="walk the link graph around a doc")
+    p_neighbors.add_argument("doc", help="the doc to center on (path, stem, or title)")
+    p_neighbors.add_argument("--depth", type=int, default=1, help="hops to walk, 1–3 (default: 1)")
+    p_neighbors.add_argument("--layer", default="links",
+                             help="links | entities | both (entities degrades to links until T3)")
+    p_neighbors.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_neighbors.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
+    p_neighbors.set_defaults(func=_cmd_neighbors)
+
+    p_overview = sub.add_parser("overview", help="one screen of the whole brain: counts, tiers, every doc")
+    p_overview.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_overview.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
+    p_overview.set_defaults(func=_cmd_overview)
+
+    p_integrate = sub.add_parser("integrate", help="install brainpick into an agent harness (skill, MCP, report)")
+    p_integrate.add_argument("target", metavar="<target>",
+                             help="the harness to wire up: claude-code | opencode | agents-md")
+    p_integrate.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_integrate.add_argument("--dry-run", action="store_true",
+                             help="print what integrate would do without writing anything")
+    p_integrate.set_defaults(func=_cmd_integrate)
 
     p_init = sub.add_parser("init", help="detect the bundle and backends, write config, compile T1")
     p_init.add_argument("--root", default=".", help="bundle root (default: current directory)")

@@ -84,3 +84,12 @@ cases:
     class: delta
     bundle: kotiaurinko
     scenario: live-edit-01
+
+  # class: report — render the opt-in AGENTS.md brain report block (spec/20) from
+  # the compiled fixture (bundle_root ".") and byte-compare it against the golden.
+  # The block is what `brainpick integrate agents-md` installs and every compile
+  # refreshes; the golden holds exactly the rendered block plus a trailing LF.
+  - id: report-kotiaurinko
+    class: report
+    bundle: kotiaurinko
+    artifact: agents-report.md

@@ -19,7 +19,7 @@ sys.path.insert(0, str(REPO / "packages" / "python" / "src"))
 import yaml  # noqa: E402
 
 from brainpick.compile.pipeline import run_compile  # noqa: E402
-from brainpick.compile.t1 import build_docs_records  # noqa: E402
+from brainpick.compile.t1 import build_docs_records, render_report_block  # noqa: E402
 from brainpick.compile.t2 import build_chunks  # noqa: E402
 from brainpick.core.bundle import scan  # noqa: E402
 from brainpick.core.canonical import canonical_jsonl  # noqa: E402
@@ -68,6 +68,24 @@ def regen_chunks(case: dict) -> None:
     print(f"golden: {dst.relative_to(REPO)}")
 
 
+def regen_report(case: dict) -> None:
+    """The AGENTS.md brain report block (spec/20) rendered from the compiled
+    fixture with bundle_root "." — the golden holds exactly the block plus a
+    trailing newline (a well-formed text file)."""
+    bundle = case["bundle"]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / bundle
+        shutil.copytree(BUNDLES / bundle, root)
+        run_compile(root)
+        bp = root / ".brainpick"
+        graph = json.loads((bp / "t1" / "graph.json").read_text(encoding="utf-8"))
+        tiers = json.loads((bp / "manifest.json").read_text(encoding="utf-8"))["tiers"]
+        dst = EXPECTED / bundle / case["artifact"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(render_report_block(graph, tiers) + "\n", encoding="utf-8")
+        print(f"golden: {dst.relative_to(REPO)}")
+
+
 def regen_delta(case: dict) -> None:
     bundle, scenario = case["bundle"], case["scenario"]
     steps = yaml.safe_load((SCENARIOS / scenario / "steps.yaml").read_text(encoding="utf-8"))["steps"]
@@ -99,6 +117,8 @@ def main() -> None:
             regen_compile(case)
         elif case["class"] == "chunks":
             regen_chunks(case)
+        elif case["class"] == "report":
+            regen_report(case)
         elif case["class"] == "delta":
             regen_delta(case)
     print("done — review the diffs like code before committing.")
