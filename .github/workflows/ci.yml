@@ -103,8 +103,10 @@ jobs:
         run: |
           uv tool install henxels
           henxels check --all
-      - name: docs wiki is fresh (generated index matches the bundle)
-        working-directory: packages/python
+      - name: docs wiki index is committed-fresh
+        # Compile T1 from a clean checkout (no embedding/extraction endpoints in
+        # CI, so t2/t3 stay off — pure, fast, deterministic), then fail if the
+        # regenerated generated-index block differs from what was committed.
         run: |
-          uv sync
-          uv run brainpick compile --check-fresh --root ../../docs
+          cd packages/python && uv sync && uv run brainpick compile --root ../../docs
+          cd ../.. && git diff --exit-code docs/index.md
