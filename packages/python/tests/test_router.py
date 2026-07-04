@@ -1,5 +1,5 @@
 """Search routing (spec/30 + spec/50): mode resolution, RRF fusion, honest degradation."""
-from brainpick.query.router import RRF_K, resolve_mode, rrf_fuse, run_search
+from brainpick.query.router import RRF_K, is_relational, resolve_mode, rrf_fuse, run_search
 
 FRESH = {"t1": "fresh", "t2": "fresh", "t3": "off"}
 NO_T2 = {"t1": "fresh", "t2": "off", "t3": "off"}
@@ -28,6 +28,12 @@ def hit(path, score=1.0, snippet=None, source="keyword"):
 def semantic_stub(paths):
     def run(query, limit):
         return [hit(p, score=0.9, source="semantic") for p in paths][:limit]
+    return run
+
+
+def graph_stub(paths):
+    def run(query, limit):
+        return [hit(p, score=0.8, source="graph") for p in paths][:limit]
     return run
 
 
@@ -99,11 +105,53 @@ def test_auto_degrades_with_marker_when_t2_not_fresh():
     assert body["degraded_from"] == "semantic"  # spec/30: auto degrades like semantic
 
 
-def test_graph_mode_degrades_to_keyword_until_t3():
+def test_graph_mode_degrades_to_keyword_when_t3_absent():
     body = run_search(RECORDS, FRESH, "aurinko", mode="graph",
                       semantic_fn=semantic_stub(["kuu.md"]))
     assert body["used_modes"] == ["keyword"]
     assert body["degraded_from"] == "graph"
+    assert body["hits"][0]["path"] == "aurinko.md"
+
+
+def test_graph_mode_uses_the_entity_graph_when_present():
+    body = run_search(RECORDS, FRESH, "aurinko", mode="graph",
+                      semantic_fn=semantic_stub(["kuu.md"]),
+                      graph_fn=graph_stub(["maa.md", "kuu.md"]))
+    assert body["used_modes"] == ["graph"]
+    assert body["degraded_from"] is None
+    assert [h["path"] for h in body["hits"]] == ["maa.md", "kuu.md"]
+    assert all(h["source"] == "graph" for h in body["hits"])
+
+
+# -- is_relational heuristic (spec/40) -----------------------------------------------
+
+
+def test_is_relational_matches_connection_words():
+    assert is_relational("how does the moon relate to the tides")
+    assert is_relational("what connects to Aurinko")
+    assert is_relational("the link between maa and kuu")
+    assert is_relational("related work")  # substring stems catch inflections
+    assert not is_relational("aurinko")
+    assert not is_relational("tides of the moon")
+
+
+def test_auto_widens_with_graph_only_for_relational_queries():
+    graph = graph_stub(["planeetat.md"])
+    plain = run_search(RECORDS, FRESH, "aurinko", mode="auto",
+                       semantic_fn=semantic_stub(["aurinko.md"]), graph_fn=graph)
+    assert plain["used_modes"] == ["keyword", "semantic"]  # not relational → no graph
+
+    relational = run_search(RECORDS, FRESH, "what connects to aurinko", mode="auto",
+                            semantic_fn=semantic_stub(["aurinko.md"]), graph_fn=graph)
+    assert relational["used_modes"] == ["keyword", "semantic", "graph"]
+    assert "planeetat.md" in {h["path"] for h in relational["hits"]}  # graph-only recall joins
+
+
+def test_auto_relational_graph_still_marks_semantic_degrade_when_t2_off():
+    body = run_search(RECORDS, NO_T2, "how does aurinko relate to maa", mode="auto",
+                      semantic_fn=semantic_stub(["x.md"]), graph_fn=graph_stub(["maa.md"]))
+    assert body["used_modes"] == ["keyword", "graph"]  # semantic absent, graph joined
+    assert body["degraded_from"] == "semantic"  # the missing tier is still named
 
 
 def test_semantic_mode_uses_vectors_alone_when_fresh():

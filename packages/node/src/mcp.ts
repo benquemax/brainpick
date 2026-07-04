@@ -129,6 +129,7 @@ function why(hit: SearchHit, query: string): string {
     return `description mentions '${query}'`;
   }
   if (hit.source === "semantic") return `semantically close to '${query}'`;
+  if (hit.source === "graph") return `connected in the entity graph to '${query}'`;
   return hit.snippet ? `body mentions '${query}'` : "keyword match";
 }
 
@@ -162,6 +163,8 @@ export async function searchPayload(
     requested,
     boundedLimit,
     state.semanticFn(),
+    state.graphFn(),
+    state.graph,
   );
   const raw = body.hits;
   const hits = raw.map((h) => ({
@@ -292,6 +295,31 @@ export function readPayload(
 
 // -- brain_neighbors ---------------------------------------------------------------
 
+/** The T1 link layer: nearby docs {path,title,description,distance} + edges. */
+function linkNeighbors(
+  state: ServeState,
+  center: string,
+  depth: number,
+): [Array<Record<string, unknown>>, Array<Record<string, unknown>>] {
+  const [distance, rawEdges] = bfsNeighborhood(state.graph, center, depth);
+  const info = new Map(state.graph.nodes.map((node) => [node.id, node]));
+  const nodes = [...distance.entries()]
+    .sort((a, b) => a[1] - b[1] || cmpStr(a[0], b[0]))
+    .map(([path, hops]) => ({
+      path,
+      title: info.get(path)!.title,
+      description: info.get(path)!.description,
+      distance: hops,
+    }));
+  const edges = rawEdges.map((e) => ({ source: e.source, target: e.target, kind: e.kind }));
+  return [nodes, edges];
+}
+
+/** Link nodes key on path, entity nodes on id (spec/40 overlay). */
+function nodeKey(node: Record<string, unknown>): string {
+  return (node["path"] ?? node["id"]) as string;
+}
+
 export function neighborsPayload(
   state: ServeState,
   doc: string,
@@ -324,27 +352,38 @@ export function neighborsPayload(
   } else {
     boundedDepth = 1;
   }
-  const layerName = String(layer || "links");
+  let layerName = String(layer || "links");
+  if (layerName !== "links" && layerName !== "entities" && layerName !== "both") layerName = "links";
+  let wantEntities = layerName === "entities" || layerName === "both";
+  let wantLinks = layerName === "links" || layerName === "both";
+  let tagged = layerName === "both";
+
   let note: string | null = null;
   let degradedFrom: string | null = null;
-  if (layerName === "entities" || layerName === "both") {
+  if (wantEntities && state.kg === null) {
+    // T3 absent: degrade to links, said out loud (spec/70 keeps this behavior)
     degradedFrom = "entities";
-    note = "the entities layer lands with T3 — served links instead. ";
-  } else if (layerName !== "links") {
-    note = `unknown layer '${layerName}' — served links. `;
+    note = "the entities layer needs a T3 export — served links instead. ";
+    wantLinks = true;
+    wantEntities = false;
+    tagged = false;
   }
 
-  const [distance, rawEdges] = bfsNeighborhood(state.graph, center, boundedDepth);
-  const info = new Map(state.graph.nodes.map((node) => [node.id, node]));
-  const nodes = [...distance.entries()]
-    .sort((a, b) => a[1] - b[1] || cmpStr(a[0], b[0]))
-    .map(([path, hops]) => ({
-      path,
-      title: info.get(path)!.title,
-      description: info.get(path)!.description,
-      distance: hops,
-    }));
-  let edges = rawEdges.map((e) => ({ source: e.source, target: e.target, kind: e.kind }));
+  const nodes: Array<Record<string, unknown>> = [];
+  let edges: Array<Record<string, unknown>> = [];
+  if (wantLinks) {
+    const [linkNodes, linkEdges] = linkNeighbors(state, center, boundedDepth);
+    for (const node of linkNodes) nodes.push(tagged ? { ...node, layer: "links" } : node);
+    for (const edge of linkEdges) edges.push(tagged ? { ...edge, layer: "links" } : edge);
+  }
+  if (wantEntities) {
+    const [entityNodes, entityEdges] = state.kg!.neighborEntities(center, boundedDepth);
+    for (const node of entityNodes) {
+      nodes.push(tagged ? { ...node, layer: "entities" } : { ...node });
+    }
+    for (const edge of entityEdges) edges.push(tagged ? { ...edge, layer: "entities" } : { ...edge });
+  }
+
   const result: Record<string, unknown> = {
     center,
     nodes,
@@ -354,14 +393,21 @@ export function neighborsPayload(
     hint: "",
   };
   while (tokensOf(result) > budget && nodes.length > 1) {
-    const dropped = nodes.pop()!; // farthest first — the list is sorted by distance
-    edges = edges.filter((e) => e.source !== dropped.path && e.target !== dropped.path);
+    const dropped = nodeKey(nodes.pop()!); // farthest first — nodes are distance-sorted
+    edges = edges.filter(
+      (e) => ![e["source"], e["target"], e["src"], e["dst"]].includes(dropped),
+    );
     result["edges"] = edges;
     result["truncated"] = true;
   }
-  const hint = result["truncated"]
-    ? "trimmed to fit budget_tokens — raise it or lower depth."
-    : `brain_read '${center}' for the doc itself.`;
+  let hint: string;
+  if (result["truncated"]) {
+    hint = "trimmed to fit budget_tokens — raise it or lower depth.";
+  } else if (wantEntities && nodes.length === 0) {
+    hint = `no entities ground '${center}' — brain_read '${center}' for the doc itself.`;
+  } else {
+    hint = `brain_read '${center}' for the doc itself.`;
+  }
   result["hint"] = (note ?? "") + hint;
   return result;
 }

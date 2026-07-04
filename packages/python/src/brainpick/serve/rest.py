@@ -40,16 +40,19 @@ async def status(request: Request) -> JSONResponse:
 async def graph(request: Request) -> Response:
     state = _state(request)
     layer = request.query_params.get("layer", "links")
-    if layer == "entities":
+    if layer == "entities" and state.kg is None:  # the instructive 404 wins over any cache
         return JSONResponse(
-            {"error": "layer=entities lands with T3 — use layer=links for now"}, status_code=404,
+            {"error": "no entity layer yet — compile T3 (an extractor) to populate it"},
+            status_code=404,
         )
-    etag = f'"{state.seq}"'
+    etag = f'"{state.seq}"'  # both layers version by manifest seq (spec/50)
     if_none_match = request.headers.get("if-none-match")
     if if_none_match:
         candidates = {value.strip().removeprefix("W/") for value in if_none_match.split(",")}
         if etag in candidates or "*" in candidates:
             return Response(status_code=304, headers={"ETag": etag})
+    if layer == "entities":
+        return JSONResponse(state.kg.entity_graph(), headers={"ETag": etag})
     return JSONResponse(state.graph, headers={"ETag": etag})
 
 
@@ -91,6 +94,7 @@ async def search_endpoint(request: Request) -> JSONResponse:
     body = run_search(
         state.records, state.manifest.get("tiers", {}), query,
         mode=mode, limit=limit, semantic_fn=state.semantic_fn(),
+        graph_fn=state.graph_fn(), link_graph=state.graph,
     )
     return JSONResponse(body)
 
@@ -113,14 +117,37 @@ async def neighbors_endpoint(request: Request) -> JSONResponse:
     except ValueError:
         depth = 1
     layer = request.query_params.get("layer", "links")
-    distance, edges = bfs_neighborhood(state.graph, center, depth)
-    body = {
-        "center": center,
-        "nodes": [node for node in state.graph["nodes"] if node["id"] in distance],
-        "edges": edges,
-    }
-    if layer in ("entities", "both"):
-        body["degraded_from"] = "entities"  # links until T3, said out loud
+    if layer not in ("links", "entities", "both"):
+        layer = "links"
+    want_entities = layer in ("entities", "both")
+    want_links = layer in ("links", "both")
+    tagged = layer == "both"
+
+    body: dict = {"center": center, "nodes": [], "edges": []}
+    if want_entities and state.kg is None:
+        body["degraded_from"] = "entities"  # links until a T3 export, said out loud
+        want_links, want_entities, tagged = True, False, False
+
+    if want_links:
+        distance, link_edges = bfs_neighborhood(state.graph, center, depth)
+        link_nodes = [dict(node) for node in state.graph["nodes"] if node["id"] in distance]
+        link_edges = [dict(edge) for edge in link_edges]
+        if tagged:
+            for node in link_nodes:
+                node["layer"] = "links"
+            for edge in link_edges:
+                edge["layer"] = "links"
+        body["nodes"] += link_nodes
+        body["edges"] += link_edges
+    if want_entities:
+        entity_nodes, entity_edges = state.kg.neighbor_entities(center, depth)
+        if tagged:
+            for node in entity_nodes:
+                node["layer"] = "entities"
+            for edge in entity_edges:
+                edge["layer"] = "entities"
+        body["nodes"] += entity_nodes
+        body["edges"] += entity_edges
     return JSONResponse(body)
 
 

@@ -11,7 +11,7 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { runCompile } from "../src/compile/pipeline";
 import { sha256Hex } from "../src/core/canonical";
 import { PACKAGE_ROOT } from "../src/version";
-import { cleanup, copyBundle } from "./helpers";
+import { cleanup, copyBundle, stageT3Export } from "./helpers";
 
 const CLI = join(PACKAGE_ROOT, "dist", "cli.js");
 
@@ -141,5 +141,37 @@ test("mcp semantic search over mock vectors", { timeout: 120_000 }, async () => 
     expect(fused.used_modes).toEqual(["keyword", "semantic"]);
     expect(fused.degraded_from).toBeNull();
     expect(fused.hits.map((h: { path: string }) => h.path)).toContain("aurinko.md");
+  });
+});
+
+test("mcp t3 entity queries", { timeout: 120_000 }, async () => {
+  const root = copyBundle();
+  await runCompile(root);
+  stageT3Export(root); // the reader loads the staged export; no extractor runs
+
+  await withSession(root, async (client) => {
+    const neighbors = await call(client, "brain_neighbors", { doc: "kuu.md", layer: "entities" });
+    expect(neighbors.center).toBe("kuu.md");
+    expect(new Set(neighbors.nodes.map((n: { id: string }) => n.id))).toEqual(
+      new Set(["kuu", "maa", "vuorovesi", "planeetat"]),
+    );
+    expect(neighbors.degraded_from).toBeNull(); // T3 export present — the real layer
+    const grounding = new Set<string>(
+      neighbors.nodes.flatMap((n: { source_docs: string[] }) => n.source_docs),
+    );
+    expect(grounding).toEqual(new Set(["aurinko.md", "kuu.md", "maa.md", "planeetat.md"]));
+    expect(neighbors.edges).toContainEqual({ src: "kuu", dst: "vuorovesi" });
+
+    const orbits = await call(client, "brain_search", {
+      query: "what orbits the star",
+      mode: "graph",
+      limit: 4,
+    });
+    expect(new Set(orbits.hits.map((h: { path: string }) => h.path))).toEqual(
+      new Set(["aurinko.md", "komeetta.md", "maa.md", "planeetat.md"]),
+    );
+    expect(orbits.used_modes).toEqual(["graph"]);
+    expect(orbits.degraded_from).toBeNull();
+    expect(orbits.hits.every((h: { why: string }) => h.why.includes("entity graph"))).toBe(true);
   });
 });

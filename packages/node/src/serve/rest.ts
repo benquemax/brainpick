@@ -122,11 +122,12 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
 
   router.get("/api/graph", (req: Request, res: Response) => {
     const layer = firstQuery(req.query["layer"]) ?? "links";
-    if (layer === "entities") {
-      res.status(404).json({ error: "layer=entities lands with T3 — use layer=links for now" });
+    if (layer === "entities" && state.kg === null) {
+      // the instructive 404 wins over any cache
+      res.status(404).json({ error: "no entity layer yet — compile T3 (an extractor) to populate it" });
       return;
     }
-    const etag = `"${state.seq}"`;
+    const etag = `"${state.seq}"`; // both layers version by manifest seq (spec/50)
     const ifNoneMatch = req.headers["if-none-match"];
     if (typeof ifNoneMatch === "string" && ifNoneMatch !== "") {
       const candidates = new Set(ifNoneMatch.split(",").map((value) => value.trim().replace(/^W\//, "")));
@@ -134,6 +135,10 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
         res.status(304).set("ETag", etag).end();
         return;
       }
+    }
+    if (layer === "entities") {
+      res.set("ETag", etag).json(state.kg!.entityGraph());
+      return;
     }
     res.set("ETag", etag).json(state.graph);
   });
@@ -167,7 +172,10 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
     }
     const mode = firstQuery(req.query["mode"]) ?? "auto"; // the router forgives unknown modes
     const limit = intParam(firstQuery(req.query["limit"]) ?? "8", 8, 1, 50);
-    const body = await runSearch(state.records, state.tiers(), query, mode, limit, state.semanticFn());
+    const body = await runSearch(
+      state.records, state.tiers(), query, mode, limit,
+      state.semanticFn(), state.graphFn(), state.graph,
+    );
     res.json(body);
   });
 
@@ -186,15 +194,32 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
       return;
     }
     const depth = intParam(firstQuery(req.query["depth"]) ?? "1", 1, 1, 3);
-    const layer = firstQuery(req.query["layer"]) ?? "links";
-    const [distance, edges] = bfsNeighborhood(state.graph, center, depth);
-    const body: Record<string, unknown> = {
-      center,
-      nodes: state.graph.nodes.filter((node) => distance.has(node.id)),
-      edges,
-    };
-    if (layer === "entities" || layer === "both") {
-      body["degraded_from"] = "entities"; // links until T3, said out loud
+    let layer = firstQuery(req.query["layer"]) ?? "links";
+    if (layer !== "links" && layer !== "entities" && layer !== "both") layer = "links";
+    let wantEntities = layer === "entities" || layer === "both";
+    let wantLinks = layer === "links" || layer === "both";
+    let tagged = layer === "both";
+
+    const nodes: Array<Record<string, unknown>> = [];
+    const edges: Array<Record<string, unknown>> = [];
+    const body: Record<string, unknown> = { center, nodes, edges };
+    if (wantEntities && state.kg === null) {
+      body["degraded_from"] = "entities"; // links until a T3 export, said out loud
+      wantLinks = true;
+      wantEntities = false;
+      tagged = false;
+    }
+    if (wantLinks) {
+      const [distance, linkEdges] = bfsNeighborhood(state.graph, center, depth);
+      for (const node of state.graph.nodes) {
+        if (distance.has(node.id)) nodes.push(tagged ? { ...node, layer: "links" } : { ...node });
+      }
+      for (const edge of linkEdges) edges.push(tagged ? { ...edge, layer: "links" } : { ...edge });
+    }
+    if (wantEntities) {
+      const [entityNodes, entityEdges] = state.kg!.neighborEntities(center, depth);
+      for (const node of entityNodes) nodes.push(tagged ? { ...node, layer: "entities" } : { ...node });
+      for (const edge of entityEdges) edges.push(tagged ? { ...edge, layer: "entities" } : { ...edge });
     }
     res.json(body);
   });

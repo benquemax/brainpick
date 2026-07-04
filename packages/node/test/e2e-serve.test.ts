@@ -15,7 +15,7 @@ import { loadConfig, type ServeConfig } from "../src/config";
 import { buildApp, type BuildAppOptions, type ServeHandles } from "../src/serve/app";
 import { sseFrame } from "../src/serve/live";
 import { recompileAndBroadcast } from "../src/serve/watcher";
-import { cleanup, copyBundle } from "./helpers";
+import { cleanup, copyBundle, stageT3Export } from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi\ndescription: New rock.\n---\n\n# Uusi\n\nNear [Kuu](kuu.md).\n";
@@ -172,6 +172,9 @@ test("graph etag roundtrip", async () => {
   const entities = await getJson(`${base}/api/graph?layer=entities`);
   expect(entities.status).toBe(404);
   expect(entities.body.error).toBeTruthy();
+  // the instructive 404 wins over a cache: a stale If-None-Match must not 304
+  const cachedEntities = await fetch(`${base}/api/graph?layer=entities`, { headers: { "If-None-Match": '"1"' } });
+  expect(cachedEntities.status).toBe(404);
 });
 
 test("docs happy and nested", async () => {
@@ -264,6 +267,78 @@ test("neighbors depth semantics", async () => {
   expect(missing.status).toBe(404);
   expect(missing.body.suggestions.length).toBeGreaterThan(0);
   expect((await getJson(`${base}/api/neighbors`)).status).toBe(400);
+});
+
+/** A running server whose ServeState holds the staged T3 export (kg present). */
+async function serveWithT3(root: string): Promise<{ base: string }> {
+  const handles = await makeApp(root); // buildApp already ran state.load()
+  stageT3Export(root);
+  handles.state.reloadArtifacts(); // re-read the flipped manifest + the export
+  return serve(handles);
+}
+
+test("t3 entity graph endpoint", async () => {
+  const { base } = await serveWithT3(copyBundle());
+  expect((await getJson(`${base}/api/status`)).body.tiers.t3).toBe("fresh");
+
+  const response = await getJson(`${base}/api/graph?layer=entities`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("etag")).toBe('"1"'); // versioned by seq, like layer=links
+  expect(response.body.nodes.map((n: { id: string }) => n.id)).toEqual([
+    "aurinko", "komeetta", "kuu", "maa", "planeetat", "vuorovesi",
+  ]);
+  const aurinko = response.body.nodes.find((n: { id: string }) => n.id === "aurinko");
+  expect(new Set(Object.keys(aurinko))).toEqual(new Set(["id", "name", "type", "description", "degree"]));
+  expect(aurinko.type).toBe("star");
+  expect(aurinko.degree).toBe(2);
+  expect(response.body.edges).toContainEqual({ src: "komeetta", dst: "aurinko", weight: 0.6 });
+  expect(response.body.edges).toHaveLength(5);
+
+  const cached = await fetch(`${base}/api/graph?layer=entities`, { headers: { "If-None-Match": '"1"' } });
+  expect(cached.status).toBe(304);
+});
+
+test("t3 neighbors entities and both", async () => {
+  const { base } = await serveWithT3(copyBundle());
+  const entities = (await getJson(`${base}/api/neighbors?id=kuu.md&layer=entities`)).body;
+  expect(entities.center).toBe("kuu.md");
+  expect(new Set(entities.nodes.map((n: { id: string }) => n.id))).toEqual(
+    new Set(["kuu", "maa", "vuorovesi", "planeetat"]),
+  );
+  expect(entities.degraded_from).toBeUndefined(); // T3 present — no degradation
+  const grounding = new Set<string>(entities.nodes.flatMap((n: { source_docs: string[] }) => n.source_docs));
+  expect(grounding).toEqual(new Set(["aurinko.md", "kuu.md", "maa.md", "planeetat.md"]));
+  expect(entities.edges).toContainEqual({ src: "kuu", dst: "vuorovesi" });
+
+  const both = (await getJson(`${base}/api/neighbors?id=kuu.md&layer=both`)).body;
+  expect(new Set(both.nodes.map((n: { layer: string }) => n.layer))).toEqual(new Set(["links", "entities"]));
+  // link nodes carry a doc title, entity nodes an entity name — overlaid, not merged
+  expect(both.nodes.some((n: Record<string, unknown>) => n["layer"] === "links" && "title" in n)).toBe(true);
+  expect(both.nodes.some((n: Record<string, unknown>) => n["layer"] === "entities" && "name" in n)).toBe(true);
+});
+
+test("t3 graph mode search", async () => {
+  const { base } = await serveWithT3(copyBundle());
+  const orbits = (await getJson(`${base}/api/search?q=${encodeURIComponent("what orbits the star")}&mode=graph&limit=4`)).body;
+  expect(new Set(orbits.hits.map((h: { path: string }) => h.path))).toEqual(
+    new Set(["aurinko.md", "komeetta.md", "maa.md", "planeetat.md"]),
+  );
+  expect(orbits.used_modes).toEqual(["graph"]);
+  expect(orbits.degraded_from).toBeNull();
+  expect(orbits.hits.every((h: { source: string }) => h.source === "graph")).toBe(true);
+
+  // "vuorovesi" is in no document body — keyword finds nothing, graph expands
+  const vuorovesi = (await getJson(`${base}/api/search?q=vuorovesi&mode=graph`)).body;
+  expect(new Set(vuorovesi.hits.map((h: { path: string }) => h.path))).toEqual(
+    new Set(["kuu.md", "aurinko.md", "maa.md"]),
+  );
+});
+
+test("graph mode degrades without t3", async () => {
+  const { base } = await serve(await makeApp(copyBundle())); // no export staged
+  const body = (await getJson(`${base}/api/search?q=aurinko&mode=graph`)).body;
+  expect(body.degraded_from).toBe("graph"); // honest marker, keyword + T1 link-walk beneath
+  expect(new Set(body.hits.map((h: { path: string }) => h.path)).has("aurinko.md")).toBe(true);
 });
 
 test("ui and spa fallback", async () => {

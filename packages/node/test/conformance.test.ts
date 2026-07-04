@@ -15,10 +15,11 @@ import { canonicalJsonl, type JsonValue } from "../src/core/canonical";
 import { checkFresh, runCompile } from "../src/compile/pipeline";
 import { buildDocsRecords, renderReportBlock, type DocRecord, type Graph } from "../src/compile/t1";
 import { buildChunks } from "../src/compile/t2";
+import { graphSearch, loadKg } from "../src/kg";
 import { search, type SearchHit } from "../src/query/keyword";
 import { runSearch } from "../src/query/router";
 import { semanticSearch } from "../src/query/vectors";
-import { cleanup, copyBundle, EXPECTED, SCENARIOS, SPEC } from "./helpers";
+import { cleanup, copyBundle, EXPECTED, SCENARIOS, SPEC, stageT3Export } from "./helpers";
 
 afterEach(cleanup);
 
@@ -38,6 +39,9 @@ interface ConformanceCase {
   limit?: number;
   expect_paths?: string[];
   scenario?: string;
+  op?: string;
+  doc?: string;
+  depth?: number;
 }
 
 const CASES = (
@@ -162,6 +166,34 @@ describe("conformance", () => {
           const actual = renderReportBlock(graph, tiers) + "\n";
           const expected = readFileSync(join(EXPECTED, c.bundle, c.artifact!), "utf8");
           expect(actual, `${c.artifact} drifted from golden`).toBe(expected);
+        });
+        break;
+
+      case "kg-query":
+        // T3 consumer over the staged export — the normative reader only, never
+        // an extractor (spec/40). Asserts the returned document SET.
+        test(c.id, async () => {
+          const root = copyBundle(c.bundle);
+          await runCompile(root);
+          stageT3Export(root, c.bundle);
+          const bp = join(root, ".brainpick");
+          const kg = loadKg(bp);
+          expect(kg, "the staged export must load — kg-query has nothing to test otherwise").not.toBeNull();
+          const records = readFileSync(join(bp, "t1", "docs.jsonl"), "utf8")
+            .split("\n")
+            .filter((line) => line !== "")
+            .map((line) => JSON.parse(line) as DocRecord);
+
+          let got: Set<string>;
+          if (c.op === "search") {
+            got = new Set(graphSearch(kg!, records, c.query!, c.limit).map((h) => h.path));
+          } else if (c.op === "neighbors") {
+            const [nodes] = kg!.neighborEntities(c.doc!, c.depth ?? 1);
+            got = new Set(nodes.flatMap((node) => node.source_docs));
+          } else {
+            throw new Error(`unknown kg-query op ${c.op}`);
+          }
+          expect(got).toEqual(new Set(c.expect_paths!));
         });
         break;
 

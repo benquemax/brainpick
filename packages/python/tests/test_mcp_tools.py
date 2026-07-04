@@ -17,6 +17,8 @@ from brainpick.mcp_server import (
 )
 from brainpick.serve.state import ServeState
 
+from conftest import stage_t3_export
+
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
     "# Uusi kivi\n\nNear [Kuu](kuu.md).\n"
@@ -188,6 +190,48 @@ def test_neighbors_depth_and_degrade(kotiaurinko):
     assert degraded["degraded_from"] == "entities"
     assert degraded["edges"]
     assert all(set(e) == {"source", "target", "kind"} for e in degraded["edges"])
+
+
+def _state_with_t3(kotiaurinko):
+    state = make_state(kotiaurinko)
+    stage_t3_export(kotiaurinko)
+    state.reload_artifacts()
+    return state
+
+
+def test_neighbors_entities_layer_over_staged_export(kotiaurinko):
+    state = _state_with_t3(kotiaurinko)
+    result = neighbors_payload(state, "kuu", layer="entities")  # forgiving stem resolution
+    assert result["center"] == "kuu.md"
+    assert result["degraded_from"] is None
+    assert {n["id"] for n in result["nodes"]} == {"kuu", "maa", "vuorovesi", "planeetat"}
+    kuu = next(n for n in result["nodes"] if n["id"] == "kuu")
+    assert set(kuu) == {"id", "name", "description", "distance", "source_docs"}
+    assert kuu["distance"] == 0
+    grounding = {doc for node in result["nodes"] for doc in node["source_docs"]}
+    assert grounding == {"aurinko.md", "kuu.md", "maa.md", "planeetat.md"}
+    assert {"src": "kuu", "dst": "vuorovesi"} in result["edges"]
+
+
+def test_neighbors_both_layer_overlays_tagged(kotiaurinko):
+    state = _state_with_t3(kotiaurinko)
+    result = neighbors_payload(state, "kuu.md", layer="both")
+    assert result["degraded_from"] is None
+    assert {n["layer"] for n in result["nodes"]} == {"links", "entities"}
+    # link nodes carry a doc path, entity nodes an id — overlaid, not merged
+    assert any(n["layer"] == "links" and "path" in n for n in result["nodes"])
+    assert any(n["layer"] == "entities" and "id" in n for n in result["nodes"])
+
+
+def test_search_graph_mode_over_staged_export(kotiaurinko):
+    state = _state_with_t3(kotiaurinko)
+    result = search_payload(state, "what orbits the star", mode="graph", limit=4)
+    assert {h["path"] for h in result["hits"]} == {
+        "aurinko.md", "komeetta.md", "maa.md", "planeetat.md",
+    }
+    assert result["used_modes"] == ["graph"]
+    assert result["degraded_from"] is None
+    assert all("entity graph" in h["why"] for h in result["hits"])
 
 
 def test_write_rejects_traversal(kotiaurinko):

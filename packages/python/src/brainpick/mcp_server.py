@@ -89,6 +89,8 @@ def _why(hit: dict, query: str) -> str:
         return f"description mentions '{query}'"
     if hit.get("source") == "semantic":
         return f"semantically close to '{query}'"
+    if hit.get("source") == "graph":
+        return f"connected in the entity graph to '{query}'"
     return f"body mentions '{query}'" if hit.get("snippet") else "keyword match"
 
 
@@ -108,6 +110,7 @@ def search_payload(state: ServeState, query: str, mode: str = "auto", limit: int
     body = run_search(
         state.records, state.manifest.get("tiers", {}), str(query or ""),
         mode=requested, limit=limit, semantic_fn=state.semantic_fn(),
+        graph_fn=state.graph_fn(), link_graph=state.graph,
     )
     raw = body["hits"]
     hits = [
@@ -204,6 +207,23 @@ def read_payload(state: ServeState, doc: str, sections: list[str] | None = None,
 # -- brain_neighbors ---------------------------------------------------------------
 
 
+def _link_neighbors(state: ServeState, center: str, depth: int) -> tuple[list[dict], list[dict]]:
+    """The T1 link layer: nearby docs {path,title,description,distance} + edges."""
+    distance, raw_edges = bfs_neighborhood(state.graph, center, depth)
+    info = {node["id"]: node for node in state.graph["nodes"]}
+    nodes = [
+        {"path": path, "title": info[path]["title"], "description": info[path]["description"],
+         "distance": hops}
+        for path, hops in sorted(distance.items(), key=lambda kv: (kv[1], kv[0]))
+    ]
+    edges = [{"source": e["source"], "target": e["target"], "kind": e["kind"]} for e in raw_edges]
+    return nodes, edges
+
+
+def _node_key(node: dict) -> str:
+    return node.get("path") or node["id"]  # link nodes key on path, entity nodes on id
+
+
 def neighbors_payload(state: ServeState, doc: str, depth: int = 1, layer: str = "links",
                       budget_tokens: int | None = None) -> dict:
     budget = budget_tokens or 800
@@ -226,22 +246,44 @@ def neighbors_payload(state: ServeState, doc: str, depth: int = 1, layer: str = 
     except (TypeError, ValueError):
         depth = 1
     layer = str(layer or "links")
+    if layer not in ("links", "entities", "both"):
+        layer = "links"  # forgiving enums (spec/70)
+    want_entities = layer in ("entities", "both")
+    want_links = layer in ("links", "both")
+    tagged = layer == "both"
+
     note = None
     degraded_from = None
-    if layer in ("entities", "both"):
-        degraded_from = "entities"
-        note = "the entities layer lands with T3 — served links instead. "
-    elif layer != "links":
-        note = f"unknown layer '{layer}' — served links. "
+    nodes: list[dict] = []
+    edges: list[dict] = []
 
-    distance, raw_edges = bfs_neighborhood(state.graph, center, depth)
-    info = {node["id"]: node for node in state.graph["nodes"]}
-    nodes = [
-        {"path": path, "title": info[path]["title"], "description": info[path]["description"],
-         "distance": hops}
-        for path, hops in sorted(distance.items(), key=lambda kv: (kv[1], kv[0]))
-    ]
-    edges = [{"source": e["source"], "target": e["target"], "kind": e["kind"]} for e in raw_edges]
+    if want_entities and state.kg is None:
+        # T3 absent: degrade to links, said out loud (spec/70 keeps this behavior)
+        degraded_from = "entities"
+        note = "the entities layer needs a T3 export — served links instead. "
+        want_links = True
+        want_entities = False
+        tagged = False
+
+    if want_links:
+        link_nodes, link_edges = _link_neighbors(state, center, depth)
+        if tagged:
+            for node in link_nodes:
+                node["layer"] = "links"
+            for edge in link_edges:
+                edge["layer"] = "links"
+        nodes += link_nodes
+        edges += link_edges
+    if want_entities:
+        entity_nodes, entity_edges = state.kg.neighbor_entities(center, depth)
+        if tagged:
+            for node in entity_nodes:
+                node["layer"] = "entities"
+            for edge in entity_edges:
+                edge["layer"] = "entities"
+        nodes += entity_nodes
+        edges += entity_edges
+
     result = {
         "center": center,
         "nodes": nodes,
@@ -251,12 +293,15 @@ def neighbors_payload(state: ServeState, doc: str, depth: int = 1, layer: str = 
         "hint": "",
     }
     while tokens_of(result) > budget and len(nodes) > 1:
-        dropped = nodes.pop()  # farthest first — the list is sorted by distance
-        edges = [e for e in edges if dropped["path"] not in (e["source"], e["target"])]
+        dropped = _node_key(nodes.pop())  # farthest first — nodes are distance-sorted
+        edges = [e for e in edges
+                 if dropped not in (e.get("source"), e.get("target"), e.get("src"), e.get("dst"))]
         result["edges"] = edges
         result["truncated"] = True
     if result["truncated"]:
         hint = "trimmed to fit budget_tokens — raise it or lower depth."
+    elif want_entities and not nodes:
+        hint = f"no entities ground '{center}' — brain_read '{center}' for the doc itself."
     else:
         hint = f"brain_read '{center}' for the doc itself."
     result["hint"] = (note or "") + hint

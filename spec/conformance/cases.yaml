@@ -93,3 +93,46 @@ cases:
     class: report
     bundle: kotiaurinko
     artifact: agents-report.md
+
+  # class: kg-query — the T3 CONSUMER (spec/40). The harness compiles the bundle,
+  # stages the hand-authored export from fixtures/expected/<bundle>/t3/ into the
+  # compiled .brainpick/t3/ (the extractor is never invoked in conformance), then
+  # asserts the document SET returned by the normative reader. op=neighbors walks
+  # brain_neighbors layer=entities from `doc` to `depth` and takes the union of the
+  # source_docs grounding the reached entities; op=search runs mode=graph and takes
+  # the ranked hit paths at `limit`.
+  - id: kg-neighbors-kuu-entities
+    class: kg-query
+    bundle: kotiaurinko
+    op: neighbors
+    doc: kuu.md
+    depth: 1
+    # Reviewed: kuu.md is grounded by kuu/maa/vuorovesi (distance 0); one relation
+    # hop reaches planeetat (maa belongs to the worlds). The union of those four
+    # entities' source_docs is the entity-layer neighborhood — a set no T1 link
+    # walk produces, so a links-degraded engine (entity nodes absent) fails here.
+    expect_paths: [aurinko.md, kuu.md, maa.md, planeetat.md]
+
+  - id: kg-graph-orbits-star
+    class: kg-query
+    bundle: kotiaurinko
+    op: search
+    query: "what orbits the star"
+    limit: 4
+    # Reviewed: the entity graph ranks the star (aurinko) and everything that orbits
+    # it — komeetta and the worlds (planeetat), and maa which belongs to the worlds.
+    # kuu (the moon orbits the earth, NOT the star) ranks last and is excluded at 4.
+    # A keyword engine returns the islands here instead (komeetta.md is its LAST hit),
+    # so matching this set proves the graph retriever actually ran.
+    expect_paths: [aurinko.md, komeetta.md, maa.md, planeetat.md]
+
+  - id: kg-graph-vuorovesi-expands
+    class: kg-query
+    bundle: kotiaurinko
+    op: search
+    query: "vuorovesi"
+    limit: 8
+    # Reviewed: no document body contains "vuorovesi" (keyword returns EMPTY), yet
+    # the entity grounds kuu.md and one hop over the tide→moon relation reaches the
+    # moon's docs. The set proves both the export read and the one-hop expansion.
+    expect_paths: [aurinko.md, kuu.md, maa.md]

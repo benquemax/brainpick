@@ -20,6 +20,8 @@ from brainpick.serve.app import build_app
 from brainpick.serve.live import sse_frame
 from brainpick.serve.watcher import recompile_and_broadcast
 
+from conftest import stage_t3_export
+
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi\ndescription: New rock.\n---\n\n"
     "# Uusi\n\nNear [Kuu](kuu.md).\n"
@@ -128,6 +130,9 @@ def test_graph_etag_roundtrip(kotiaurinko):
         entities = client.get("/api/graph?layer=entities")
         assert entities.status_code == 404
         assert "error" in entities.json()
+        # the instructive 404 wins over a cache: a stale If-None-Match must not 304
+        cached_entities = client.get("/api/graph?layer=entities", headers={"If-None-Match": '"1"'})
+        assert cached_entities.status_code == 404
 
 
 def test_docs_happy_and_nested(kotiaurinko):
@@ -215,6 +220,80 @@ def test_neighbors_depth_semantics(kotiaurinko):
         assert missing.status_code == 404
         assert missing.json()["suggestions"]
         assert client.get("/api/neighbors").status_code == 400
+
+
+def _serve_with_t3(kotiaurinko):
+    """An app whose ServeState holds the staged T3 export (kg present, t3 fresh)."""
+    app = make_app(kotiaurinko)  # build_app already ran state.load()
+    stage_t3_export(kotiaurinko)
+    app.state.brainpick.reload_artifacts()  # re-read the flipped manifest + the export
+    return app
+
+
+def test_t3_entity_graph_endpoint(kotiaurinko):
+    app = _serve_with_t3(kotiaurinko)
+    with TestClient(app) as client:
+        assert client.get("/api/status").json()["tiers"]["t3"] == "fresh"
+
+        response = client.get("/api/graph?layer=entities")
+        assert response.status_code == 200
+        assert response.headers["etag"] == '"1"'  # versioned by manifest seq, like layer=links
+        payload = response.json()
+        assert [n["id"] for n in payload["nodes"]] == [
+            "aurinko", "komeetta", "kuu", "maa", "planeetat", "vuorovesi",
+        ]
+        aurinko = next(n for n in payload["nodes"] if n["id"] == "aurinko")
+        assert set(aurinko) == {"id", "name", "type", "description", "degree"}
+        assert aurinko["type"] == "star" and aurinko["degree"] == 2
+        assert {"src": "komeetta", "dst": "aurinko", "weight": 0.6} in payload["edges"]
+        assert len(payload["edges"]) == 5
+
+        cached = client.get("/api/graph?layer=entities", headers={"If-None-Match": '"1"'})
+        assert cached.status_code == 304
+
+
+def test_t3_neighbors_entities_and_both(kotiaurinko):
+    app = _serve_with_t3(kotiaurinko)
+    with TestClient(app) as client:
+        entities = client.get("/api/neighbors", params={"id": "kuu.md", "layer": "entities"}).json()
+        assert entities["center"] == "kuu.md"
+        assert {n["id"] for n in entities["nodes"]} == {"kuu", "maa", "vuorovesi", "planeetat"}
+        assert "degraded_from" not in entities  # T3 present — no degradation
+        grounding = {doc for node in entities["nodes"] for doc in node["source_docs"]}
+        assert grounding == {"aurinko.md", "kuu.md", "maa.md", "planeetat.md"}
+        assert {"src": "kuu", "dst": "vuorovesi"} in entities["edges"]
+
+        both = client.get("/api/neighbors", params={"id": "kuu.md", "layer": "both"}).json()
+        assert {n["layer"] for n in both["nodes"]} == {"links", "entities"}
+        assert {e["layer"] for e in both["edges"]} <= {"links", "entities"}
+        # link nodes carry a doc title, entity nodes an entity name — overlaid, not merged
+        assert any("title" in n and n["layer"] == "links" for n in both["nodes"])
+        assert any("name" in n and n["layer"] == "entities" for n in both["nodes"])
+
+
+def test_t3_graph_mode_search(kotiaurinko):
+    app = _serve_with_t3(kotiaurinko)
+    with TestClient(app) as client:
+        orbits = client.get(
+            "/api/search", params={"q": "what orbits the star", "mode": "graph", "limit": 4},
+        ).json()
+        assert {h["path"] for h in orbits["hits"]} == {
+            "aurinko.md", "komeetta.md", "maa.md", "planeetat.md",
+        }
+        assert orbits["used_modes"] == ["graph"]
+        assert orbits["degraded_from"] is None
+        assert all(h["source"] == "graph" for h in orbits["hits"])
+
+        # "vuorovesi" is in no document body — keyword finds nothing, graph expands
+        vuorovesi = client.get("/api/search", params={"q": "vuorovesi", "mode": "graph"}).json()
+        assert {h["path"] for h in vuorovesi["hits"]} == {"kuu.md", "aurinko.md", "maa.md"}
+
+
+def test_graph_mode_degrades_without_t3(kotiaurinko):
+    with TestClient(make_app(kotiaurinko)) as client:  # no export staged
+        body = client.get("/api/search", params={"q": "aurinko", "mode": "graph"}).json()
+        assert body["degraded_from"] == "graph"  # honest marker, keyword + T1 link-walk beneath
+        assert "aurinko.md" in {h["path"] for h in body["hits"]}
 
 
 def test_ui_and_spa_fallback(kotiaurinko):

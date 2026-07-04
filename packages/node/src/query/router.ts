@@ -1,13 +1,20 @@
 /** One search surface, four strategies (spec/30 + spec/50): keyword always,
  * semantic when T2 is fresh, RRF fusion under auto, honest degradation markers. */
-import type { DocRecord } from "../compile/t1";
+import type { DocRecord, Graph } from "../compile/t1";
 import { cmpStr } from "../core/canonical";
+import { linkWalkSearch } from "../kg";
 import { search as keywordSearch, type SearchHit } from "./keyword";
 
 export const KNOWN_MODES = ["auto", "keyword", "semantic", "graph"] as const;
 export const RRF_K = 60; // spec/30: reciprocal rank fusion constant
 
+// auto may consult the entity graph, but only for relation-shaped queries — the
+// small deterministic heuristic that keeps "what connects to X" honest without
+// dragging graph noise into every keyword lookup (spec/40).
+export const RELATIONAL_HINTS = ["relate", "connect", "between"] as const;
+
 export type SemanticFn = (query: string, limit: number) => Promise<SearchHit[]> | SearchHit[];
+export type GraphFn = (query: string, limit: number) => SearchHit[];
 
 export interface SearchBody {
   hits: SearchHit[];
@@ -19,6 +26,14 @@ export interface SearchBody {
 export function resolveMode(mode: unknown): string {
   const resolved = String(mode || "auto");
   return (KNOWN_MODES as readonly string[]).includes(resolved) ? resolved : "auto";
+}
+
+/** A query auto should widen with graph results: it asks about connections
+ * ('relate'/'related', 'connect'/'connects', 'between'). Substring match so the
+ * stems catch their inflections; deterministic and conservative (spec/40). */
+export function isRelational(query: string): boolean {
+  const lowered = String(query ?? "").toLowerCase();
+  return RELATIONAL_HINTS.some((hint) => lowered.includes(hint));
 }
 
 /** Python round(x, 6) — see query/keyword.ts. */
@@ -63,16 +78,23 @@ export async function runSearch(
   mode: unknown = "auto",
   limit = 8,
   semanticFn: SemanticFn | null = null,
+  graphFn: GraphFn | null = null,
+  linkGraph: Graph | null = null,
 ): Promise<SearchBody> {
   const resolved = resolveMode(mode);
   const t2Fresh = tiers["t2"] === "fresh" && semanticFn !== null;
+  const t3On = graphFn !== null;
 
   if (resolved === "keyword") {
     return body(keywordSearch(records, query, limit), ["keyword"], null);
   }
   if (resolved === "graph") {
-    // the entity layer lands with T3 — keyword meanwhile
-    return body(keywordSearch(records, query, limit), ["keyword"], "graph");
+    if (t3On) return body(graphFn!(query, limit), ["graph"], null);
+    // T3 absent: degrade to a T1 link-walk over keyword hits (spec/40)
+    const hits = linkGraph
+      ? linkWalkSearch(linkGraph, records, query, limit)
+      : keywordSearch(records, query, limit);
+    return body(hits, ["keyword"], "graph");
   }
 
   let semanticHits: SearchHit[] | null = null;
@@ -91,11 +113,19 @@ export async function runSearch(
     return body(semanticHits, ["semantic"], null);
   }
 
-  // auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document)
+  // auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document).
+  // The entity graph joins only for relation-shaped queries (spec/40).
   const keywordHits = keywordSearch(records, query, limit);
-  if (semanticHits === null) return body(keywordHits, ["keyword"], "semantic");
-  const fused = rrfFuse({ keyword: keywordHits, semantic: semanticHits }, limit);
-  return body(fused, ["keyword", "semantic"], null);
+  const rankings: Record<string, SearchHit[]> = { keyword: keywordHits };
+  if (semanticHits !== null) rankings["semantic"] = semanticHits;
+  if (t3On && isRelational(query)) rankings["graph"] = graphFn!(query, limit);
+
+  const degradedFrom = semanticHits === null ? "semantic" : null;
+  if (Object.keys(rankings).length === 1) {
+    return body(keywordHits, ["keyword"], degradedFrom);
+  }
+  const usedModes = ["keyword", "semantic", "graph"].filter((name) => name in rankings);
+  return body(rrfFuse(rankings, limit), usedModes, degradedFrom);
 }
 
 function body(hits: SearchHit[], usedModes: string[], degradedFrom: string | null): SearchBody {

@@ -15,11 +15,12 @@ from brainpick.compile.t1 import build_docs_records, render_report_block
 from brainpick.compile.t2 import build_chunks
 from brainpick.core.bundle import scan
 from brainpick.core.canonical import canonical_jsonl
+from brainpick.kg import graph_search, load_kg
 from brainpick.query.keyword import search
 from brainpick.query.router import run_search
 from brainpick.query.vectors import semantic_search
 
-from conftest import SPEC, FIXTURE_BUNDLES
+from conftest import SPEC, FIXTURE_BUNDLES, stage_t3_export
 
 MOCK_CONFIG = '[models.embedding]\nkind = "mock"\n'  # the spec/30 conformance embedder
 
@@ -132,6 +133,31 @@ def test_report_golden(case, tmp_path):
     actual = render_report_block(graph, tiers) + "\n"
     expected = (EXPECTED / case["bundle"] / case["artifact"]).read_text(encoding="utf-8")
     assert actual == expected, f"{case['artifact']} drifted from golden"
+
+
+@pytest.mark.parametrize("case", _cases("kg-query"), ids=_case_ids("kg-query"))
+def test_kg_query(case, tmp_path):
+    """T3 consumer over the staged export — the normative reader only, never an
+    extractor (spec/40). Asserts the returned document SET."""
+    root = _bundle_copy(tmp_path, case["bundle"])
+    run_compile(root)
+    stage_t3_export(root, case["bundle"])
+    bp = root / ".brainpick"
+    kg = load_kg(bp)
+    assert kg is not None, "the staged export must load — kg-query has nothing to test otherwise"
+    records = [json.loads(line)
+               for line in (bp / "t1" / "docs.jsonl").read_text(encoding="utf-8").splitlines()
+               if line]
+
+    if case["op"] == "search":
+        hits = graph_search(kg, records, case["query"], limit=case["limit"])
+        got = {h["path"] for h in hits}
+    elif case["op"] == "neighbors":
+        nodes, _edges = kg.neighbor_entities(case["doc"], case.get("depth", 1))
+        got = {doc for node in nodes for doc in node["source_docs"]}
+    else:  # pragma: no cover - spec violation
+        raise AssertionError(f"unknown kg-query op {case['op']}")
+    assert got == set(case["expect_paths"])
 
 
 @pytest.mark.parametrize("case", _cases("delta"), ids=_case_ids("delta"))

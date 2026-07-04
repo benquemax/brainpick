@@ -109,13 +109,28 @@ export {
   OpenAICompatEmbedder,
   type Embedder,
 } from "./embed";
-export { search, type HitSource, type SearchHit } from "./query/keyword";
+export { search, tokenize, type HitSource, type SearchHit } from "./query/keyword";
 export {
+  disambiguateIds,
+  graphSearch,
+  KnowledgeGraph,
+  linkWalkSearch,
+  loadKg,
+  normalizeEntityId,
+  type Entity,
+  type EntityEdge,
+  type EntityNode,
+  type Relation,
+} from "./kg";
+export {
+  isRelational,
   KNOWN_MODES,
+  RELATIONAL_HINTS,
   resolveMode,
   RRF_K,
   rrfFuse,
   runSearch,
+  type GraphFn,
   type SearchBody,
   type SemanticFn,
 } from "./query/router";

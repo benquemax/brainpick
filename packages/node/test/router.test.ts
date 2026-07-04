@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 
 import type { DocRecord } from "../src/compile/t1";
 import type { HitSource, SearchHit } from "../src/query/keyword";
-import { resolveMode, RRF_K, rrfFuse, runSearch } from "../src/query/router";
+import { isRelational, resolveMode, RRF_K, rrfFuse, runSearch } from "../src/query/router";
 
 const FRESH = { t1: "fresh", t2: "fresh", t3: "off" };
 const NO_T2 = { t1: "fresh", t2: "off", t3: "off" };
@@ -37,6 +37,11 @@ function hit(path: string, score = 1.0, snippet: string | null = null, source: H
 function semanticStub(paths: string[]) {
   return (_query: string, limit: number): SearchHit[] =>
     paths.map((p) => hit(p, 0.9, null, "semantic")).slice(0, limit);
+}
+
+function graphStub(paths: string[]) {
+  return (_query: string, limit: number): SearchHit[] =>
+    paths.map((p) => hit(p, 0.8, null, "graph")).slice(0, limit);
 }
 
 function brokenSemantic(): Promise<SearchHit[]> {
@@ -116,10 +121,52 @@ test("auto degrades with marker when t2 not fresh", async () => {
   expect(body.degraded_from).toBe("semantic"); // spec/30: auto degrades like semantic
 });
 
-test("graph mode degrades to keyword until t3", async () => {
+test("graph mode degrades to keyword when t3 absent", async () => {
   const body = await runSearch(RECORDS, FRESH, "aurinko", "graph", 8, semanticStub(["kuu.md"]));
   expect(body.used_modes).toEqual(["keyword"]);
   expect(body.degraded_from).toBe("graph");
+  expect(body.hits[0]!.path).toBe("aurinko.md");
+});
+
+test("graph mode uses the entity graph when present", async () => {
+  const body = await runSearch(
+    RECORDS, FRESH, "aurinko", "graph", 8, semanticStub(["kuu.md"]), graphStub(["maa.md", "kuu.md"]),
+  );
+  expect(body.used_modes).toEqual(["graph"]);
+  expect(body.degraded_from).toBeNull();
+  expect(body.hits.map((h) => h.path)).toEqual(["maa.md", "kuu.md"]);
+  expect(body.hits.every((h) => h.source === "graph")).toBe(true);
+});
+
+// -- isRelational heuristic (spec/40) ------------------------------------------------
+
+test("isRelational matches connection words", () => {
+  expect(isRelational("how does the moon relate to the tides")).toBe(true);
+  expect(isRelational("what connects to Aurinko")).toBe(true);
+  expect(isRelational("the link between maa and kuu")).toBe(true);
+  expect(isRelational("related work")).toBe(true); // substring stems catch inflections
+  expect(isRelational("aurinko")).toBe(false);
+  expect(isRelational("tides of the moon")).toBe(false);
+});
+
+test("auto widens with graph only for relational queries", async () => {
+  const graph = graphStub(["planeetat.md"]);
+  const plain = await runSearch(RECORDS, FRESH, "aurinko", "auto", 8, semanticStub(["aurinko.md"]), graph);
+  expect(plain.used_modes).toEqual(["keyword", "semantic"]); // not relational → no graph
+
+  const relational = await runSearch(
+    RECORDS, FRESH, "what connects to aurinko", "auto", 8, semanticStub(["aurinko.md"]), graph,
+  );
+  expect(relational.used_modes).toEqual(["keyword", "semantic", "graph"]);
+  expect(relational.hits.map((h) => h.path)).toContain("planeetat.md"); // graph-only recall joins
+});
+
+test("auto relational graph still marks semantic degrade when t2 off", async () => {
+  const body = await runSearch(
+    RECORDS, NO_T2, "how does aurinko relate to maa", "auto", 8, semanticStub(["x.md"]), graphStub(["maa.md"]),
+  );
+  expect(body.used_modes).toEqual(["keyword", "graph"]); // semantic absent, graph joined
+  expect(body.degraded_from).toBe("semantic"); // the missing tier is still named
 });
 
 test("semantic mode uses vectors alone when fresh", async () => {

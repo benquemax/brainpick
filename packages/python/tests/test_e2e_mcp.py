@@ -9,6 +9,8 @@ from mcp.client.stdio import stdio_client
 
 from brainpick.compile.pipeline import run_compile
 
+from conftest import stage_t3_export
+
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
     "# Uusi kivi\n\nNear [Kuu](kuu.md).\n"
@@ -103,6 +105,39 @@ def test_mcp_semantic_search_over_mock_vectors(kotiaurinko):
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["tiers"]["t2"] == "fresh"
     asyncio.run(_semantic_scenario(kotiaurinko))
+
+
+async def _t3_scenario(root):
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "brainpick", "mcp", "--root", str(root)],
+    )
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            neighbors = await _call(session, "brain_neighbors",
+                                    {"doc": "kuu.md", "layer": "entities"})
+            assert neighbors["center"] == "kuu.md"
+            assert {n["id"] for n in neighbors["nodes"]} == {"kuu", "maa", "vuorovesi", "planeetat"}
+            assert neighbors["degraded_from"] is None  # T3 export present — the real layer
+            grounding = {doc for node in neighbors["nodes"] for doc in node["source_docs"]}
+            assert grounding == {"aurinko.md", "kuu.md", "maa.md", "planeetat.md"}
+            assert {"src": "kuu", "dst": "vuorovesi"} in neighbors["edges"]
+
+            orbits = await _call(session, "brain_search",
+                                 {"query": "what orbits the star", "mode": "graph", "limit": 4})
+            assert {h["path"] for h in orbits["hits"]} == {
+                "aurinko.md", "komeetta.md", "maa.md", "planeetat.md",
+            }
+            assert orbits["used_modes"] == ["graph"]
+            assert orbits["degraded_from"] is None
+            assert all("entity graph" in h["why"] for h in orbits["hits"])
+
+
+def test_mcp_t3_entity_queries(kotiaurinko):
+    run_compile(kotiaurinko)
+    stage_t3_export(kotiaurinko)  # the reader loads the staged export; no extractor runs
+    asyncio.run(_t3_scenario(kotiaurinko))
 
 
 KUU_REWRITE = (

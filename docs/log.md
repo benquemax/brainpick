@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Updated: T3 query is live in both engines — entity-layer neighbors, mode=graph
+  search, and the entity graph over the API, all reading the neutral export.
 - Updated: the cosmos now fits the phone — GPU-tier node budgets with
   degree-ranked culling and per-directory cluster aggregation, honest
   'showing N of M' when it caps.

@@ -16,8 +16,9 @@ import { getCloseMatches, SequenceMatcher } from "../core/difflib";
 import { pyStrip } from "../core/pyfmt";
 import { YamlFloat, YamlTimestamp } from "../core/yaml11";
 import { diffGraphs, type GraphDelta } from "../deltas";
+import { graphSearch, loadKg, type KnowledgeGraph } from "../kg";
 import { semanticSearch } from "../query/vectors";
-import type { SemanticFn } from "../query/router";
+import type { GraphFn, SemanticFn } from "../query/router";
 
 export const RING_SIZE = 512; // spec/60 wants >= 256 replayable deltas
 
@@ -230,6 +231,7 @@ export class ServeState {
   graph: Graph = { edges: [], ghosts: [], islands: [], nodes: [], stats: {} as Graph["stats"], tags: {} };
   manifest: Record<string, unknown> = {};
   records: DocRecord[] = [];
+  kg: KnowledgeGraph | null = null; // the T3 export, when one is staged (spec/40)
   seq = 0;
   watching: boolean;
   ring: Array<[number, string]> = [];
@@ -256,6 +258,7 @@ export class ServeState {
     this.graph = JSON.parse(readFileSync(join(bp, "t1", "graph.json"), "utf8")) as Graph;
     const lines = readFileSync(join(bp, "t1", "docs.jsonl"), "utf8").split("\n");
     this.records = lines.filter((line) => line !== "").map((line) => JSON.parse(line) as DocRecord);
+    this.kg = loadKg(bp); // null when no T3 export is present — query degrades
     this.seq = this.manifest["seq"] as number;
   }
 
@@ -352,6 +355,15 @@ export class ServeState {
   semanticFn(): SemanticFn {
     const bp = join(this.root, ".brainpick");
     return (query: string, limit: number) => semanticSearch(bp, this.records, query, limit);
+  }
+
+  /** The T3 entity-graph retriever (kg.graphSearch) over this bundle's export,
+   * shaped for runSearch's graphFn hook — null when T3 is absent. */
+  graphFn(): GraphFn | null {
+    if (this.kg === null) return null;
+    const kg = this.kg;
+    const records = this.records;
+    return (query: string, limit: number) => graphSearch(kg, records, query, limit);
   }
 
   recordFor(path: string): DocRecord | null {

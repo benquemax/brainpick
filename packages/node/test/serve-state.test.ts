@@ -9,7 +9,7 @@ import { runCompile } from "../src/compile/pipeline";
 import { loadConfig } from "../src/config";
 import { resolveDoc, ServeState, suggestPaths, type ServeEvent } from "../src/serve/state";
 import { recompileAndBroadcast } from "../src/serve/watcher";
-import { cleanup, copyBundle } from "./helpers";
+import { cleanup, copyBundle, stageT3Export } from "./helpers";
 
 afterEach(cleanup);
 
@@ -29,6 +29,27 @@ test("load compiles and holds artifacts", async () => {
   expect(state.graph.stats.docs).toBe(10);
   expect(state.records.some((r) => r.path === "kuu.md")).toBe(true);
   expect(state.manifest["tiers"]).toEqual({ t1: "fresh", t2: "off", t3: "off" });
+});
+
+test("kg absent by default", async () => {
+  const root = copyBundle();
+  const state = await makeState(root);
+  expect(state.kg).toBeNull(); // no T3 export → unavailable, and graphFn signals it
+  expect(state.graphFn()).toBeNull();
+  expect((state.manifest["tiers"] as Record<string, string>)["t3"]).toBe("off");
+});
+
+test("kg loads from a staged export", async () => {
+  const root = copyBundle();
+  const state = await makeState(root);
+  stageT3Export(root);
+  state.reloadArtifacts(); // re-read: the flipped manifest + the staged export
+  expect(state.kg).not.toBeNull();
+  expect((state.manifest["tiers"] as Record<string, string>)["t3"]).toBe("fresh");
+  const run = state.graphFn()!;
+  const hits = run("vuorovesi", 8);
+  expect(new Set(hits.map((h) => h.path))).toEqual(new Set(["kuu.md", "aurinko.md", "maa.md"]));
+  expect(hits.every((h) => h.source === "graph")).toBe(true);
 });
 
 test("applyCompileResult updates state and ring", async () => {

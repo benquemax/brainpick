@@ -16,6 +16,7 @@ from pathlib import Path
 from brainpick.compile.pipeline import CompileResult, run_compile
 from brainpick.config import Config
 from brainpick.deltas import diff_graphs
+from brainpick.kg import KnowledgeGraph, load_kg
 
 RING_SIZE = 512  # spec/60 wants >= 256 replayable deltas
 
@@ -135,6 +136,7 @@ class ServeState:
         self.graph: dict = {"edges": [], "ghosts": [], "islands": [], "nodes": [], "stats": {}, "tags": {}}
         self.manifest: dict = {}
         self.records: list[dict] = []
+        self.kg: KnowledgeGraph | None = None  # the T3 export, when one is staged (spec/40)
         self.seq = 0
         self.watching = bool(config.serve.watch)
         self.ring: deque[tuple[int, str]] = deque(maxlen=RING_SIZE)
@@ -157,6 +159,7 @@ class ServeState:
         self.graph = json.loads((bp / "t1" / "graph.json").read_text(encoding="utf-8"))
         lines = (bp / "t1" / "docs.jsonl").read_text(encoding="utf-8").splitlines()
         self.records = [json.loads(line) for line in lines if line]
+        self.kg = load_kg(bp)  # None when no T3 export is present — query degrades
         self.seq = self.manifest["seq"]
 
     # -- state transitions -------------------------------------------------------
@@ -252,6 +255,20 @@ class ServeState:
 
         def run(query: str, limit: int) -> list[dict]:
             return semantic_search(bp, self.records, query, limit=limit)
+
+        return run
+
+    def graph_fn(self):
+        """The T3 entity-graph retriever (kg.graph_search) over this bundle's
+        export, shaped for run_search's graph_fn hook — None when T3 is absent."""
+        if self.kg is None:
+            return None
+        from brainpick.kg import graph_search
+
+        kg, records = self.kg, self.records
+
+        def run(query: str, limit: int) -> list[dict]:
+            return graph_search(kg, records, query, limit=limit)
 
         return run
 

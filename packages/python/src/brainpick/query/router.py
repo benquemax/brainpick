@@ -9,7 +9,21 @@ from brainpick.query.keyword import search as keyword_search
 KNOWN_MODES = ("auto", "keyword", "semantic", "graph")
 RRF_K = 60  # spec/30: reciprocal rank fusion constant
 
+# auto may consult the entity graph, but only for relation-shaped queries — the
+# small deterministic heuristic that keeps "what connects to X" honest without
+# dragging graph noise into every keyword lookup (spec/40).
+RELATIONAL_HINTS = ("relate", "connect", "between")
+
 SemanticFn = Callable[[str, int], list[dict]]
+GraphFn = Callable[[str, int], list[dict]]
+
+
+def is_relational(query: str) -> bool:
+    """A query auto should widen with graph results: it asks about connections
+    ('relate'/'related', 'connect'/'connects', 'between'). Substring match so the
+    stems catch their inflections; deterministic and conservative."""
+    lowered = str(query or "").lower()
+    return any(hint in lowered for hint in RELATIONAL_HINTS)
 
 
 def resolve_mode(mode) -> str:
@@ -45,20 +59,31 @@ def run_search(
     mode: str = "auto",
     limit: int = 8,
     semantic_fn: SemanticFn | None = None,
+    graph_fn: GraphFn | None = None,
+    link_graph: dict | None = None,
 ) -> dict:
     """The spec/50 response body: {"hits", "used_modes", "degraded_from"}.
 
-    `semantic_fn(query, limit)` runs the vector retriever; callers wire it to
-    query.vectors.semantic_search. Any semantic failure degrades to keyword —
-    a missing tier downgrades the answer, never errors the call.
+    `semantic_fn(query, limit)` runs the vector retriever; `graph_fn(query, limit)`
+    runs the T3 entity-graph retriever (present iff the export loaded). Callers
+    wire them to query.vectors.semantic_search and kg.graph_search. Any tier's
+    trouble downgrades the answer with a marker, never errors the call.
     """
     resolved = resolve_mode(mode)
     t2_fresh = tiers.get("t2") == "fresh" and semantic_fn is not None
+    t3_on = graph_fn is not None
 
     if resolved == "keyword":
         return _body(keyword_search(records, query, limit=limit), ["keyword"], None)
-    if resolved == "graph":  # the entity layer lands with T3 — keyword meanwhile
-        return _body(keyword_search(records, query, limit=limit), ["keyword"], "graph")
+    if resolved == "graph":
+        if t3_on:
+            return _body(graph_fn(query, limit), ["graph"], None)
+        # T3 absent: degrade to a T1 link-walk over keyword hits (spec/40)
+        from brainpick.kg import link_walk_search
+
+        hits = (link_walk_search(link_graph, records, query, limit) if link_graph
+                else keyword_search(records, query, limit=limit))
+        return _body(hits, ["keyword"], "graph")
 
     semantic_hits: list[dict] | None = None
     if t2_fresh:
@@ -72,12 +97,20 @@ def run_search(
             return _body(keyword_search(records, query, limit=limit), ["keyword"], "semantic")
         return _body(semantic_hits, ["semantic"], None)
 
-    # auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document)
+    # auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document).
+    # The entity graph joins only for relation-shaped queries (spec/40).
     keyword_hits = keyword_search(records, query, limit=limit)
-    if semantic_hits is None:
-        return _body(keyword_hits, ["keyword"], "semantic")
-    fused = rrf_fuse({"keyword": keyword_hits, "semantic": semantic_hits}, limit)
-    return _body(fused, ["keyword", "semantic"], None)
+    rankings: dict[str, list[dict]] = {"keyword": keyword_hits}
+    if semantic_hits is not None:
+        rankings["semantic"] = semantic_hits
+    if t3_on and is_relational(query):
+        rankings["graph"] = graph_fn(query, limit)
+
+    degraded_from = "semantic" if semantic_hits is None else None
+    if len(rankings) == 1:  # keyword alone — the honest degradation is still "semantic"
+        return _body(keyword_hits, ["keyword"], degraded_from)
+    used_modes = [mode for mode in ("keyword", "semantic", "graph") if mode in rankings]
+    return _body(rrf_fuse(rankings, limit), used_modes, degraded_from)
 
 
 def _body(hits: list[dict], used_modes: list[str], degraded_from: str | None) -> dict:

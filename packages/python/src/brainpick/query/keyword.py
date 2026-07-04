@@ -12,7 +12,7 @@ B = 0.75
 SNIPPET_WINDOW = 240
 
 
-def _tokens(text: str) -> list[str]:
+def tokenize(text: str) -> list[str]:
     return _TOKEN.findall(text.lower())
 
 
@@ -26,11 +26,11 @@ def search(records: list[dict], query: str, limit: int = 8) -> list[dict]:
     if not corpus:
         return []
 
-    term_freqs = [Counter(_tokens(_searchable(r))) for r in corpus]
+    term_freqs = [Counter(tokenize(_searchable(r))) for r in corpus]
     doc_lengths = [sum(tf.values()) for tf in term_freqs]
     avg_length = sum(doc_lengths) / len(doc_lengths) if corpus else 0.0
 
-    query_terms = _tokens(query)
+    query_terms = tokenize(query)
     if not query_terms or avg_length == 0:
         return []
 

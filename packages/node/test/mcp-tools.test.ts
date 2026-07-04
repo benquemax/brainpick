@@ -16,7 +16,7 @@ import {
   writePayload,
 } from "../src/mcp";
 import { ServeState } from "../src/serve/state";
-import { cleanup, copyBundle, tempDir } from "./helpers";
+import { cleanup, copyBundle, stageT3Export, tempDir } from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
@@ -218,6 +218,50 @@ test("neighbors depth and degrade", async () => {
   for (const e of edges) {
     expect(new Set(Object.keys(e))).toEqual(new Set(["source", "target", "kind"]));
   }
+});
+
+async function stateWithT3(root: string): Promise<ServeState> {
+  const state = await makeState(root);
+  stageT3Export(root);
+  state.reloadArtifacts();
+  return state;
+}
+
+test("neighbors entities layer over staged export", async () => {
+  const state = await stateWithT3(copyBundle());
+  const result = neighborsPayload(state, "kuu", 1, "entities"); // forgiving stem resolution
+  expect(result["center"]).toBe("kuu.md");
+  expect(result["degraded_from"]).toBeNull();
+  const nodes = result["nodes"] as Array<{ id: string; distance: number; source_docs: string[] }>;
+  expect(new Set(nodes.map((n) => n.id))).toEqual(new Set(["kuu", "maa", "vuorovesi", "planeetat"]));
+  const kuu = nodes.find((n) => n.id === "kuu")!;
+  expect(new Set(Object.keys(kuu))).toEqual(new Set(["id", "name", "description", "distance", "source_docs"]));
+  expect(kuu.distance).toBe(0);
+  const grounding = new Set<string>(nodes.flatMap((n) => n.source_docs));
+  expect(grounding).toEqual(new Set(["aurinko.md", "kuu.md", "maa.md", "planeetat.md"]));
+  expect(result["edges"]).toContainEqual({ src: "kuu", dst: "vuorovesi" });
+});
+
+test("neighbors both layer overlays tagged", async () => {
+  const state = await stateWithT3(copyBundle());
+  const result = neighborsPayload(state, "kuu.md", 1, "both");
+  expect(result["degraded_from"]).toBeNull();
+  const nodes = result["nodes"] as Array<Record<string, unknown>>;
+  expect(new Set(nodes.map((n) => n["layer"]))).toEqual(new Set(["links", "entities"]));
+  expect(nodes.some((n) => n["layer"] === "links" && "path" in n)).toBe(true);
+  expect(nodes.some((n) => n["layer"] === "entities" && "id" in n)).toBe(true);
+});
+
+test("search graph mode over staged export", async () => {
+  const state = await stateWithT3(copyBundle());
+  const result = await searchPayload(state, "what orbits the star", "graph", 4);
+  const hits = result["hits"] as Array<{ path: string; why: string }>;
+  expect(new Set(hits.map((h) => h.path))).toEqual(
+    new Set(["aurinko.md", "komeetta.md", "maa.md", "planeetat.md"]),
+  );
+  expect(result["used_modes"]).toEqual(["graph"]);
+  expect(result["degraded_from"]).toBeNull();
+  expect(hits.every((h) => h.why.includes("entity graph"))).toBe(true);
 });
 
 test("write rejects traversal", async () => {

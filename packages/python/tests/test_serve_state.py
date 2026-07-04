@@ -6,6 +6,8 @@ from brainpick.config import load_config
 from brainpick.serve.state import ServeState, resolve_doc, suggest_paths
 from brainpick.serve.watcher import recompile_and_broadcast
 
+from conftest import stage_t3_export
+
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi\ndescription: New rock.\n---\n\n"
     "# Uusi\n\nNear [Kuu](kuu.md).\n"
@@ -31,6 +33,25 @@ def test_load_compiles_and_holds_artifacts(kotiaurinko):
     assert state.graph["stats"]["docs"] == 10
     assert any(r["path"] == "kuu.md" for r in state.records)
     assert state.manifest["tiers"] == {"t1": "fresh", "t2": "off", "t3": "off"}
+
+
+def test_kg_absent_by_default(kotiaurinko):
+    state = make_state(kotiaurinko)
+    assert state.kg is None  # no T3 export → unavailable, and graph_fn signals it
+    assert state.graph_fn() is None
+    assert state.manifest["tiers"]["t3"] == "off"
+
+
+def test_kg_loads_from_staged_export(kotiaurinko):
+    state = make_state(kotiaurinko)
+    stage_t3_export(kotiaurinko)
+    state.reload_artifacts()  # re-read: the flipped manifest + the staged export
+    assert state.kg is not None
+    assert state.manifest["tiers"]["t3"] == "fresh"
+    run = state.graph_fn()
+    hits = run("vuorovesi", 8)
+    assert {h["path"] for h in hits} == {"kuu.md", "aurinko.md", "maa.md"}
+    assert all(h["source"] == "graph" for h in hits)
 
 
 def test_apply_compile_result_updates_state_and_ring(kotiaurinko):
