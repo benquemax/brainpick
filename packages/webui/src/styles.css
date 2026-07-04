@@ -1291,6 +1291,82 @@ button:focus-visible,
   }
 }
 
+/* ---- MODE toggle: the cosmos ⇄ holographic-brain morph (bottom-centre) ---- */
+
+.mode-cluster {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 40px);
+  align-items: center;
+  z-index: 6;
+}
+
+.mode-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 7px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: rgba(12, 20, 36, 0.72);
+  border: 1px solid rgba(75, 225, 255, 0.4);
+  border-radius: 999px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 18px rgba(75, 225, 255, 0.14),
+    0 8px 28px rgba(0, 0, 0, 0.45);
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.mode-toggle:hover {
+  color: #eaf9ff;
+  border-color: rgba(75, 225, 255, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 24px rgba(75, 225, 255, 0.28),
+    0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* active = the brain is on screen; shift to the violet hologram accent */
+.mode-toggle.brain {
+  color: var(--violet);
+  border-color: rgba(167, 139, 250, 0.7);
+  background: rgba(24, 18, 42, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 22px rgba(167, 139, 250, 0.3),
+    0 8px 28px rgba(0, 0, 0, 0.5);
+}
+
+.mode-glyph {
+  font-size: 15px;
+  line-height: 1;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.mode-label {
+  white-space: nowrap;
+}
+
+.mode-toggle kbd {
+  color: inherit;
+  border-color: currentColor;
+  opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+  .mode-toggle {
+    min-height: 44px;
+  }
+}
+
 /* ---- hint bar ------------------------------------------------------------ */
 
 .hint-bar {

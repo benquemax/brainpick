@@ -8,6 +8,7 @@ import { DocPanel } from './ui/DocPanel';
 import { EntityPanel } from './ui/EntityPanel';
 import { LayerToggle } from './ui/LayerToggle';
 import { LensCluster } from './ui/LensCluster';
+import { ModeToggle } from './ui/ModeToggle';
 import { NavigatorPanel } from './ui/NavigatorPanel';
 import { SearchOverlay } from './ui/SearchOverlay';
 import { StatusHUD } from './ui/StatusHUD';
@@ -57,6 +58,9 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         s.toggleNavigator();
+      } else if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        s.toggleMode(); // morph cosmos ⇄ holographic brain
       } else if (e.key === 'l' || e.key === 'L') {
         e.preventDefault();
         // Cycle links → entities → overlay, skipping the entity layers once a
@@ -82,10 +86,11 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <EntityPanel />
       <NavigatorPanel />
       <LensCluster />
+      <ModeToggle />
       <CameraCluster />
       <div className="hint-bar">
-        <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>l</kbd> layer · <kbd>0</kbd> overview · <kbd>1–3</kbd> views (
-        <kbd>shift</kbd> saves) · <kbd>g</kbd> ghosts · click a node to read
+        <kbd>b</kbd> brain · <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>l</kbd> layer · <kbd>0</kbd> overview ·{' '}
+        <kbd>1–3</kbd> views (<kbd>shift</kbd> saves) · <kbd>g</kbd> ghosts · click a node to read
       </div>
     </div>
   );

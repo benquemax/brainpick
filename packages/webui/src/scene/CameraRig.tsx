@@ -35,7 +35,19 @@ export function CameraRig({ runtime }: { runtime: GraphRuntime }) {
     controls.dollyToCursor = true;
     controls.draggingSmoothTime = 0.05;
     controls.smoothTime = 0.3;
-  }, []);
+    controls.enabled = !runtime.store.getState().morphActive;
+  }, [runtime]);
+
+  // While the brain morph is on screen the perspective BrainCameraRig owns the
+  // gestures — disable the ortho cosmos controls so they are not trucked around
+  // underneath it (the cosmos pose is preserved for the return).
+  useEffect(() => {
+    return runtime.store.subscribe((state, prev) => {
+      if (state.morphActive === prev.morphActive) return;
+      const controls = controlsRef.current;
+      if (controls) controls.enabled = !state.morphActive;
+    });
+  }, [runtime]);
 
   // Fit the cosmos once the first simulated positions arrive.
   useFrame(() => {

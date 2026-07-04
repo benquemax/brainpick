@@ -9,8 +9,8 @@
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import type { GraphRuntime } from './runtime';
-import { DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW } from './tuning';
+import { nodeStagger, type GraphRuntime } from './runtime';
+import { BRAIN, DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 iCosmos;
@@ -22,6 +22,7 @@ const VERTEX = /* glsl */ `
   attribute float iActivity;
   attribute float iFlags;
   attribute float iHighlight;
+  attribute float iStagger;
 
   uniform float uMorph;
   uniform float uTime;
@@ -35,7 +36,10 @@ const VERTEX = /* glsl */ `
   varying float vEntity;
 
   void main() {
-    vec3 center = mix(iCosmos, iBrain, uMorph);
+    // Per-node stagger: nodes stream into the brain in a spread, not all at once.
+    float span = ${f(BRAIN.staggerSpan)};
+    float m = clamp((uMorph - iStagger * span) / (1.0 - span), 0.0, 1.0);
+    vec3 center = mix(iCosmos, iBrain, m);
 
     // Entrance: scale in from the join position (easeOutCubic).
     float grow = 1.0;
@@ -73,8 +77,13 @@ const VERTEX = /* glsl */ `
     vAlpha = 1.0 - death;
     vCluster = cluster;
 
-    vec3 world = center + vec3(position.xy * scale, 0.0);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(world, 1.0);
+    // Billboard in VIEW space so sprites face the camera in both the ortho
+    // cosmos and the perspective brain. Under the top-down ortho camera (no
+    // roll/tilt) this is identical to the old world-space offset — cosmos
+    // stays byte-for-byte the same.
+    vec4 mv = modelViewMatrix * vec4(center, 1.0);
+    mv.xy += position.xy * scale;
+    gl_Position = projectionMatrix * mv;
   }
 `;
 
@@ -157,9 +166,18 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
     activity[i] = -1;
   }
 
-  // iBrain starts as a copy of the cosmos target: uMorph is 0 in M1, and a
-  // copied buffer keeps any accidental morph non-degenerate until M3.
+  // iBrain: the 3D brain-layout target for each live node (world units). Until
+  // brain mode is entered runtime.brainPositions is empty, so it mirrors the
+  // cosmos target — uMorph is 0 and nothing moves (cosmos byte-unchanged).
   const brain = cosmos.slice();
+  const bp = runtime.brainPositions;
+  if (bp.length >= live * 3) {
+    for (let i = 0; i < live * 3; i++) brain[i] = bp[i]!;
+  }
+
+  // Per-node morph stagger (deterministic from the index) — the "stream in".
+  const stagger = new Float32Array(total);
+  for (let i = 0; i < total; i++) stagger[i] = nodeStagger(i);
 
   const add = (name: string, array: Float32Array, itemSize: number, dynamic = false) => {
     const attr = new THREE.InstancedBufferAttribute(array, itemSize);
@@ -175,6 +193,7 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
   add('iActivity', activity, 1);
   add('iFlags', flags, 1);
   add('iHighlight', highlight, 1, true);
+  add('iStagger', stagger, 1);
   return geo;
 }
 
@@ -260,6 +279,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     }
 
     material.uniforms.uTime!.value = runtime.now();
+    material.uniforms.uMorph!.value = runtime.morph;
     material.uniforms.uBloom!.value = s.gpu.bloomEnabled ? 1 : GPU_BUDGET.bloomDisabledScale;
     const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;

@@ -19,7 +19,16 @@ import type { UIState } from '../src/state/store';
 declare global {
   interface Window {
     __bp_store: { getState(): UIState };
-    __bp_runtime: { ids: string[]; liveCount: number };
+    __bp_runtime: {
+      ids: string[];
+      liveCount: number;
+      /** Holographic brain: the live morph value + lazy-layout / orbit signals. */
+      morph: number;
+      brainReady: boolean;
+      orbited: boolean;
+      brainAzimuth: number;
+      brainPositions: Float32Array;
+    };
   }
 }
 
@@ -453,8 +462,128 @@ test('entity layer: a T3-less bundle degrades on select — toggle tags it, view
   await expect(page.locator('.entity-panel')).toHaveCount(0);
 });
 
+test.describe('holographic brain', () => {
+  test('the cosmos is byte-untouched until the brain is entered — the layout is lazy', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+    // Never toggled: no brain layout has been computed and the morph is at rest.
+    const s = await page.evaluate(() => ({
+      mode: window.__bp_store.getState().mode,
+      morphActive: window.__bp_store.getState().morphActive,
+      brainReady: window.__bp_runtime.brainReady,
+      brainPts: window.__bp_runtime.brainPositions.length,
+      morph: window.__bp_runtime.morph,
+    }));
+    expect(s.mode).toBe('cosmos');
+    expect(s.morphActive).toBe(false);
+    expect(s.brainReady).toBe(false); // nothing computed yet
+    expect(s.brainPts).toBe(0);
+    expect(s.morph).toBe(0);
+  });
+
+  test('key b morphs into the brain and back; the canvas stays alive, no crash', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (e) => pageErrors.push(String(e)));
+
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.keyboard.press('b');
+    // The brain layout is computed lazily on entry (store/runtime flags, no pixels).
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      const rt = window.__bp_runtime;
+      return s.mode === 'brain' && s.morphActive && rt.brainReady && rt.brainPositions.length > 0;
+    });
+    // A morph-complete signal is observable: uMorph animates to 1.
+    await page.waitForFunction(() => window.__bp_runtime.morph > 0.9);
+
+    // The WebGL context is alive (like the existing scene e2e, assert the
+    // context, not pixels — canvas pixels are not deterministic).
+    await expect(page.locator('canvas')).toBeVisible();
+    const contextAlive = await page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      const gl = c && ((c.getContext('webgl2') as WebGLRenderingContext | null) ?? (c.getContext('webgl') as WebGLRenderingContext | null));
+      return !!gl && !gl.isContextLost();
+    });
+    expect(contextAlive).toBe(true);
+
+    // Back to the cosmos: the morph unwinds and the flat 2D view returns.
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      return s.mode === 'cosmos' && !s.morphActive && window.__bp_runtime.morph < 0.05;
+    });
+
+    expect(pageErrors).toEqual([]); // no uncaught exceptions across the morph
+  });
+
+  test('the HUD button toggles the brain, and a drag orbits the camera', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.getByRole('button', { name: 'brain' }).click();
+    await page.waitForFunction(() => window.__bp_store.getState().mode === 'brain' && window.__bp_runtime.morph > 0.9);
+    // the pill now offers the way back
+    await expect(page.getByRole('button', { name: 'cosmos' })).toBeVisible();
+
+    // Drag across the canvas → the perspective orbit camera reacts. `orbited` is
+    // set by the pointer handler itself, so the assertion is frame-independent.
+    const box = await page.locator('canvas').boundingBox();
+    if (!box) throw new Error('canvas has no box');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(cx + i * 14, cy - i * 3);
+    await page.mouse.up();
+    await page.waitForFunction(() => window.__bp_runtime.orbited === true);
+
+    // and back to cosmos restores the 2D view
+    await page.getByRole('button', { name: 'cosmos' }).click();
+    await page.waitForFunction(() => window.__bp_store.getState().mode === 'cosmos' && window.__bp_runtime.morph < 0.05);
+  });
+});
+
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('the holographic brain toggle + orbit work by touch on a phone', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    // the mode pill is reachable and taps into the brain
+    await page.getByRole('button', { name: 'brain' }).tap();
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      return s.mode === 'brain' && window.__bp_runtime.brainReady;
+    });
+    await page.waitForFunction(() => window.__bp_runtime.morph > 0.9);
+
+    // a one-finger touch drag orbits the brain
+    await page.evaluate(() => {
+      const canvas = document.querySelector('canvas')!;
+      const r = canvas.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const ev = (type: string, x: number, y: number) =>
+        canvas.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: 1,
+            pointerType: 'touch',
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            buttons: type === 'pointerup' ? 0 : 1,
+          }),
+        );
+      ev('pointerdown', cx, cy);
+      for (let i = 1; i <= 10; i++) ev('pointermove', cx - i * 10, cy + i * 2);
+      ev('pointerup', cx - 100, cy + 20);
+    });
+    await page.waitForFunction(() => window.__bp_runtime.orbited === true);
+  });
 
   test('the layer toggle + entity legend are reachable on a phone', async ({ page }) => {
     await page.goto(t3URL() + '/');

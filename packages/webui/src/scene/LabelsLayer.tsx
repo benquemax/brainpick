@@ -34,6 +34,13 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
     frame.current += 1;
     if (frame.current % 3 !== 0) return; // 20 Hz is plenty for labels
 
+    // Labels are placed at the flat cosmos positions; once the morph is past
+    // halfway they would no longer sit on their (now 3D) nodes, so hide them.
+    if (runtime.morph > 0.5) {
+      for (const div of pool.current) div.style.display = 'none';
+      return;
+    }
+
     const state = runtime.store.getState();
     const zoomRatio = (camera as THREE.OrthographicCamera).zoom / (runtime.fitZoom || 1);
     // Semantic-zoom budget, capped by the GPU tier's label ceiling.

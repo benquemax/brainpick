@@ -2,6 +2,7 @@
 
 ## 2026-07-04
 
+- Updated: the brain is real — the cosmos morphs into a floating holographic brain, procedural SDF form, topic clusters gathered into lobes, spun and pinched with your fingers.
 - Updated: T3 extraction landed — LightRAG behind the KGBackend adapter turns the
   prose into an entity graph, normalized into the neutral export; Python extracts,
   both engines read.

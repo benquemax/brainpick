@@ -341,6 +341,46 @@ describe('hud panel', () => {
   });
 });
 
+describe('view mode (holographic brain)', () => {
+  it('starts in cosmos with the morph inactive', () => {
+    const s = createUIStore().getState();
+    expect(s.mode).toBe('cosmos');
+    expect(s.morphActive).toBe(false);
+  });
+
+  it('setMode(brain) enters the brain and marks the morph active immediately', () => {
+    const store = createUIStore();
+    store.getState().setMode('brain');
+    expect(store.getState().mode).toBe('brain');
+    expect(store.getState().morphActive).toBe(true); // rig/shell mount at once
+  });
+
+  it('toggleMode flips cosmos ⇄ brain', () => {
+    const store = createUIStore();
+    store.getState().toggleMode();
+    expect(store.getState().mode).toBe('brain');
+    store.getState().toggleMode();
+    expect(store.getState().mode).toBe('cosmos');
+  });
+
+  it('leaving the brain keeps morphActive until the morph settles', () => {
+    const store = createUIStore();
+    store.getState().setMode('brain');
+    store.getState().setMode('cosmos'); // toggled back
+    expect(store.getState().mode).toBe('cosmos');
+    expect(store.getState().morphActive).toBe(true); // still transitioning
+    store.getState().setMorphActive(false); // MorphController, once uMorph hits 0
+    expect(store.getState().morphActive).toBe(false);
+  });
+
+  it('setMode ignores a no-op and never bumps state needlessly', () => {
+    const store = createUIStore();
+    store.getState().setMorphActive(true);
+    store.getState().setMode('cosmos'); // already cosmos
+    expect(store.getState().morphActive).toBe(true); // untouched
+  });
+});
+
 describe('navigator', () => {
   it('starts closed; toggleNavigator flips it open and shut', () => {
     const store = createUIStore();

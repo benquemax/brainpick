@@ -35,6 +35,9 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
     let down: { x: number; y: number; t: number } | null = null;
 
     const onMove = (e: PointerEvent) => {
+      // In brain mode the perspective orbit camera owns the pointer; 2D picking
+      // against the flat cosmos positions would be meaningless.
+      if (runtime.store.getState().morphActive) return;
       const i = pickAt(e);
       const id = i >= 0 ? runtime.ids[i] ?? null : null;
       const s = runtime.store.getState();
@@ -46,6 +49,10 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
     };
     const onUp = (e: PointerEvent) => {
       if (!down) return;
+      if (runtime.store.getState().morphActive) {
+        down = null;
+        return;
+      }
       const travel = Math.hypot(e.clientX - down.x, e.clientY - down.y);
       const dt = performance.now() - down.t;
       down = null;

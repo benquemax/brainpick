@@ -33,6 +33,9 @@ import { entityRenderIdsForDoc } from './entityModel';
 
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
 
+/** The two faces of one brain: the flat analytic cosmos, or the 3D hologram. */
+export type ViewMode = 'cosmos' | 'brain';
+
 export interface FlyRequest {
   id: string;
   nonce: number;
@@ -111,6 +114,16 @@ export interface UIState extends GraphSlice {
   /** NAVIGATOR: the directory-tree panel (desktop) / drawer (mobile). */
   navigatorOpen: boolean;
 
+  /** VIEW MODE: the flat 2D cosmos (uMorph→0) or the 3D holographic brain (→1). */
+  mode: ViewMode;
+  /**
+   * True while the brain form is on screen — set the moment brain mode is
+   * entered and held until the morph eases fully back to cosmos, so the
+   * perspective orbit rig + shell stay mounted through the whole transition.
+   * (The per-frame morph value itself lives on the runtime, not in the store.)
+   */
+  morphActive: boolean;
+
   /** GPU performance tier (scene/gpuTier) — detected once at startup. */
   gpu: GpuTier;
   /** Active node render budget: the tier's cap, raised by "show more". */
@@ -165,6 +178,13 @@ export interface UIState extends GraphSlice {
 
   setHudPanel(panel: HudPanel): void;
   toggleNavigator(): void;
+
+  /** Enter/leave the holographic brain (drives the uMorph target). */
+  setMode(mode: ViewMode): void;
+  /** Flip cosmos ⇄ brain (HUD button, key `b`). */
+  toggleMode(): void;
+  /** MorphController reports when the transition is live / has fully settled. */
+  setMorphActive(active: boolean): void;
 
   /** Adopt a detected GPU tier and its node budget (main.tsx, at startup). */
   initGpu(gpu: GpuTier): void;
@@ -276,6 +296,9 @@ export function createUIStore(): UIStoreApi {
       hudPanel: null,
 
       navigatorOpen: false,
+
+      mode: 'cosmos',
+      morphActive: false,
 
       gpu: DEFAULT_GPU_TIER,
       nodeBudget: DEFAULT_GPU_TIER.nodeBudget,
@@ -523,6 +546,22 @@ export function createUIStore(): UIStoreApi {
 
       toggleNavigator() {
         set({ navigatorOpen: !get().navigatorOpen });
+      },
+
+      setMode(mode) {
+        if (get().mode === mode) return;
+        // Entering the brain: mark the transition active NOW so the perspective
+        // rig + shell mount for the whole morph. Leaving: keep it active until
+        // MorphController sees uMorph reach 0 and calls setMorphActive(false).
+        set(mode === 'brain' ? { mode, morphActive: true } : { mode });
+      },
+
+      toggleMode() {
+        get().setMode(get().mode === 'brain' ? 'cosmos' : 'brain');
+      },
+
+      setMorphActive(active) {
+        if (get().morphActive !== active) set({ morphActive: active });
       },
 
       initGpu(gpu) {

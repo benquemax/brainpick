@@ -90,6 +90,90 @@ export const GHOST_GLOW = {
 export const DIM_EASE = 0.14;
 
 /**
+ * THE HOLOGRAPHIC BRAIN (spec: holographic-brain.md). The cosmos morphs from
+ * the flat 2D star map into a floating anatomical brain: a procedural SDF form
+ * (scene/brainSDF.ts), topic clusters gathered into lobes (state/communities.ts)
+ * via a containment force layout (layout/brainLayout.ts), spun with a perspective
+ * orbit camera. Every constant the brain visuals use lives here with the rest.
+ *
+ * The SDF works in natural units (roughly a unit brain, ±1); BRAIN.scale maps it
+ * into world space so the node radii (world units) read proportional to the form.
+ */
+export const BRAIN = {
+  /** World units per SDF natural unit — the brain's overall size in the scene. */
+  scale: 96,
+  /** Seed for every deterministic brain computation (layout jitter, sampling). */
+  seed: 0xb7a11,
+  /** Per-frame ease factor for uMorph toward its 0/1 target (cosmos⇄brain). */
+  morphEase: 0.055,
+  /** Below this the morph is treated as fully cosmos (perspective rig unmounts). */
+  morphRestEps: 0.002,
+  /** Per-node morph stagger: nodes stream in over this fraction of the travel. */
+  staggerSpan: 0.55,
+
+  /** Force layout: relaxation rounds (scaled down as the node count grows). */
+  layoutIterations: 110,
+  /** Repulsion strength between nearby nodes — enough to fill the volume. */
+  layoutRepulsion: 0.012,
+  /** Radius within which nodes repel each other (natural units). */
+  layoutRepelRadius: 0.62,
+  /** Link spring: pull linked nodes toward this rest length (natural units). */
+  layoutLinkRest: 0.22,
+  layoutLinkStrength: 0.06,
+  /** Gentle pull toward the node's lobe centroid — a BIAS, so clusters read as
+   * lobes without collapsing to a point (repulsion still fills the volume). */
+  layoutLobePull: 0.02,
+  /** Seed jitter around a lobe centroid (natural units) — a wide initial spread. */
+  layoutSeedJitter: 0.34,
+  /** Keep points this far inside the surface when the containment force bites. */
+  layoutContainMargin: 0.06,
+
+  /** The fresnel-rimmed point shell: how many surface points sample the form. */
+  shellPoints: 3800,
+  /** Shell point sprite size (world units). */
+  shellPointSize: 2.3,
+  /** Fresnel exponent — higher = a thinner, brighter silhouette rim. */
+  shellFresnel: 2.2,
+  /** Base (non-rim) shell brightness and rim brightness (additive, restrained). */
+  shellCoreGlow: 0.06,
+  shellRimGlow: 0.62,
+  /** Cool hologram tint of the shell (linear-ish RGB). */
+  shellTint: [0.42, 0.72, 1.0] as [number, number, number],
+  /** Scanline spatial frequency (per world unit) and drift speed, and depth. */
+  shellScanFreq: 0.14,
+  shellScanSpeed: 0.9,
+  shellScanDepth: 0.35,
+  /** Depth fog: the far side of the shell dims by up to this much. */
+  shellFogDepth: 0.55,
+
+  /** Firing pulse (brain mode): duration and the width of the travelling glow. */
+  pulseSeconds: 1.6,
+  pulseWidth: 0.16,
+  pulseGlow: 1.4,
+} as const;
+
+/**
+ * The perspective orbit camera for brain mode (drei's makeDefault only swaps
+ * controls, not the render camera — BrainCameraRig owns a perspective camera it
+ * installs as the default while mounted). Touch-first: one-finger orbit, pinch
+ * dolly + two-finger twist; a slow idle auto-rotation that pauses on interaction.
+ */
+export const BRAIN_CAMERA = {
+  fov: 46,
+  near: 1,
+  far: 8000,
+  /** Initial + resting dolly distance, in multiples of the brain's world radius. */
+  distanceFactor: 2.05,
+  minDistanceFactor: 1.05,
+  maxDistanceFactor: 6.0,
+  /** Idle auto-rotation (radians/sec) and how long after a gesture it resumes. */
+  autoRotateSpeed: 0.16,
+  autoRotateResumeMs: 2600,
+  /** Smooth-time (sec) for the camera-controls damping. */
+  smoothTime: 0.28,
+} as const;
+
+/**
  * GPU performance budget — how much the cosmos is allowed to render so weak /
  * mobile GPUs stay smooth. A detected tier (scene/gpuTier.ts) picks a node
  * cap; beyond it, degree-ranked culling + per-directory cluster aggregation

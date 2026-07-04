@@ -7,16 +7,29 @@
  * nodes linger briefly with a death timestamp so the sprite shader can fade
  * them out (spec 60 leave animation).
  */
-import type { UIStoreApi } from '../state/store';
+import type { UIStoreApi, ViewMode } from '../state/store';
 import type { UIState } from '../state/store';
 import { buildSeeds, diffGraph } from '../layout/simShared';
+import { computeBrainLayout } from '../layout/brainLayout';
 import type { FromWorker, GraphMessage, WorkerLink } from '../layout/messages';
 import { budgetedGraph, isClusterId } from '../state/budget';
 import { activeRenderGraph } from '../state/entityModel';
+import { communityLobes } from '../state/communities';
+import type { Vec3 } from './brainSDF';
 import { isEntityRenderId } from '../graph/entities';
 import { colorForId, entityColorForType } from './colors';
 import { buildGhostAnchors, type GhostAnchor } from './ghosts';
-import { GHOST_GLOW } from './tuning';
+import { BRAIN, GHOST_GLOW } from './tuning';
+
+/**
+ * Per-node morph stagger in [0,1): a golden-ratio walk over the index spreads
+ * the "stream into the brain" evenly. Shared by the node + edge layers so an
+ * edge's endpoints morph in lockstep with the nodes they connect (edges stay
+ * attached through the whole transition).
+ */
+export function nodeStagger(i: number): number {
+  return (i * 0.618033988749895) % 1;
+}
 
 export interface DyingNode {
   x: number;
@@ -76,6 +89,20 @@ export class GraphRuntime {
   fitZoom = 1;
   firstPositionsSeen = false;
 
+  // ---- Holographic brain (lazy; nothing computed until the first toggle) ----
+  /** Current animated morph 0 (cosmos) → 1 (brain); eased by MorphController. */
+  morph = 0;
+  /** World-space brain layout [x,y,z per live node]; empty until brain entered. */
+  brainPositions: Float32Array = new Float32Array(0);
+  /** True once a brain layout matching the current graph has been computed. */
+  brainReady = false;
+  /** e2e/debug: the orbit camera's azimuth, and whether it has been dragged. */
+  brainAzimuth = 0;
+  orbited = false;
+  private brainEpoch = -1;
+  private brainCount = -1;
+  private lastMode: ViewMode = 'cosmos';
+
   private worker: Worker | null = null;
   private gen = 0;
   private prevEdgeKeys: string[] = [];
@@ -115,6 +142,12 @@ export class GraphRuntime {
       ) {
         this.rebuild(state);
       }
+      // Entering the brain computes its layout lazily (the very first time only);
+      // cosmos stays byte-for-byte untouched until then.
+      if (state.mode !== this.lastMode) {
+        this.lastMode = state.mode;
+        if (state.mode === 'brain') this.ensureBrainLayout(state);
+      }
     });
     const initial = store.getState();
     this.lastEpoch = initial.epoch;
@@ -123,6 +156,7 @@ export class GraphRuntime {
     this.lastLayer = initial.layer;
     this.lastEntityEpoch = initial.entityEpoch;
     this.lastAvailability = initial.entityAvailability;
+    this.lastMode = initial.mode;
     if (initial.nodes.size > 0) this.rebuild(initial);
   }
 
@@ -310,6 +344,11 @@ export class GraphRuntime {
     this.labelOrder = ids
       .map((_, i) => i)
       .sort((a, b) => (degrees[b] ?? 0) - (degrees[a] ?? 0) || (ids[a] as string).localeCompare(ids[b] as string));
+
+    // In brain mode, keep the 3D layout in step with the live graph so new
+    // nodes stream into their lobe too (recomputed before the version bump).
+    if (this.lastMode === 'brain') this.computeBrainPositions(state);
+    else this.brainReady = false; // stale once the graph moved; recompute on re-entry
     this.version += 1;
 
     this.gen += 1;
@@ -323,6 +362,47 @@ export class GraphRuntime {
       reheat: prevIds.length === 0 ? 1 : diff.structural ? 0.5 : 0,
     };
     this.worker?.postMessage(message, [seeds.buffer]);
+  }
+
+  /**
+   * Compute positionBrain for the current (budgeted) node set: detect
+   * communities on the render edges, map them to lobe centroids, and relax a
+   * force layout constrained inside the SDF (all deterministic). Recomputed only
+   * when the graph the last layout saw is stale.
+   */
+  ensureBrainLayout(state: UIState): void {
+    if (this.brainReady && this.brainEpoch === state.epoch && this.brainCount === this.ids.length) return;
+    this.computeBrainPositions(state);
+    this.version += 1; // rebuild geometry with the fresh iBrain targets
+  }
+
+  private computeBrainPositions(state: UIState): void {
+    const n = this.ids.length;
+    this.brainEpoch = state.epoch;
+    this.brainCount = n;
+    this.brainReady = true;
+    if (n === 0) {
+      this.brainPositions = new Float32Array(0);
+      return;
+    }
+    const idEdges: { source: string; target: string }[] = [];
+    const pairs: Array<[number, number]> = [];
+    for (let e = 0; e < this.edgeCount; e++) {
+      const a = this.edgePairs[e * 2] ?? 0;
+      const b = this.edgePairs[e * 2 + 1] ?? 0;
+      pairs.push([a, b]);
+      idEdges.push({ source: this.ids[a] as string, target: this.ids[b] as string });
+    }
+    const { centroidOf } = communityLobes(this.ids, idEdges);
+    const fallback: Vec3 = [0, -0.1, 0];
+    const seeds = this.ids.map((id) => centroidOf.get(id) ?? fallback);
+    this.brainPositions = computeBrainLayout({
+      count: n,
+      edges: pairs,
+      seeds,
+      seed: BRAIN.seed,
+      scale: BRAIN.scale,
+    });
   }
 
   private boundsRadiusOf(positions: Float32Array, count: number): number {
