@@ -23,6 +23,13 @@ def _print_warnings(result: CompileResult) -> None:
         print(warning, flush=True)
 
 
+def _print_t3_summary(result: CompileResult) -> None:
+    s = result.t3_summary
+    if s is not None:
+        print(f"t3 sample: {s['entities']} entities · {s['relations']} relations"
+              f" from {s['docs']} docs", flush=True)
+
+
 def _cmd_compile(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     if args.check_fresh:
@@ -31,11 +38,12 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         return 0 if verdict.fresh else 1
 
     only = (args.only,) if args.only else None
-    result = run_compile(root, full=args.full, only=only)
+    result = run_compile(root, full=args.full, only=only, sample=args.sample)
     if result.changed:
         _print_compiled(result)
     else:
         print(f"fresh — nothing to do (seq {result.seq})")
+    _print_t3_summary(result)
     _print_warnings(result)
 
     if args.watch:
@@ -247,8 +255,10 @@ def main(argv: list[str] | None = None) -> int:
     p_compile.add_argument("--full", action="store_true", help="ignore the manifest, rebuild all")
     p_compile.add_argument("--check-fresh", action="store_true",
                            help="verify freshness without writing (exit 1 when stale)")
-    p_compile.add_argument("--only", choices=("t1", "t2"), default=None,
-                           help="compile a single tier (t2 reuses the compiled docs substrate)")
+    p_compile.add_argument("--only", choices=("t1", "t2", "t3"), default=None,
+                           help="compile a single tier (t2/t3 reuse the compiled docs substrate)")
+    p_compile.add_argument("--sample", type=int, default=None, metavar="N",
+                           help="T3 preview: extract only the first N docs' chunks and summarize")
     p_compile.add_argument("--watch", action="store_true",
                            help="stay running and recompile on changes")
     p_compile.set_defaults(func=_cmd_compile)

@@ -3,3 +3,7 @@
 # it deep-merges over this one and stays out of git.
 # Delete .brainpick/ any time; `brainpick compile` rebuilds everything.
 spec = "0.1"
+
+[modules]
+graph = "auto"   # T3: extract the entity graph when a chat model is configured
+                 # (the extraction endpoint lives in brainpick.local.toml, never here)

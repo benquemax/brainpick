@@ -29,8 +29,15 @@ vectors = [
 vectors-local = [
     "fastembed>=0.7",
 ]
+graph = [
+    # T3 entity extraction (spec/40). Core only — no RagAnything/multimodal
+    # extras, no offline-llm/offline-storage: the default Json/NetworkX/nano
+    # storages need only these, and extraction talks to [models.extraction]
+    # over HTTP. Fenced behind this extra so T1/T2 never pull it.
+    "lightrag-hku>=1.5,<2",
+]
 all = [
-    "brainpick[vectors,vectors-local]",
+    "brainpick[vectors,vectors-local,graph]",
 ]
 
 [project.scripts]
@@ -47,3 +54,7 @@ line-length = 110
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The fast suite (pre-commit gate, default run) excludes live-LLM integration
+# tests. Run them explicitly: `pytest -m integration` (needs stabilitee + [graph]).
+addopts = "-m 'not integration'"
+markers = ["integration: exercises a live model endpoint (slow, opt-in)"]

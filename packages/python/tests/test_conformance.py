@@ -160,6 +160,50 @@ def test_kg_query(case, tmp_path):
     assert got == set(case["expect_paths"])
 
 
+# The T3 EXTRACTOR is Python-only (Node delegates, spec/40) and non-deterministic
+# when a model writes it — so it has no cases.yaml twin and is never golden-tested
+# against the LLM. But the export FORMAT from the deterministic MockKGBackend IS
+# fixed: this pins the canonical entities/relations bytes a mock-driven
+# `compile --only t3` produces, independent of the hand-authored kg-query fixture.
+_MOCK_ENTITY_IDS = ["atolli", "aurinko", "komeetta", "kuu", "laguuni", "maa",
+                    "planeetat", "yksinainen"]
+# (src, dst) with the mock's chosen direction, in canonical line order (sorted by pair).
+_MOCK_RELATIONS = [
+    ("atolli", "laguuni"), ("aurinko", "planeetat"), ("komeetta", "aurinko"),
+    ("kuu", "maa"), ("yksinainen", "aurinko"),
+]
+
+
+def test_t3_mock_export_is_canonical_and_deterministic(tmp_path):
+    root = _bundle_copy(tmp_path, "kotiaurinko")
+    (root / "brainpick.toml").write_text(
+        '[modules]\ngraph = "auto"\n[models.extraction]\nkind = "mock"\n', encoding="utf-8",
+    )
+    run_compile(root)
+    t3 = root / ".brainpick" / "t3"
+
+    entities = [json.loads(line)
+                for line in (t3 / "entities.jsonl").read_text(encoding="utf-8").splitlines()]
+    relations = [json.loads(line)
+                 for line in (t3 / "relations.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    # canonical: sorted by id / (src,dst), every field present, ids normalized
+    assert [e["id"] for e in entities] == _MOCK_ENTITY_IDS
+    for entity in entities:
+        assert set(entity) == {"description", "id", "name", "source_docs", "type"}
+        assert entity["source_docs"] == sorted(entity["source_docs"])
+    assert [(r["src"], r["dst"]) for r in relations] == _MOCK_RELATIONS  # direction + line order
+    for relation in relations:
+        assert set(relation) == {"description", "dst", "keywords", "source_docs", "src", "weight"}
+        assert 0.0 <= relation["weight"] <= 1.0
+
+    # the export bytes are canonical JSONL (spec/10) and byte-stable across recompiles
+    assert (t3 / "entities.jsonl").read_text(encoding="utf-8") == canonical_jsonl(entities)
+    snapshot = (t3 / "entities.jsonl").read_bytes(), (t3 / "relations.jsonl").read_bytes()
+    assert run_compile(root).changed is False
+    assert ((t3 / "entities.jsonl").read_bytes(), (t3 / "relations.jsonl").read_bytes()) == snapshot
+
+
 @pytest.mark.parametrize("case", _cases("delta"), ids=_case_ids("delta"))
 def test_delta_scenario(case, tmp_path):
     root = _bundle_copy(tmp_path, case["bundle"])

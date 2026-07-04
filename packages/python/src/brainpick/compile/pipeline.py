@@ -17,7 +17,8 @@ from brainpick.compile.t1 import (
     render_index_block,
     render_report_block,
 )
-from brainpick.compile.t2 import run_t2_stage, t2_gate
+from brainpick.compile.t2 import build_chunks, run_t2_stage, t2_gate
+from brainpick.compile.t3 import run_t3_stage, t3_gate
 from brainpick.config import Config, load_config
 from brainpick.core.bundle import scan
 from brainpick.core.canonical import canonical_json, canonical_jsonl
@@ -35,6 +36,7 @@ class CompileResult:
     stats: dict
     delta: dict | None
     warnings: list[str] = field(default_factory=list)
+    t3_summary: dict | None = None  # --sample preview counts, printed by the CLI
 
 
 @dataclass
@@ -95,14 +97,17 @@ def run_compile(
     full: bool = False,
     only: tuple[str, ...] | None = None,
     config: Config | None = None,
+    sample: int | None = None,
 ) -> CompileResult:
     root = Path(root)
     bp = root / ".brainpick"
     if config is None:
         config = load_config(root)
-    wanted = set(only) if only else {"t1", "t2"}
+    wanted = set(only) if only else {"t1", "t2", "t3"}
     if wanted == {"t2"}:
         return _compile_t2_only(root, bp, config)
+    if wanted == {"t3"}:
+        return _compile_t3_only(root, bp, config, full=full, sample=sample)
 
     warnings: list[str] = []
     docs = scan(root)
@@ -149,14 +154,37 @@ def run_compile(
         if instruction and old_tiers.get("t2") != "off":
             warnings.append(instruction)  # said once: the next manifest records t2 = off
 
-    tiers = {"t1": "fresh", "t2": t2_status, "t3": "off"}
+    # T3 (spec/40): extraction runs last and never blocks T1/T2. Gated by
+    # [modules] graph; like T2 a failure degrades the tier, never the compile.
+    t3_enabled, t3_instruction = t3_gate(config)
+    t3_summary = None
+    if "t3" not in wanted:
+        t3_changed = False
+        if not t3_enabled:
+            t3_status = "off"
+        elif not t1_changed and old_tiers.get("t3") == "fresh":
+            t3_status = "fresh"
+        else:
+            t3_status = "stale"  # --only t1 skipped T3 while its chunk inputs moved
+    elif t3_enabled:
+        outcome = run_t3_stage(bp, records, build_chunks(records), config, full=full, sample=sample)
+        t3_status, t3_changed = outcome.status, outcome.changed
+        t3_summary = outcome.summary
+        if outcome.warning:
+            warnings.append(outcome.warning)
+    else:
+        t3_status, t3_changed = "off", False
+        if t3_instruction and old_tiers.get("t3") != "off":
+            warnings.append(t3_instruction)  # said once: the next manifest records t3 = off
+
+    tiers = {"t1": "fresh", "t2": t2_status, "t3": t3_status}
     # The opt-in AGENTS.md brain report rides along on every compile so it stays
     # true even when nothing else changed (e.g. the markers were just installed).
     _refresh_report(root, graph, tiers)
-    artifacts_changed = t1_changed or t2_changed
+    artifacts_changed = t1_changed or t2_changed or t3_changed
     unchanged = not artifacts_changed and old_manifest is not None and old_tiers == tiers
     if unchanged and not full:
-        return CompileResult(False, old_manifest["seq"], graph["stats"], None, warnings)
+        return CompileResult(False, old_manifest["seq"], graph["stats"], None, warnings, t3_summary)
 
     _atomic_write(bp / "t1" / "graph.json", graph_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "docs.jsonl", docs_text.encode("utf-8"))
@@ -192,11 +220,11 @@ def run_compile(
                 p for p in old_files.keys() | new_files.keys()
                 if old_files.get(p, {}).get("sha256") != new_files.get(p, {}).get("sha256")
             ),
-            "tier": "t1" if t1_changed else "t2",
+            "tier": "t1" if t1_changed else ("t2" if t2_changed else "t3"),
         }
         delta["seq"] = seq
 
-    return CompileResult(not unchanged, seq, graph["stats"], delta, warnings)
+    return CompileResult(not unchanged, seq, graph["stats"], delta, warnings, t3_summary)
 
 
 def _compile_t2_only(root: Path, bp: Path, config: Config) -> CompileResult:
@@ -237,6 +265,51 @@ def _compile_t2_only(root: Path, bp: Path, config: Config) -> CompileResult:
     manifest["generator"] = _generator()
     _atomic_write(bp / "manifest.json", canonical_json(manifest).encode("utf-8"))
     return CompileResult(True, manifest["seq"], stats, None, warnings)
+
+
+def _compile_t3_only(
+    root: Path, bp: Path, config: Config, full: bool = False, sample: int | None = None,
+) -> CompileResult:
+    """`--only t3`: (re)extract the entity graph from the already-compiled docs.
+
+    Chunks derive from t1/docs.jsonl (spec/40 reuses the T2 chunker), so T1/T2
+    artifacts and the file map stay exactly as the last compile left them. A
+    `--sample` preview reports what it found without a full pass."""
+    old_manifest_text = _read_or_none(bp / "manifest.json")
+    docs_text = _read_or_none(bp / "t1" / "docs.jsonl")
+    graph_text = _read_or_none(bp / "t1" / "graph.json")
+    if old_manifest_text is None or docs_text is None or graph_text is None:
+        return CompileResult(False, 0, {}, None, ["nothing compiled yet — run: brainpick compile"])
+    old_manifest = json.loads(old_manifest_text)
+    stats = json.loads(graph_text).get("stats", {})
+    records = [json.loads(line) for line in docs_text.splitlines() if line]
+
+    warnings: list[str] = []
+    enabled, instruction = t3_gate(config)
+    t3_summary = None
+    if enabled:
+        outcome = run_t3_stage(bp, records, build_chunks(records), config, full=full, sample=sample)
+        t3_status, t3_changed = outcome.status, outcome.changed
+        t3_summary = outcome.summary
+        if outcome.warning:
+            warnings.append(outcome.warning)
+    else:
+        t3_status, t3_changed = "off", False
+        if instruction and old_manifest.get("tiers", {}).get("t3") != "off":
+            warnings.append(instruction)
+
+    tiers = dict(old_manifest.get("tiers", {}))
+    tiers["t3"] = t3_status
+    if not t3_changed and tiers == old_manifest.get("tiers"):
+        return CompileResult(False, old_manifest["seq"], stats, None, warnings, t3_summary)
+
+    manifest = dict(old_manifest)
+    manifest["tiers"] = tiers
+    manifest["seq"] = old_manifest["seq"] + (1 if t3_changed else 0)
+    manifest["compiled_at"] = _now()
+    manifest["generator"] = _generator()
+    _atomic_write(bp / "manifest.json", canonical_json(manifest).encode("utf-8"))
+    return CompileResult(True, manifest["seq"], stats, None, warnings, t3_summary)
 
 
 def check_fresh(root: str | Path) -> Freshness:

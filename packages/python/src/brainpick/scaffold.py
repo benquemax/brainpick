@@ -477,6 +477,26 @@ def run_doctor(
         emit("○", f"vectors: configured ({embedding.kind}) but t2 is {t2_state}",
              f"run: brainpick compile --root {root}")
 
+    # T3 graph: extractor extra importable, endpoint configured, tier state (spec/40) —
+    # optional, never ✗. Extraction is Python-only; the Node sibling delegates here.
+    from brainpick.kgadapt.lightrag_backend import lightrag_available
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        extraction = load_config(root).models.extraction
+    t3_state = tiers.get("t3", "off")
+    if not extraction.kind:
+        emit("○", "graph: no [models.extraction] configured — brainpick extracts the entity"
+                  " graph once a chat model is set in brainpick.local.toml")
+    elif extraction.kind != "mock" and not lightrag_available():
+        emit("○", "graph: LightRAG missing — pip install 'brainpick[graph]'")
+    elif t3_state == "fresh":
+        model = f" · {extraction.model}" if extraction.model else ""
+        emit("✓", f"graph: t3 fresh — {extraction.kind}{model}")
+    else:
+        emit("○", f"graph: configured ({extraction.kind}) but t3 is {t3_state}",
+             f"run: brainpick compile --only t3 --root {root}")
+
     # backend probes
     results = probe_backends(env) if probes is None else probes
     for label, backend in results:

@@ -2,6 +2,9 @@
 
 ## 2026-07-04
 
+- Updated: T3 extraction landed — LightRAG behind the KGBackend adapter turns the
+  prose into an entity graph, normalized into the neutral export; Python extracts,
+  both engines read.
 - Updated: T3 query is live in both engines — entity-layer neighbors, mode=graph
   search, and the entity graph over the API, all reading the neutral export.
 - Updated: the cosmos now fits the phone — GPU-tier node budgets with
@@ -14,6 +17,7 @@
 - Updated: the cosmos gained a NAVIGATOR — a live directory tree for when you
   know exactly what you are looking for, desktop panel and mobile drawer
   alike.
+- Updated: the cosmos can see the second layer — toggle to the extracted entity graph or overlay it on the links, distinct hues, click an entity to reach its sources.
 
 ## 2026-07-03
 
