@@ -2,6 +2,8 @@
 
 ## 2026-07-04
 
+- Updated: the brain fills its volume — nodes spread through the 3D form (no more flat-sheet look) and it turns slowly on its axis like a galaxy.
+- Updated: the hologram got its anatomy and its manners — the form reads as a real brain (elongated front-to-back, tapered occipital, temporal lobes, a subtle top fissure — no more two-cheeks look); clicking a dot in the 3D brain opens its article again; the return to the flat cosmos eases instead of snapping; and a cosmos drag pans straight.
 - Updated: the brain is real — the cosmos morphs into a floating holographic brain, procedural SDF form, topic clusters gathered into lobes, spun and pinched with your fingers.
 - Updated: T3 extraction landed — LightRAG behind the KGBackend adapter turns the
   prose into an entity graph, normalized into the neutral export; Python extracts,

@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url';
 import {
   BASE_SEQ,
   applyDeltaToGraph,
+  bigGraph,
   entityGraph,
   entityNeighbors,
   initialGraph,
@@ -27,6 +28,9 @@ import {
 const RING_LIMIT = 256;
 // T3 is fresh in the mock so the entity/overlay layers are developable offline.
 const TIERS = { t1: 'fresh', t2: 'off', t3: 'fresh' };
+// MOCK_BIG serves a 66-doc synthetic brain instead of the 10-doc kotiaurinko —
+// used to make the holographic brain's VOLUME obvious in manual/screenshot review.
+const START_GRAPH = process.env.MOCK_BIG ? bigGraph() : initialGraph();
 
 function sseFrame(event, data, id) {
   let out = `event: ${event}\n`;
@@ -37,7 +41,7 @@ function sseFrame(event, data, id) {
 
 export function createMockServer({ stepMs = 6000 } = {}) {
   let seq = BASE_SEQ;
-  let graph = initialGraph();
+  let graph = START_GRAPH;
   let step = 0;
   /** @type {{seq: number, delta: object}[]} */
   const ring = [];
@@ -54,6 +58,9 @@ export function createMockServer({ stepMs = 6000 } = {}) {
   }
 
   function tickMutation() {
+    // The scripted cycle mutates kotiaurinko nodes; skip it for the big synthetic
+    // brain (MOCK_BIG), which has none of them — the brain simply stays static.
+    if (!graph.nodes.some((n) => n.id === 'kuu.md')) return;
     broadcast(sseFrame('compile.status', { seq, state: 'running', tier: 't1' }));
     setTimeout(() => {
       const delta = nextDelta(graph, seq + 1, step);

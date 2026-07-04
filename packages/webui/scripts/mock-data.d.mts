@@ -4,6 +4,7 @@ export declare const BASE_SEQ: number;
 export declare const STEP_COUNT: number;
 
 export declare function initialGraph(): GraphPayload;
+export declare function bigGraph(clusters?: number, per?: number): GraphPayload;
 export declare function nextDelta(graph: GraphPayload, seq: number, stepIndex: number): GraphDelta;
 export declare function applyDeltaToGraph(graph: GraphPayload, delta: GraphDelta): GraphPayload;
 

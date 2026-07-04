@@ -12,47 +12,53 @@ import * as THREE from 'three';
 import type { CameraCommand } from '../state/store';
 import type { GraphRuntime } from './runtime';
 
+/**
+ * 2D presentation: every gesture pans or zooms; nothing orbits. This must be
+ * RE-APPLIED whenever drei hands us a fresh controls instance — drei's
+ * CameraControls does `useMemo(() => new Impl(camera), [camera])`, so it rebuilds
+ * the controls (back at its default left=ROTATE) every time the render camera
+ * swaps, i.e. on every brain enter/exit. Without re-applying, a cosmos drag would
+ * ROTATE the flat map instead of panning (the "drag-rotate glitch").
+ */
+function applyCosmosActions(controls: CameraControlsImpl): void {
+  const A = CameraControlsImpl.ACTION;
+  controls.mouseButtons.left = A.TRUCK;
+  controls.mouseButtons.right = A.TRUCK;
+  controls.mouseButtons.middle = A.ZOOM;
+  controls.mouseButtons.wheel = A.ZOOM;
+  controls.touches.one = A.TOUCH_TRUCK;
+  controls.touches.two = A.TOUCH_ZOOM_TRUCK;
+  controls.touches.three = A.TOUCH_TRUCK;
+  controls.dollyToCursor = true;
+  controls.draggingSmoothTime = 0.05;
+  controls.smoothTime = 0.3;
+}
+
 export function CameraRig({ runtime }: { runtime: GraphRuntime }) {
   const controlsRef = useRef<CameraControlsImpl | null>(null);
+  const configured = useRef<CameraControlsImpl | null>(null);
   const fitted = useRef(false);
   const size = useThree((s) => s.size);
   // The overview command needs the viewport size outside the render cycle.
   const sizeRef = useRef(size);
   sizeRef.current = size;
 
-  useEffect(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-    const A = CameraControlsImpl.ACTION;
-    // 2D presentation: every gesture pans or zooms; nothing orbits.
-    controls.mouseButtons.left = A.TRUCK;
-    controls.mouseButtons.right = A.TRUCK;
-    controls.mouseButtons.middle = A.ZOOM;
-    controls.mouseButtons.wheel = A.ZOOM;
-    controls.touches.one = A.TOUCH_TRUCK;
-    controls.touches.two = A.TOUCH_ZOOM_TRUCK;
-    controls.touches.three = A.TOUCH_TRUCK;
-    controls.dollyToCursor = true;
-    controls.draggingSmoothTime = 0.05;
-    controls.smoothTime = 0.3;
-    controls.enabled = !runtime.store.getState().morphActive;
-  }, [runtime]);
-
-  // While the brain morph is on screen the perspective BrainCameraRig owns the
-  // gestures — disable the ortho cosmos controls so they are not trucked around
-  // underneath it (the cosmos pose is preserved for the return).
-  useEffect(() => {
-    return runtime.store.subscribe((state, prev) => {
-      if (state.morphActive === prev.morphActive) return;
-      const controls = controlsRef.current;
-      if (controls) controls.enabled = !state.morphActive;
-    });
-  }, [runtime]);
-
-  // Fit the cosmos once the first simulated positions arrive.
+  // Fit the cosmos once the first simulated positions arrive — and, first, keep
+  // the pan/zoom action map and the enabled flag correct on whatever controls
+  // instance drei currently holds (it rebuilds on each render-camera swap).
   useFrame(() => {
     const controls = controlsRef.current;
-    if (!controls || fitted.current) return;
+    if (!controls) return;
+    if (configured.current !== controls) {
+      configured.current = controls; // a fresh (or first) instance → (re)configure it
+      applyCosmosActions(controls);
+    }
+    // While the brain morph is on screen the perspective BrainCameraRig owns the
+    // gestures — disable the ortho controls so they are not trucked underneath it
+    // (the cosmos pose is preserved for the return).
+    controls.enabled = !runtime.store.getState().morphActive;
+
+    if (fitted.current) return;
     if (!runtime.firstPositionsSeen || runtime.liveCount === 0) return;
     fitted.current = true;
     const r = Math.max(40, runtime.boundsRadius() * 1.3);

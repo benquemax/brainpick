@@ -117,14 +117,25 @@ export const BRAIN = {
   layoutRepulsion: 0.012,
   /** Radius within which nodes repel each other (natural units). */
   layoutRepelRadius: 0.62,
-  /** Link spring: pull linked nodes toward this rest length (natural units). */
-  layoutLinkRest: 0.22,
-  layoutLinkStrength: 0.06,
-  /** Gentle pull toward the node's lobe centroid — a BIAS, so clusters read as
-   * lobes without collapsing to a point (repulsion still fills the volume). */
-  layoutLobePull: 0.02,
-  /** Seed jitter around a lobe centroid (natural units) — a wide initial spread. */
-  layoutSeedJitter: 0.34,
+  /** Link spring: pull linked nodes toward this rest length (natural units).
+   * Deliberately gentle — a stiff ring of links relaxes to a FLAT polygon, so
+   * the spring must not overpower the volumetric seed + home anchor below. */
+  layoutLinkRest: 0.24,
+  layoutLinkStrength: 0.04,
+  /** VOLUMETRIC SEED (the anti-flat-sheet fix). Each node is rejection-sampled
+   * to a real 3D point INSIDE the SDF within a SPHERE around its (core-biased)
+   * lobe centroid — not dropped on the centroid point. The sphere radius (natural
+   * units) is `min + gain × fill`, where `fill`→1 when there are FEW communities
+   * so a lone cluster scatters through a fat central ball of the brain volume (a
+   * 10-node graph still reads volumetric), and `fill`→0 when the 7 anatomical
+   * lobes already span 3D and each keeps a tight, crisp sub-volume. */
+  layoutSeedSpreadMin: 0.3,
+  layoutSeedSpreadGain: 0.36,
+  /** Home anchor: a gentle spring pulling each node back toward its own
+   * volumetric seed (NOT the shared centroid). This preserves the 3D spread the
+   * seeding created — repulsion + links refine spacing without collapsing the
+   * cloud into a plane or a point. Replaces the old collapse-to-centroid pull. */
+  layoutHomePull: 0.055,
   /** Keep points this far inside the surface when the containment force bites. */
   layoutContainMargin: 0.06,
 
@@ -166,9 +177,23 @@ export const BRAIN_CAMERA = {
   distanceFactor: 2.05,
   minDistanceFactor: 1.05,
   maxDistanceFactor: 6.0,
-  /** Idle auto-rotation (radians/sec) and how long after a gesture it resumes. */
+  /**
+   * The TURNTABLE / "Milky Way" idle spin. `autoRotateSpeed` (rad/sec) advances
+   * the AZIMUTH around the vertical (Y) axis; 0.16 ≈ a full revolution every ~39s
+   * — a slow galaxy turn. It resumes `autoRotateResumeMs` after a gesture and is
+   * active immediately on entering brain mode.
+   */
   autoRotateSpeed: 0.16,
   autoRotateResumeMs: 2600,
+  /**
+   * The starting (and reference) orbit orientation, in camera-controls spherical
+   * coords. The polar angle is a gentle DOWNWARD tilt — well off the equator — so
+   * the turntable spin reveals the brain's depth (front/back, top) instead of
+   * sweeping a flat disc edge-on. startPolarAngle ≈ 1.15 rad ≈ 66° from vertical
+   * (≈24° looking down); startAzimuthAngle ≈ 0.52 rad ≈ 30° for a 3/4 view.
+   */
+  startAzimuthAngle: 0.52,
+  startPolarAngle: 1.15,
   /** Smooth-time (sec) for the camera-controls damping. */
   smoothTime: 0.28,
 } as const;

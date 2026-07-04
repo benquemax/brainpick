@@ -28,6 +28,8 @@ declare global {
       orbited: boolean;
       brainAzimuth: number;
       brainPositions: Float32Array;
+      /** Set while brain mode is mounted: project a node to client pixels. */
+      projectNodeToScreen: ((i: number) => { x: number; y: number } | null) | null;
     };
   }
 }
@@ -542,6 +544,77 @@ test.describe('holographic brain', () => {
     // and back to cosmos restores the 2D view
     await page.getByRole('button', { name: 'cosmos' }).click();
     await page.waitForFunction(() => window.__bp_store.getState().mode === 'cosmos' && window.__bp_runtime.morph < 0.05);
+  });
+
+  test('clicking a node in brain mode opens its article (3D picking, no regression)', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return window.__bp_store.getState().mode === 'brain' && rt.brainReady && rt.morph > 0.9 && !!rt.projectNodeToScreen;
+    });
+
+    // Find a real doc node whose projected dot sits comfortably on screen, and
+    // click it — the 3D picker must select it and open the doc panel.
+    const target = await page.evaluate(() => {
+      const rt = window.__bp_runtime;
+      const proj = rt.projectNodeToScreen!;
+      for (let i = 0; i < rt.ids.length; i++) {
+        const id = rt.ids[i]!;
+        if (!id.endsWith('.md')) continue;
+        const p = proj(i);
+        if (!p) continue;
+        if (p.x > 90 && p.y > 90 && p.x < window.innerWidth - 90 && p.y < window.innerHeight - 140) {
+          return { id, x: Math.round(p.x), y: Math.round(p.y) };
+        }
+      }
+      return null;
+    });
+    expect(target, 'a doc dot was on screen to click').not.toBeNull();
+
+    await page.mouse.click(target!.x, target!.y);
+    // A dot was selected (front-most under the cursor) and its article opened.
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      return s.selection !== null && s.selection.endsWith('.md');
+    });
+    await expect(page.locator('.doc-panel')).toBeVisible();
+    await expect(page.locator('.doc-panel h2')).toBeVisible();
+  });
+
+  test('the brain turns on its own axis like a galaxy, and a gesture pauses the spin', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return window.__bp_store.getState().mode === 'brain' && rt.brainReady && rt.morph > 0.9;
+    });
+
+    // The idle turntable advances the azimuth WITHOUT any interaction — active the
+    // moment we enter brain mode (it is a movie shot, not a still).
+    const a0 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
+    await page.waitForFunction((prev) => Math.abs(window.__bp_runtime.brainAzimuth - prev) > 0.05, a0);
+
+    // A drag pauses the spin: within the resume window the azimuth barely moves
+    // (the idle spin would advance ~0.14 rad over the same ~0.9 s).
+    const box = await page.locator('canvas').boundingBox();
+    if (!box) throw new Error('canvas has no box');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 8; i++) await page.mouse.move(cx + i * 12, cy - i * 2);
+    await page.mouse.up();
+    await page.waitForFunction(() => window.__bp_runtime.orbited === true);
+    await page.waitForTimeout(700); // let the drag's damping settle, still inside the pause window
+    const b0 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
+    await page.waitForTimeout(900);
+    const b1 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
+    expect(Math.abs(b1 - b0)).toBeLessThan(0.03); // paused by the gesture
   });
 });
 

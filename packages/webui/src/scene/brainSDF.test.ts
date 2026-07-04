@@ -86,6 +86,43 @@ describe('brainSDF hemispheric symmetry', () => {
   });
 });
 
+describe('brainSDF anatomical proportions (reads as a brain, not two cheeks)', () => {
+  /** Largest reach along +axis from the centre where the point is still inside. */
+  const reach = (axis: 'x' | 'z'): number => {
+    let last = 0;
+    for (let t = 0; t <= 1.3; t += 0.01) {
+      const inside = axis === 'x' ? sdf(t, 0.1, 0) < 0 : sdf(0, 0.1, t) < 0;
+      if (inside) last = t;
+    }
+    return last;
+  };
+
+  it('is ELONGATED antero-posterior — longer front-to-back than it is wide', () => {
+    const front = reach('z');
+    const side = reach('x');
+    expect(front).toBeGreaterThan(side * 1.15); // clearly longer in z than in x
+  });
+
+  /** Largest lateral (+x) reach at a given height/depth. */
+  const lateralReach = (y: number, z: number): number => {
+    let last = 0;
+    for (let x = 0; x <= 1.0; x += 0.01) if (sdf(x, y, z) < 0) last = x;
+    return last;
+  };
+
+  it('has TEMPORAL lobes bulging low on the sides (widest DOWN low, not up top)', () => {
+    const low = lateralReach(-0.16, 0.1); // temporal-lobe height
+    const high = lateralReach(0.46, 0.1); // up near the crown
+    expect(low).toBeGreaterThan(high); // the sides bulge out lower, like temporal lobes
+  });
+
+  it('TAPERS toward the occipital — the back is narrower than the middle', () => {
+    // 0.5 out to the side is inside near the middle but outside at the back pole.
+    expect(sdf(0.5, 0.1, 0.1)).toBeLessThan(0); // wide through the middle
+    expect(sdf(0.5, 0.1, -0.62)).toBeGreaterThan(0); // pinched at the back
+  });
+});
+
 describe('brainSDF gradient', () => {
   it('returns a unit outward normal that points away from the interior', () => {
     // Just outside the right hemisphere at +x, the normal should point +x-ish.

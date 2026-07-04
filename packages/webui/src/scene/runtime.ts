@@ -99,6 +99,12 @@ export class GraphRuntime {
   /** e2e/debug: the orbit camera's azimuth, and whether it has been dragged. */
   brainAzimuth = 0;
   orbited = false;
+  /**
+   * e2e/debug: project a live node's CURRENT (morphed) 3D position to client
+   * pixels, or null if off-screen. Installed by BrainCameraRig while brain mode
+   * is mounted (it owns the perspective camera); null in the flat cosmos.
+   */
+  projectNodeToScreen: ((i: number) => { x: number; y: number } | null) | null = null;
   private brainEpoch = -1;
   private brainCount = -1;
   private lastMode: ViewMode = 'cosmos';

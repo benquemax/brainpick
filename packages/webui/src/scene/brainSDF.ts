@@ -6,14 +6,19 @@
  * right-handed natural-unit space (roughly a unit brain):
  *   x = left(−)/right(+), y = inferior(−)/superior(+), z = posterior(−)/anterior(+)
  *
- *   - two cerebral hemispheres: ellipsoids offset ±x, overlapping at the midline
- *     so the smooth union leaves a longitudinal-fissure groove between them;
- *   - a cerebellum: a wider, flatter ellipsoid low and to the back;
- *   - a brain stem: a short capsule descending from the centre.
+ * It is shaped to read as a BRAIN, not two round cheeks:
+ *   - the cerebrum is ELONGATED antero-posterior (longer front-to-back than wide),
+ *     a fuller frontal bulge tapering to a rounded occipital at the back;
+ *   - two hemispheres, only modestly offset and smooth-unioned into one body, with
+ *     a SUBTLE longitudinal fissure carved as a shallow groove along the top only
+ *     (not a deep midline cleft);
+ *   - temporal lobes bulging lower on the sides;
+ *   - a flatter, tucked underside (the lower half is compressed, not a round ball);
+ *   - a cerebellum tucked under-and-back, and a brain stem descending below.
  *
- * `sdf` is negative inside, positive outside. It is an approximate distance
- * (the ellipsoid term is iq's bound, not exact), which is all the containment
- * force and the shell sampler need — sign is exact, the gradient points outward.
+ * `sdf` is negative inside, positive outside. It is an approximate distance (the
+ * ellipsoid term is iq's bound, not exact), which is all the containment force and
+ * the shell sampler need — the sign is exact and the gradient points outward.
  */
 import { BRAIN } from './tuning';
 
@@ -27,7 +32,7 @@ function sdEllipsoid(px: number, py: number, pz: number, rx: number, ry: number,
   return (k0 * (k0 - 1)) / k1;
 }
 
-/** Distance to a capsule (line segment a→b, radius r) — the brain stem. */
+/** Distance to a capsule (line segment a→b, radius r) — the brain stem / fissure tube. */
 function sdCapsule(
   px: number, py: number, pz: number,
   ax: number, ay: number, az: number,
@@ -48,21 +53,62 @@ function smin(a: number, b: number, k: number): number {
   return b + h * (a - b) - k * h * (1 - h);
 }
 
-/** Two hemispheres, offset ±x and overlapping so the union grooves at the midline. */
-const HEMI_OFFSET_X = 0.4;
-const HEMI = { rx: 0.6, ry: 0.72, rz: 1.0, cy: 0.05 } as const;
-const CEREBELLUM = { cx: 0, cy: -0.56, cz: -0.72, rx: 0.54, ry: 0.34, rz: 0.44 } as const;
-const STEM = { ax: 0, ay: -0.28, az: -0.22, bx: 0, by: -0.94, bz: -0.06, r: 0.13 } as const;
+/** Smooth-max — the dual of smin; used to carve the fissure (smooth subtraction). */
+function smax(a: number, b: number, k: number): number {
+  return -smin(-a, -b, k);
+}
 
-const K_HEMI = 0.14; // hemisphere↔hemisphere: keeps the fissure a groove, not a crease
+/** Hermite smoothstep in [edge0, edge1]. */
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+const HEMI_OFFSET_X = 0.19; // modest — one brain with a hint of midline, not two cheeks
+const HEMI = { rx: 0.46, ry: 0.62, rz: 0.95, cy: 0.12, cz: 0.06 } as const;
+const TEMPORAL = { dx: 0.42, cy: -0.16, cz: 0.08, rx: 0.26, ry: 0.3, rz: 0.52 } as const;
+const CEREBELLUM = { cx: 0, cy: -0.52, cz: -0.62, rx: 0.5, ry: 0.3, rz: 0.42 } as const;
+const STEM = { ax: 0, ay: -0.26, az: -0.16, bx: 0, by: -0.92, bz: -0.02, r: 0.12 } as const;
+// The longitudinal fissure: a thin tube skimming ONLY the very top midline,
+// subtracted — a shallow superior groove, well above the parietal seed at y≈0.44.
+const FISSURE = { cy: 0.62, az: -0.5, bz: 0.66, r: 0.11 } as const;
+
+const K_HEMI = 0.16; // hemisphere↔hemisphere: a soft seam, not a crease
+const K_TEMPORAL = 0.14; // cerebrum↔temporal lobes
 const K_STEM = 0.1; // cerebellum↔stem
 const K_JOIN = 0.13; // cerebrum↔(cerebellum+stem)
+const K_FISSURE = 0.06; // shallow, smooth groove
+
+/** One cerebral hemisphere, tapered narrower toward the occipital (back). */
+function hemisphere(x: number, y: number, z: number, side: number): number {
+  const px = x - side * HEMI_OFFSET_X;
+  const py = y - HEMI.cy;
+  const pz = z - HEMI.cz;
+  // 0 at the occipital pole (−z) → 1 at the frontal pole (+z): the back is slimmer,
+  // the front stays full, so the body reads bulbous-front / tapered-back.
+  const t = smoothstep(-0.9, 0.24, z);
+  const rx = HEMI.rx * (0.72 + 0.28 * t);
+  const ry = HEMI.ry * (0.9 + 0.1 * t);
+  return sdEllipsoid(px, py, pz, rx, ry, HEMI.rz);
+}
 
 /** Signed distance to the brain, in natural units. Negative inside. */
 export function sdf(x: number, y: number, z: number): number {
-  const left = sdEllipsoid(x + HEMI_OFFSET_X, y - HEMI.cy, z, HEMI.rx, HEMI.ry, HEMI.rz);
-  const right = sdEllipsoid(x - HEMI_OFFSET_X, y - HEMI.cy, z, HEMI.rx, HEMI.ry, HEMI.rz);
-  const cerebrum = smin(left, right, K_HEMI);
+  // Flatten/tuck the underside: gently lift the sampled y below the centre so the
+  // bottom surface reads flatter than a round ball (the cerebrum sits on a base).
+  const yc = y < HEMI.cy ? HEMI.cy + (y - HEMI.cy) * 0.82 : y;
+
+  let cerebrum = smin(hemisphere(x, yc, z, -1), hemisphere(x, yc, z, 1), K_HEMI);
+
+  // Temporal lobes: bulges low on each side, toward the front.
+  const tempL = sdEllipsoid(x + TEMPORAL.dx, yc - TEMPORAL.cy, z - TEMPORAL.cz, TEMPORAL.rx, TEMPORAL.ry, TEMPORAL.rz);
+  const tempR = sdEllipsoid(x - TEMPORAL.dx, yc - TEMPORAL.cy, z - TEMPORAL.cz, TEMPORAL.rx, TEMPORAL.ry, TEMPORAL.rz);
+  cerebrum = smin(cerebrum, smin(tempL, tempR, K_TEMPORAL), K_TEMPORAL);
+
+  // Carve the longitudinal fissure — a shallow top-midline groove (smooth subtract).
+  const fissure = sdCapsule(x, y - FISSURE.cy, z, 0, 0, FISSURE.az, 0, 0, FISSURE.bz, FISSURE.r);
+  cerebrum = smax(cerebrum, -fissure, K_FISSURE);
+
   const cerebellum = sdEllipsoid(x - CEREBELLUM.cx, y - CEREBELLUM.cy, z - CEREBELLUM.cz, CEREBELLUM.rx, CEREBELLUM.ry, CEREBELLUM.rz);
   const stem = sdCapsule(x, y, z, STEM.ax, STEM.ay, STEM.az, STEM.bx, STEM.by, STEM.bz, STEM.r);
   const lower = smin(cerebellum, stem, K_STEM);
@@ -82,8 +128,8 @@ export function gradient(p: Vec3): Vec3 {
 
 /** An axis-aligned box that fully contains the brain (with margin for the smin bulge). */
 export const bounds = {
-  min: [-1.15, -1.2, -1.25] as Vec3,
-  max: [1.15, 0.92, 1.16] as Vec3,
+  min: [-0.85, -1.1, -1.12] as Vec3,
+  max: [0.85, 0.8, 1.05] as Vec3,
 } as const;
 
 /** True when a point lies inside (or on) the surface, within an optional tolerance. */

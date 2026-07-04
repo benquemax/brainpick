@@ -140,6 +140,61 @@ export function initialGraph() {
   };
 }
 
+/**
+ * A synthetic LARGER graph (66 docs in 6 directory clusters) used only to make
+ * the holographic brain's VOLUME obvious in screenshots / manual review — the
+ * 10-doc kotiaurinko brain is genuinely volumetric but small. Gated behind
+ * MOCK_BIG in the mock server so the default surface stays byte-identical.
+ *
+ * Deterministic (index arithmetic, no Math.random): each cluster is a ring so
+ * community detection resolves it to one lobe, plus a few cross-cluster bridges
+ * so the whole thing is one connected brain across all 6 → 7 lobes.
+ */
+export function bigGraph(clusters = 6, per = 11) {
+  const nodes = [];
+  const edges = [];
+  const names = ['cortex', 'limbic', 'stem', 'lobe', 'sulcus', 'gyrus', 'nucleus', 'tract'];
+  const clusterIds = [];
+  for (let c = 0; c < clusters; c++) {
+    const ids = [];
+    for (let k = 0; k < per; k++) {
+      const id = `${names[c % names.length]}/n${k}.md`;
+      ids.push(id);
+      nodes.push(node(id, `${names[c % names.length]} ${k}`, { tags: [names[c % names.length]], in: 0, out: 0 }));
+    }
+    clusterIds.push(ids);
+    // ring the cluster so it is one community
+    for (let k = 0; k < ids.length; k++) edges.push(edge(ids[k], ids[(k + 1) % ids.length], 'link'));
+    // a couple of chords thicken the lobe
+    for (let k = 0; k < ids.length; k += 3) edges.push(edge(ids[k], ids[(k + 2) % ids.length], 'link'));
+  }
+  // sparse bridges between consecutive clusters — connected, still 6 communities
+  for (let c = 0; c < clusters; c++) {
+    const a = clusterIds[c][0];
+    const b = clusterIds[(c + 1) % clusters][1];
+    edges.push(edge(a, b, 'bridge'));
+  }
+  // recompute in/out degree from the edge list
+  const deg = new Map(nodes.map((n) => [n.id, { in: 0, out: 0 }]));
+  for (const e of edges) {
+    deg.get(e.source).out += 1;
+    deg.get(e.target).in += 1;
+  }
+  for (const n of nodes) {
+    n.in = deg.get(n.id).in;
+    n.out = deg.get(n.id).out;
+  }
+  const sorted = [...nodes].sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    nodes: sorted,
+    edges: [...edges].sort(edgeSort),
+    ghosts: [],
+    islands: [],
+    stats: { docs: sorted.length, edges: edges.length, ghosts: 0, islands: 0, orphans: 0, tags: clusters },
+    tags: tagsFromNodes(sorted),
+  };
+}
+
 const findNode = (graph, id) => graph.nodes.find((n) => n.id === id);
 
 /**

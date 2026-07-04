@@ -15,8 +15,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import CameraControlsImpl from 'camera-controls';
 import { bounds } from './brainSDF';
+import { orbitStartPosition } from './brainCamera';
 import { BRAIN, BRAIN_CAMERA } from './tuning';
-import type { GraphRuntime } from './runtime';
+import { nodeStagger, type GraphRuntime } from './runtime';
 
 // camera-controls needs THREE installed once; full THREE is a safe superset of
 // the subset drei installs for the cosmos rig.
@@ -39,6 +40,7 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
   );
   const controlsRef = useRef<CameraControlsImpl | null>(null);
   const lastInteract = useRef(-Infinity);
+  const returning = useRef(false);
 
   useEffect(() => {
     const prevCamera = get().camera;
@@ -61,8 +63,10 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
     controls.draggingSmoothTime = BRAIN_CAMERA.smoothTime * 0.5;
     controls.minDistance = R * BRAIN_CAMERA.minDistanceFactor;
     controls.maxDistance = R * BRAIN_CAMERA.maxDistanceFactor;
-    // A gentle 3/4 starting pose looking at the origin.
-    void controls.setLookAt(dist * 0.32, dist * 0.16, dist, 0, 0, 0, false);
+    // A gentle 3/4 starting pose, tilted down off the equator so the idle spin
+    // reveals the brain's depth (shared spherical math with the spin, testable).
+    const [sx, sy, sz] = orbitStartPosition(dist, BRAIN_CAMERA.startAzimuthAngle, BRAIN_CAMERA.startPolarAngle);
+    void controls.setLookAt(sx, sy, sz, 0, 0, 0, false);
     controlsRef.current = controls;
 
     const touched = () => {
@@ -74,12 +78,30 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
 
     set({ camera }); // take over the render camera
 
+    // e2e/debug hook: project a node's CURRENT morphed position to client pixels
+    // (the same mix the sprite shader and the 3D picker use), so a test can tap a
+    // real dot in the hologram. Lives only while brain mode is mounted.
+    const wp = new THREE.Vector3();
+    runtime.projectNodeToScreen = (i: number) => {
+      const bp = runtime.brainPositions;
+      if (i < 0 || bp.length < (i + 1) * 3) return null;
+      const span = BRAIN.staggerSpan;
+      const m = Math.min(1, Math.max(0, (runtime.morph - nodeStagger(i) * span) / (1 - span)));
+      const cx = runtime.positions[i * 2] ?? 0;
+      const cy = runtime.positions[i * 2 + 1] ?? 0;
+      wp.set(cx + (bp[i * 3]! - cx) * m, cy + (bp[i * 3 + 1]! - cy) * m, bp[i * 3 + 2]! * m).project(camera);
+      if (wp.z >= 1) return null;
+      const rect = gl.domElement.getBoundingClientRect();
+      return { x: rect.left + (wp.x * 0.5 + 0.5) * rect.width, y: rect.top + (-wp.y * 0.5 + 0.5) * rect.height };
+    };
+
     return () => {
       controls.removeEventListener('controlstart', touched);
       controls.removeEventListener('control', touched);
       controls.disconnect();
       controls.dispose();
       controlsRef.current = null;
+      runtime.projectNodeToScreen = null;
       set({ camera: prevCamera }); // hand the ortho cosmos camera back
     };
     // Created once for the life of the mount; resize is handled separately.
@@ -96,10 +118,27 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
   useFrame((_, dt) => {
     const controls = controlsRef.current;
     if (!controls) return;
-    const idleMs = performance.now() - lastInteract.current;
-    if (idleMs > BRAIN_CAMERA.autoRotateResumeMs) {
-      // Slow idle spin — resumes only after the gesture-pause window.
-      controls.rotate(BRAIN_CAMERA.autoRotateSpeed * Math.min(dt, 0.05), 0, false);
+    const leaving = runtime.store.getState().mode === 'cosmos';
+    if (leaving) {
+      // Returning to the flat cosmos: ease the perspective camera to a HEAD-ON,
+      // face-the-viewer pose (azimuth → the nearest whole turn, polar → the
+      // equator) so the dots settle onto a plane that is ALREADY facing front
+      // when the ortho cosmos camera takes over — the morph eases both ways, no
+      // snap/teleport at the swap. Triggered once, then camera-controls damps it.
+      if (!returning.current) {
+        returning.current = true;
+        const flat = Math.round(controls.azimuthAngle / (2 * Math.PI)) * 2 * Math.PI;
+        void controls.rotateTo(flat, Math.PI / 2, true);
+      }
+    } else {
+      returning.current = false;
+      const idleMs = performance.now() - lastInteract.current;
+      if (idleMs > BRAIN_CAMERA.autoRotateResumeMs) {
+        // The Milky-Way turntable: advance the AZIMUTH around the vertical (Y) axis
+        // (polar delta 0 keeps the tilt). Active immediately on entry (lastInteract
+        // starts at -Infinity); pauses on gesture, resumes after the window.
+        controls.rotate(BRAIN_CAMERA.autoRotateSpeed * Math.min(dt, 0.05), 0, false);
+      }
     }
     controls.update(dt);
     runtime.brainAzimuth = controls.azimuthAngle;
