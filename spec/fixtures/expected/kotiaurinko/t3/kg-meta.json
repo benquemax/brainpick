@@ -1,0 +1,9 @@
+{
+  "entities": 6,
+  "extractor": {
+    "kind": "hand-authored-fixture",
+    "model": "none"
+  },
+  "relations": 5,
+  "spec_version": "0.1"
+}

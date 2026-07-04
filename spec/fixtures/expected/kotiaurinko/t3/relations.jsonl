@@ -1,0 +1,5 @@
+{"description":"the moon raises the tides","dst":"vuorovesi","keywords":["pull","tide"],"source_docs":["kuu.md"],"src":"kuu","weight":0.7}
+{"description":"orbits the star","dst":"aurinko","keywords":["orbit"],"source_docs":["komeetta.md"],"src":"komeetta","weight":0.6}
+{"description":"the moon companions the earth","dst":"maa","keywords":["companion","orbit"],"source_docs":["kuu.md","maa.md"],"src":"kuu","weight":0.9}
+{"description":"the earth belongs to the worlds","dst":"planeetat","keywords":["member"],"source_docs":["maa.md","planeetat.md"],"src":"maa","weight":0.8}
+{"description":"the worlds orbit the star","dst":"aurinko","keywords":["orbit"],"source_docs":["planeetat.md"],"src":"planeetat","weight":0.9}

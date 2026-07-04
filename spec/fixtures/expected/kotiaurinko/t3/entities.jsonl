@@ -1,0 +1,6 @@
+{"description":"The star at the center that everything orbits.","id":"aurinko","name":"Aurinko","source_docs":["aurinko.md","komeetta.md","planeetat.md"],"type":"star"}
+{"description":"A visitor with a tail that falls toward the star and races away.","id":"komeetta","name":"Komeetta","source_docs":["komeetta.md"],"type":"comet"}
+{"description":"The moon that raises the tides of the earth.","id":"kuu","name":"Kuu","source_docs":["aurinko.md","kuu.md","maa.md"],"type":"moon"}
+{"description":"The blue world with a companion, belonging to the worlds.","id":"maa","name":"Maa","source_docs":["kuu.md","maa.md","planeetat.md"],"type":"planet"}
+{"description":"The catalogue of worlds around the star.","id":"planeetat","name":"Planeetat","source_docs":["aurinko.md","maa.md","planeetat.md"],"type":"catalogue"}
+{"description":"The tidal pull of the moon on the sea.","id":"vuorovesi","name":"Vuorovesi","source_docs":["kuu.md"],"type":"phenomenon"}

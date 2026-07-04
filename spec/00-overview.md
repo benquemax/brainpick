@@ -17,7 +17,9 @@ T2/T3 are optional modules; an engine lacking one degrades to the tier
 below and MUST say so in its responses (`degraded_from`).
 
 Spec 0.1 normatively covers T1, the REST surface, the delta protocol, MCP
-tools, and config. T2/T3 sections land with milestone M2/M3.
+tools, and config. T2 (`30-t2-vectors.md`) landed with M2; T3
+(`40-t3-kg.md`) lands with M3 — its neutral export is normative, its
+extraction advisory.
 
 ## Disposability
 
