@@ -1,0 +1,88 @@
+name: release
+
+# Publish v0.1+ to PyPI and npm. Triggered by pushing a version tag (v0.1.0)
+# or run manually. The web UI is built ONCE and synced into both packages so
+# pip and npm ship the identical UI. Version lockstep is enforced before either
+# publish, so a half-bumped release cannot ship.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "version to verify, e.g. v0.1.0 (must equal the package version)"
+        required: true
+
+jobs:
+  build-webui:
+    name: build the shared web UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: version lockstep
+        run: node scripts/check-versions.mjs "${{ github.event.inputs.version || github.ref_name }}"
+      - run: npm run build -w packages/webui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webui-dist
+          path: packages/webui/dist
+
+  publish-pypi:
+    name: publish to PyPI (trusted publishing)
+    needs: build-webui
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write # OIDC trusted publishing — no API token in secrets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with:
+          name: webui-dist
+          path: packages/webui/dist
+      - name: sync the UI + skill into the package
+        run: |
+          node scripts/sync-ui.mjs
+          node scripts/sync-skill.mjs
+      - uses: astral-sh/setup-uv@v5
+      - name: build wheel + sdist
+        working-directory: packages/python
+        run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/python/dist
+
+  publish-npm:
+    name: publish to npm
+    needs: build-webui
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: webui-dist
+          path: packages/webui/dist
+      - name: sync the UI + skill into the package
+        run: |
+          node scripts/sync-ui.mjs
+          node scripts/sync-skill.mjs
+      - run: npm run build -w packages/node
+      - name: publish
+        working-directory: packages/node
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

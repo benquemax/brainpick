@@ -1,10 +1,19 @@
 {
   "name": "brainpick",
   "version": "0.1.0",
-  "//": "private until the 0.1 release decision — publishing to npm is a release-time act, flip this then",
-  "private": true,
-  "description": "pick your agent's brain — compile and serve OKF knowledge bundles (native Node engine)",
+  "description": "pick your agent's brain — compile and serve OKF knowledge bundles (native Node engine, zero Python)",
   "license": "MIT",
+  "homepage": "https://github.com/benquemax/brainpick",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/benquemax/brainpick.git",
+    "directory": "packages/node"
+  },
+  "bugs": "https://github.com/benquemax/brainpick/issues",
+  "keywords": ["knowledge-graph", "okf", "mcp", "rag", "agents", "brainpick", "llm"],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -23,7 +32,8 @@
   "files": [
     "dist",
     "static",
-    "skill"
+    "skill",
+    "README.md"
   ],
   "scripts": {
     "build": "tsup",

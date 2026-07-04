@@ -6,8 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "brainpick"
 version = "0.1.0"
 description = "A turn-key brain stack for agents: compile an OKF markdown bundle into a queryable, servable, visualizable brain."
+readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Benquemax" }]
+keywords = ["knowledge-graph", "okf", "mcp", "rag", "agents", "brainpick", "llm"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "PyYAML>=6",
     "tomli>=2; python_version<'3.11'",
@@ -17,6 +26,11 @@ dependencies = [
     "watchfiles>=0.24",
     "httpx>=0.27",
 ]
+
+[project.urls]
+Homepage = "https://github.com/benquemax/brainpick"
+Repository = "https://github.com/benquemax/brainpick"
+Issues = "https://github.com/benquemax/brainpick/issues"
 
 [project.optional-dependencies]
 dev = [

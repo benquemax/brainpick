@@ -36,3 +36,4 @@ playwright-report/
 
 # machine-local bundle config (personal endpoints — the shared brainpick.toml is committable)
 **/brainpick.local.toml
+
