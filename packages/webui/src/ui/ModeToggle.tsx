@@ -3,11 +3,9 @@
  * floating holographic brain and back. One prominent pill (bottom-centre) plus
  * the `b` key. Same game-HUD language as the rest of the cockpit.
  *
- * TODO (deferred, see _todo.md): a TIME SCRUBBER belongs next to this control —
- * it would replay the brain's growth over its history. It needs a per-seq
- * `timeline.json` artifact that NEITHER engine emits yet (T1 compile currently
- * drops the advisory timeline), so it is intentionally NOT built here — no faked
- * scrubber over data we do not have. Wire the artifact first, then add it.
+ * Its sibling below the pill is the TIME MACHINE (ui/TimeMachine.tsx, key `t`):
+ * the timeline.json artifact now exists, so the deferred time scrubber is real —
+ * scrub the brain's git history and watch it grow, in both cosmos and brain modes.
  */
 import { useUI, uiStore } from '../state/store';
 

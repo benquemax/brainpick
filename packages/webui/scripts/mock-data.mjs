@@ -354,6 +354,56 @@ export function entityNeighbors(doc, depth = 1) {
   return { center: doc, nodes, edges };
 }
 
+/**
+ * A SYNTHETIC git history for the Time Machine (spec/90). Eight commits, oldest
+ * first, that visibly GROW the kotiaurinko graph from a single star to the full
+ * ten-doc brain — a couple of modifies along the way so a node pulses when the
+ * scrub crosses them. The `docs` lifecycle is derived from the commits exactly
+ * as the engine derives it, so the mock matches the real timeline.json shape.
+ * Reserved index.md / log.md are excluded (spec/90) — they read as "always
+ * present" in the UI, the frame the concepts grow inside.
+ */
+const commitSort = (a, b) => a.localeCompare(b);
+const TIMELINE_COMMITS = [
+  { sha: 'a1c0533', date: '2026-07-01T09:12:00Z', author: 'Tom', message: 'Founding commit — the home star', added: ['aurinko.md'], modified: [], deleted: [] },
+  { sha: 'b2d1a4e', date: '2026-07-01T18:40:00Z', author: 'Tom', message: 'Catalogue the worlds', added: ['planeetat.md'], modified: ['aurinko.md'], deleted: [] },
+  { sha: 'c3e2b5f', date: '2026-07-02T10:05:00Z', author: 'Tom', message: 'The blue world, Maa', added: ['maa.md'], modified: ['planeetat.md'], deleted: [] },
+  { sha: 'd4f3c60', date: '2026-07-03T09:30:00Z', author: 'Tom', message: 'The Moon and its tides', added: ['kuu.md'], modified: ['maa.md'], deleted: [] },
+  { sha: 'e5a4d71', date: '2026-07-03T20:15:00Z', author: 'Tom', message: 'A visiting comet', added: ['komeetta.md'], modified: ['aurinko.md'], deleted: [] },
+  { sha: 'f6b5e82', date: '2026-07-04T11:00:00Z', author: 'Tom', message: 'Chart the islands', added: ['saaret/atolli.md', 'saaret/laguuni.md'], modified: [], deleted: [] },
+  { sha: '07c6f93', date: '2026-07-05T14:20:00Z', author: 'Tom', message: 'A lonely wanderer', added: ['yksinainen.md'], modified: [], deleted: [] },
+  { sha: '18d70a4', date: '2026-07-06T14:03:00Z', author: 'Tom', message: 'Refine the moon and the star', added: [], modified: ['aurinko.md', 'kuu.md'], deleted: [] },
+];
+
+/** Derive per-doc lifecycle from commits (spec/90): created / modified / deleted. */
+function lifecycleFromCommits(commits) {
+  const docs = {};
+  for (const c of commits) {
+    for (const p of c.added) if (!docs[p]) docs[p] = { created: c.date, modified: [], deleted: null };
+    for (const p of c.modified) {
+      if (!docs[p]) docs[p] = { created: c.date, modified: [], deleted: null };
+      else docs[p].modified.push(c.date);
+    }
+    for (const p of c.deleted) if (docs[p]) docs[p].deleted = c.date;
+  }
+  return docs;
+}
+
+/** GET /api/timeline — the advisory git-history timeline (spec/90). */
+export function timeline() {
+  const commits = TIMELINE_COMMITS.map((c) => ({
+    ...c,
+    added: [...c.added].sort(commitSort),
+    modified: [...c.modified].sort(commitSort),
+    deleted: [...c.deleted].sort(commitSort),
+  }));
+  return {
+    commits,
+    docs: lifecycleFromCommits(commits),
+    span: { commits: commits.length, first: commits[0].date, last: commits[commits.length - 1].date },
+  };
+}
+
 /** Doc records backing /api/docs/{path} and /api/search. */
 export function mockDocs() {
   const doc = (path, title, over = {}) => ({

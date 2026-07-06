@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BASE_SEQ, applyDeltaToGraph, initialGraph, mockDocs, nextDelta, STEP_COUNT } from '../../scripts/mock-data.mjs';
+import { BASE_SEQ, applyDeltaToGraph, initialGraph, mockDocs, nextDelta, STEP_COUNT, timeline } from '../../scripts/mock-data.mjs';
 import type { GraphPayload } from '../graph/types';
 import { applyDelta, applySnapshot, emptyGraphSlice } from '../state/applyDelta';
+import { hasHistory, indexOfTime, presentDocsAt, timeOfIndex } from '../time/timeline';
 
 function checkInvariants(graph: GraphPayload): void {
   const ids = new Set(graph.nodes.map((n) => n.id));
@@ -125,5 +126,72 @@ describe('mock scripted deltas', () => {
     const a = initialGraph();
     expect(graph.nodes.map((n) => n.id).sort()).toEqual(a.nodes.map((n) => n.id).sort());
     expect(graph.edges.length).toBe(a.edges.length);
+  });
+});
+
+describe('mock timeline (Time Machine — spec/90)', () => {
+  it('is a well-formed timeline: history present, commits oldest-first, span summarised', () => {
+    const tl = timeline();
+    expect(hasHistory(tl)).toBe(true);
+    expect(tl.commits.length).toBeGreaterThanOrEqual(6); // a demonstrable growth movie
+    // chronological, oldest first
+    for (let i = 1; i < tl.commits.length; i++) {
+      expect(Date.parse(tl.commits[i]!.date)).toBeGreaterThanOrEqual(Date.parse(tl.commits[i - 1]!.date));
+    }
+    expect(tl.span).toEqual({
+      commits: tl.commits.length,
+      first: tl.commits[0]!.date,
+      last: tl.commits[tl.commits.length - 1]!.date,
+    });
+    // every commit carries the spec/90 fields, arrays sorted
+    for (const c of tl.commits) {
+      expect(Object.keys(c).sort()).toEqual(['added', 'author', 'date', 'deleted', 'message', 'modified', 'sha']);
+      expect(c.sha).toHaveLength(7);
+      for (const field of [c.added, c.modified, c.deleted]) {
+        expect([...field].sort()).toEqual(field);
+      }
+    }
+  });
+
+  it('grows REAL graph nodes: every tracked doc is a non-reserved node in the graph', () => {
+    const graph = initialGraph();
+    const reserved = new Set(graph.nodes.filter((n) => n.reserved).map((n) => n.id));
+    const nodeIds = new Set(graph.nodes.map((n) => n.id));
+    const tracked = Object.keys(timeline().docs);
+    // every non-reserved knowledge doc appears in the history…
+    const nonReserved = graph.nodes.filter((n) => !n.reserved).map((n) => n.id).sort();
+    expect(tracked.sort()).toEqual(nonReserved);
+    // …and the timeline never tracks a reserved doc (spec/90 excludes index/log)
+    for (const path of tracked) {
+      expect(nodeIds.has(path)).toBe(true);
+      expect(reserved.has(path)).toBe(false);
+    }
+  });
+
+  it('the docs lifecycle is derived from the commits (created = first add, modified = later changes)', () => {
+    const tl = timeline();
+    for (const [path, life] of Object.entries(tl.docs)) {
+      const firstAdd = tl.commits.find((c) => c.added.includes(path));
+      expect(firstAdd, `${path} has an add commit`).toBeTruthy();
+      expect(life.created).toBe(firstAdd!.date);
+      const mods = tl.commits.filter((c) => c.modified.includes(path)).map((c) => c.date);
+      expect(life.modified).toEqual(mods);
+    }
+  });
+
+  it('reconstructs a strictly GROWING brain from the first commit to the present', () => {
+    const tl = timeline();
+    const atFirst = presentDocsAt(tl, timeOfIndex(tl, 0));
+    const atLast = presentDocsAt(tl, timeOfIndex(tl, tl.commits.length - 1));
+    // the past is a strict subset of the present — the brain grows
+    expect(atFirst.size).toBeGreaterThan(0);
+    expect(atLast.size).toBeGreaterThan(atFirst.size);
+    for (const id of atFirst) expect(atLast.has(id)).toBe(true);
+    // the present holds every tracked doc (none were deleted in this history)
+    expect(atLast.size).toBe(Object.keys(tl.docs).length);
+    // each commit's added docs are born exactly at that commit index
+    tl.commits.forEach((c, i) => {
+      for (const added of c.added) expect(indexOfTime(tl, Date.parse(tl.docs[added]!.created))).toBe(i);
+    });
   });
 });

@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
-import { BRAIN, DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW } from './tuning';
+import { BRAIN, DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 iCosmos;
@@ -23,10 +23,15 @@ const VERTEX = /* glsl */ `
   attribute float iFlags;
   attribute float iHighlight;
   attribute float iStagger;
+  attribute float iBirthIdx;   // TIME MACHINE: commit index this node is born at (−1 = always present)
+  attribute float iDeathIdx;   // commit index it is deleted at (1e9 = immortal)
+  attribute float iModIdx;     // commit index of its last modification (−1 = never)
 
   uniform float uMorph;
   uniform float uTime;
   uniform float uDim;
+  uniform float uTimeTravel;   // 0 = live present, →1 = travelling history
+  uniform float uScrub;        // the animated fractional commit index
 
   varying vec2 vQuad;
   varying vec3 vColor;
@@ -71,10 +76,34 @@ const VERTEX = /* glsl */ `
     bright *= mix(1.0, ${f(NODE_GLOW.reservedFactor)}, reserved);
     bright *= mix(1.0, ${f(NODE_GLOW.dimFloor)}, uDim * (1.0 - highlight));
 
+    // TIME MACHINE: reconstruct this node's presence at the scrub position. A node
+    // fades in as the scrub crosses its birth commit and out before its death; a
+    // firing pop (birth) and a gentler pulse (last modify) ripple as edits land.
+    // All gated by uTimeTravel so the live present is byte-for-byte unchanged.
+    float ttAlpha = 1.0;
+    if (uTimeTravel > 0.001) {
+      // Fade in over the window BEFORE the birth commit so the node is FULLY
+      // present exactly at it (spec/90: created ≤ T is inclusive); fade out
+      // before death so it is gone AT the delete commit (deleted > T, exclusive).
+      float born = iBirthIdx < 0.0 ? 1.0 : smoothstep(iBirthIdx - ${f(TIME_MACHINE.fadeWindow)}, iBirthIdx, uScrub);
+      float alive = 1.0 - smoothstep(iDeathIdx - ${f(TIME_MACHINE.fadeWindow)}, iDeathIdx, uScrub);
+      float present = born * alive;
+      float p = mix(1.0, present, uTimeTravel);
+      float bsince = uScrub - iBirthIdx;
+      float bflash = (iBirthIdx >= 0.0 && bsince >= 0.0 && bsince < ${f(TIME_MACHINE.flashWindow)})
+        ? (1.0 - bsince / ${f(TIME_MACHINE.flashWindow)}) : 0.0;
+      float msince = uScrub - iModIdx;
+      float mflash = (iModIdx >= 0.0 && msince >= 0.0 && msince < ${f(TIME_MACHINE.flashWindow)})
+        ? (1.0 - msince / ${f(TIME_MACHINE.flashWindow)}) : 0.0;
+      scale *= p * (1.0 + uTimeTravel * (${f(TIME_MACHINE.birthPop)} * bflash + ${f(TIME_MACHINE.modPop)} * mflash));
+      bright = bright * p + uTimeTravel * p * (${f(TIME_MACHINE.birthGlow)} * bflash + ${f(TIME_MACHINE.modGlow)} * mflash);
+      ttAlpha = p;
+    }
+
     vQuad = position.xy;
     vColor = iColor;
     vIntensity = bright;
-    vAlpha = 1.0 - death;
+    vAlpha = (1.0 - death) * ttAlpha;
     vCluster = cluster;
 
     // Billboard in VIEW space so sprites face the camera in both the ortho
@@ -138,6 +167,10 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
   const activity = new Float32Array(total).fill(-1);
   const flags = new Float32Array(total);
   const highlight = new Float32Array(total);
+  // TIME MACHINE per-node commit indices (sentinels: born-before-all / immortal / never-modified).
+  const birthIdx = new Float32Array(total).fill(-1);
+  const deathIdx = new Float32Array(total).fill(1e9);
+  const modIdx = new Float32Array(total).fill(-1);
 
   for (let i = 0; i < live; i++) {
     cosmos[i * 3] = runtime.positions[i * 2] ?? 0;
@@ -150,6 +183,9 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
     activity[i] = runtime.activityAt[i] ?? -1;
     // bit 0 = reserved (index/log), bit 1 = cluster proxy, bit 2 = entity (T3 gem).
     flags[i] = (runtime.reserved[i] ?? 0) | ((runtime.cluster[i] ?? 0) << 1) | ((runtime.family[i] ?? 0) << 2);
+    birthIdx[i] = runtime.birthIdx[i] ?? -1;
+    deathIdx[i] = runtime.deathIdx[i] ?? 1e9;
+    modIdx[i] = runtime.modIdx[i] ?? -1;
   }
   for (let d = 0; d < runtime.dying.length; d++) {
     const i = live + d;
@@ -194,6 +230,9 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
   add('iFlags', flags, 1);
   add('iHighlight', highlight, 1, true);
   add('iStagger', stagger, 1);
+  add('iBirthIdx', birthIdx, 1);
+  add('iDeathIdx', deathIdx, 1);
+  add('iModIdx', modIdx, 1);
   return geo;
 }
 
@@ -215,6 +254,8 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
           uMorph: { value: 0 }, // 2D cosmos; the M3 brain layout animates this
           uDim: { value: 0 },
           uBloom: { value: 1 }, // additive-halo strength; the GPU tier sets it
+          uTimeTravel: { value: 0 }, // TIME MACHINE: eased 0→1 by TimeController
+          uScrub: { value: 0 }, // the animated fractional commit index
         },
         transparent: true,
         depthWrite: false,
@@ -280,6 +321,8 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
 
     material.uniforms.uTime!.value = runtime.now();
     material.uniforms.uMorph!.value = runtime.morph;
+    material.uniforms.uTimeTravel!.value = runtime.timeTravelAmt;
+    material.uniforms.uScrub!.value = runtime.scrub;
     material.uniforms.uBloom!.value = s.gpu.bloomEnabled ? 1 : GPU_BUDGET.bloomDisabledScale;
     const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;

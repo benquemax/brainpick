@@ -1367,6 +1367,341 @@ button:focus-visible,
   }
 }
 
+/* ---- TIME MACHINE: travel the brain's git history (spec/90) ---------------
+   The entry pill sits above the mode pill; activating it raises a scrubber bar
+   with a time readout, play/step controls and commit ticks. Around the scene a
+   calm OSX-Time-Machine depth: a cool time-fog that deepens toward the past and
+   a starfield we fly through. All pure DOM — GPU-free, mode-agnostic. */
+
+/* the depth field — over the canvas, under the HUD, pointer-transparent */
+.time-depth {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.time-stars {
+  position: absolute;
+  inset: -25%;
+  opacity: 0;
+  transition: opacity 0.7s ease;
+  mix-blend-mode: screen;
+  background-repeat: repeat;
+  /* five parallax layers of scattered stars, cool-tinted */
+  background-image:
+    radial-gradient(1.6px 1.6px at 18% 24%, rgba(200, 224, 255, 0.95), transparent 60%),
+    radial-gradient(1.3px 1.3px at 62% 71%, rgba(170, 205, 255, 0.85), transparent 60%),
+    radial-gradient(1.1px 1.1px at 84% 38%, rgba(150, 195, 255, 0.8), transparent 60%),
+    radial-gradient(1px 1px at 41% 83%, rgba(210, 228, 255, 0.7), transparent 60%),
+    radial-gradient(0.9px 0.9px at 8% 62%, rgba(180, 210, 255, 0.6), transparent 60%);
+  background-size: 340px 340px, 260px 260px, 200px 200px, 150px 150px, 110px 110px;
+  animation: star-drift 70s linear infinite;
+}
+
+.time-depth.on .time-stars {
+  opacity: 0.85;
+}
+
+/* the backward-rush: the field streams faster while the growth movie plays */
+.time-depth.rushing .time-stars {
+  animation-duration: 9s;
+}
+
+@keyframes star-drift {
+  /* different per-layer travel = depth parallax (nearer layers move further) */
+  to {
+    background-position:
+      0 680px,
+      0 460px,
+      0 300px,
+      0 190px,
+      0 120px;
+  }
+}
+
+.time-fog {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.5s ease;
+  background:
+    radial-gradient(ellipse at 50% 42%, transparent 0%, transparent 34%, var(--time-fog-tint, rgba(10, 22, 48, 0.6)) 100%),
+    linear-gradient(to bottom, transparent 40%, var(--time-fog-tint, rgba(10, 22, 48, 0.6)) 140%);
+}
+
+/* the entry pill — stacked just above the mode pill */
+.time-cluster {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 92px);
+  align-items: center;
+  z-index: 6;
+}
+
+.time-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  background: rgba(20, 16, 10, 0.66);
+  border: 1px solid rgba(251, 191, 110, 0.4);
+  border-radius: 999px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 16px rgba(251, 191, 110, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.time-toggle:hover {
+  color: #ffe0ac;
+  border-color: rgba(251, 191, 110, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 22px rgba(251, 191, 110, 0.26),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* active = travelling; shift to the cyan present-accent */
+.time-toggle.on {
+  color: var(--cyan);
+  border-color: rgba(75, 225, 255, 0.7);
+  background: rgba(10, 22, 34, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 20px rgba(75, 225, 255, 0.28),
+    0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.time-glyph {
+  font-size: 15px;
+  line-height: 1;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.time-toggle kbd {
+  color: inherit;
+  border-color: currentColor;
+  opacity: 0.7;
+}
+
+/* the scrubber bar — raised above the entry pill while travelling */
+.time-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 140px);
+  z-index: 7;
+  width: min(640px, calc(100vw - 24px));
+  padding: 12px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-color: rgba(75, 225, 255, 0.32);
+  box-shadow:
+    0 0 22px rgba(75, 225, 255, 0.1),
+    0 12px 40px rgba(0, 0, 0, 0.55);
+  animation: time-bar-in 0.24s ease;
+}
+
+@keyframes time-bar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+}
+
+/* the time readout — styled like a machine display */
+.time-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-family: var(--mono);
+}
+
+.time-date {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: #d9f4ff;
+  text-shadow: 0 0 12px rgba(75, 225, 255, 0.45);
+  white-space: nowrap;
+}
+
+.time-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-count {
+  font-size: 11px;
+  color: var(--cyan);
+  border: 1px solid rgba(75, 225, 255, 0.4);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.time-sha {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.time-msg {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 46%;
+  text-align: right;
+}
+
+.time-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.time-step,
+.time-play {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px solid var(--panel-border);
+  background: rgba(12, 20, 36, 0.6);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.time-step:hover,
+.time-play:hover {
+  color: var(--text);
+  border-color: rgba(75, 225, 255, 0.5);
+  background: rgba(14, 24, 42, 0.75);
+}
+
+.time-play {
+  color: var(--cyan);
+  border-color: rgba(75, 225, 255, 0.5);
+  font-size: 13px;
+}
+
+.time-play.playing {
+  color: #04060c;
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 14px rgba(75, 225, 255, 0.5);
+}
+
+/* the scrub track — draggable, touch-sized */
+.time-track {
+  position: relative;
+  flex: 1;
+  height: 34px;
+  margin: 0 4px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.time-track:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.time-track-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: rgba(120, 160, 200, 0.22);
+}
+
+.time-track-fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 3px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: linear-gradient(to right, rgba(75, 225, 255, 0.35), var(--cyan));
+  box-shadow: 0 0 8px rgba(75, 225, 255, 0.4);
+  pointer-events: none;
+}
+
+.time-tick {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+  background: rgba(150, 190, 230, 0.35);
+  pointer-events: none;
+}
+
+.time-tick.active {
+  background: var(--cyan);
+  box-shadow: 0 0 7px rgba(75, 225, 255, 0.7);
+  height: 12px;
+}
+
+.time-handle {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #eaf9ff;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 12px rgba(75, 225, 255, 0.7);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .time-bar {
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 148px);
+    padding: 10px 12px 12px;
+  }
+
+  .time-date {
+    font-size: 14px;
+  }
+
+  .time-msg {
+    display: none; /* keep the phone readout compact */
+  }
+
+  .time-step,
+  .time-play,
+  .time-toggle {
+    min-height: 42px;
+  }
+
+  .time-track {
+    height: 42px;
+  }
+}
+
 /* ---- hint bar ------------------------------------------------------------ */
 
 .hint-bar {

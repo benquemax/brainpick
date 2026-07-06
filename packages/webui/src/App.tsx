@@ -12,6 +12,7 @@ import { ModeToggle } from './ui/ModeToggle';
 import { NavigatorPanel } from './ui/NavigatorPanel';
 import { SearchOverlay } from './ui/SearchOverlay';
 import { StatusHUD } from './ui/StatusHUD';
+import { TimeMachine } from './ui/TimeMachine';
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -41,6 +42,7 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
         else if (s.lens.kind !== 'none') s.clearLens();
         else if (s.selection !== null) s.select(null);
         else if (s.navigatorOpen) s.toggleNavigator();
+        else if (s.timeTravel) s.exitTimeTravel();
       } else if (s.searchOpen) {
         // While the search overlay is up, letters/digits belong to the query
         // (even if focus briefly sits on a mode button) — no camera hotkeys.
@@ -68,6 +70,21 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
         const order: GraphLayer[] = s.entityAvailability === 'unavailable' ? ['links'] : ['links', 'entities', 'overlay'];
         const next = order[(order.indexOf(s.layer) + 1) % order.length] ?? 'links';
         s.setLayer(next);
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        s.toggleTimeTravel(); // enter/leave the TIME MACHINE (no-op without history)
+      } else if (s.timeTravel && (e.key === ' ' || e.code === 'Space')) {
+        // Let a focused control (the play/step buttons) take space itself — only
+        // the global space toggles play when focus sits on the canvas/body.
+        if (e.target instanceof HTMLButtonElement) return;
+        e.preventDefault();
+        s.togglePlay(); // play/pause the growth movie
+      } else if (s.timeTravel && !s.navigatorOpen && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        s.stepCommit(-1); // step back one commit
+      } else if (s.timeTravel && !s.navigatorOpen && e.key === 'ArrowRight') {
+        e.preventDefault();
+        s.stepCommit(1); // step forward one commit
       }
     };
     window.addEventListener('keydown', onKey);
@@ -87,10 +104,11 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <NavigatorPanel />
       <LensCluster />
       <ModeToggle />
+      <TimeMachine />
       <CameraCluster />
       <div className="hint-bar">
-        <kbd>b</kbd> brain · <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>l</kbd> layer · <kbd>0</kbd> overview ·{' '}
-        <kbd>1–3</kbd> views (<kbd>shift</kbd> saves) · <kbd>g</kbd> ghosts · click a node to read
+        <kbd>b</kbd> brain · <kbd>t</kbd> time · <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>l</kbd> layer ·{' '}
+        <kbd>0</kbd> overview · <kbd>1–3</kbd> views · <kbd>g</kbd> ghosts · click a node to read
       </div>
     </div>
   );

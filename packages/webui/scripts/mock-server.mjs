@@ -23,6 +23,7 @@ import {
   initialGraph,
   mockDocs,
   nextDelta,
+  timeline,
 } from './mock-data.mjs';
 
 const RING_LIMIT = 256;
@@ -231,6 +232,16 @@ export function createMockServer({ stepMs = 6000 } = {}) {
         return;
       }
       sendJson(res, 200, layer === 'entities' ? entityGraph() : graph, { etag });
+    } else if (path === '/api/timeline') {
+      // The advisory git-history timeline (spec/90). ETag by seq like /api/graph;
+      // the synthetic history is static (it is the past, not the live seq).
+      const etag = `"${seq}"`;
+      if (req.headers['if-none-match'] === etag) {
+        res.writeHead(304, { etag, 'access-control-allow-origin': '*' });
+        res.end();
+        return;
+      }
+      sendJson(res, 200, timeline(), { etag });
     } else if (path === '/api/neighbors') {
       const center = url.searchParams.get('id') ?? '';
       const layer = url.searchParams.get('layer') ?? 'links';

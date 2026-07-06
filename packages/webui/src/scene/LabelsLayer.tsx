@@ -57,6 +57,16 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
     }
     const candidates = [...forced, ...runtime.labelOrder];
 
+    // TIME MACHINE: while travelling, a node's label rides with its presence —
+    // hide labels for nodes not yet born (or already gone) at the scrub position,
+    // so no name floats over an empty patch of the young brain.
+    const traveling = runtime.timeTravelAmt > 0.01;
+    const present = (i: number): boolean => {
+      const b = runtime.birthIdx[i] ?? -1;
+      const d = runtime.deathIdx[i] ?? 1e9;
+      return (b < 0 || runtime.scrub >= b) && runtime.scrub < d;
+    };
+
     const placed: Array<{ x: number; y: number }> = [];
     const seen = new Set<number>();
     let used = 0;
@@ -65,6 +75,7 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
       if (used >= budget) break;
       if (seen.has(i)) continue;
       seen.add(i);
+      if (traveling && !present(i)) continue;
       const x = runtime.positions[i * 2] ?? 0;
       const y = runtime.positions[i * 2 + 1] ?? 0;
       v.current.set(x, y, 0).project(camera);

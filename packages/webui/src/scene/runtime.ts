@@ -20,6 +20,12 @@ import { isEntityRenderId } from '../graph/entities';
 import { colorForId, entityColorForType } from './colors';
 import { buildGhostAnchors, type GhostAnchor } from './ghosts';
 import { BRAIN, GHOST_GLOW } from './tuning';
+import { birthIndexOf, deathIndexOf, hasHistory, lastModIndexOf, type Timeline } from '../time/timeline';
+
+/** Sentinel birth index for a node the timeline never saw — "present throughout". */
+const UNTRACKED_BIRTH = -1;
+/** Sentinel death index for a node that never dies (kept finite for the GPU float). */
+const NO_DEATH = 1e9;
 
 /**
  * Per-node morph stagger in [0,1): a golden-ratio walk over the index spreads
@@ -65,6 +71,16 @@ export class GraphRuntime {
   family: Uint8Array = new Uint8Array(0);
   birth: Float32Array = new Float32Array(0); // scene seconds; -1 = no entrance animation
   activityAt: Float32Array = new Float32Array(0); // scene seconds; -1 = none
+  /**
+   * TIME MACHINE (spec/90): per live node, the FRACTIONAL COMMIT INDEX at which
+   * it is born / dies / was last modified. The node shader fades a node in as the
+   * scrub crosses birthIdx, out at deathIdx, and flashes at birth/mod — all from
+   * these static attributes + two uniforms, so scrubbing rebuilds no buffers.
+   * birthIdx = -1 → present throughout (untracked meta); deathIdx = 1e9 → immortal.
+   */
+  birthIdx: Float32Array = new Float32Array(0);
+  deathIdx: Float32Array = new Float32Array(0);
+  modIdx: Float32Array = new Float32Array(0);
   edgePairs: Uint32Array = new Uint32Array(0);
   /** Per-edge brightness weight (relation weight / virtual hint / 1 for links). */
   edgeWeights: Float32Array = new Float32Array(0);
@@ -88,6 +104,12 @@ export class GraphRuntime {
   /** Set by the camera rig after the first fit; labels scale from it. */
   fitZoom = 1;
   firstPositionsSeen = false;
+
+  // ---- Time Machine (per-frame animated values; eased by TimeController) ----
+  /** Animated scrub position (fractional commit index), eased toward store.scrubIndex. */
+  scrub = 0;
+  /** Animated 0→1 time-travel amount (uTimeTravel); eases the whole reconstruction in/out. */
+  timeTravelAmt = 0;
 
   // ---- Holographic brain (lazy; nothing computed until the first toggle) ----
   /** Current animated morph 0 (cosmos) → 1 (brain); eased by MorphController. */
@@ -133,6 +155,7 @@ export class GraphRuntime {
   private lastLayer: string | null = null;
   private lastEntityEpoch = -1;
   private lastAvailability: string | null = null;
+  private lastTimeline: Timeline | null = null;
   private dyingTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly clockStartMs = performance.now();
   private readonly epochStartMs = Date.now();
@@ -161,6 +184,12 @@ export class GraphRuntime {
         state.entityAvailability !== this.lastAvailability
       ) {
         this.rebuild(state);
+      } else if (state.timeline !== this.lastTimeline) {
+        // The graph is unchanged but a fresh timeline arrived (or grew): recompute
+        // only the per-node birth/death indices and re-upload — no worker reheat.
+        this.lastTimeline = state.timeline;
+        this.computeTimeArrays(state);
+        this.version += 1;
       }
       // Entering the brain computes its layout lazily (the very first time only);
       // cosmos stays byte-for-byte untouched until then.
@@ -176,6 +205,7 @@ export class GraphRuntime {
     this.lastLayer = initial.layer;
     this.lastEntityEpoch = initial.entityEpoch;
     this.lastAvailability = initial.entityAvailability;
+    this.lastTimeline = initial.timeline;
     this.lastMode = initial.mode;
     if (initial.nodes.size > 0) this.rebuild(initial);
   }
@@ -201,6 +231,25 @@ export class GraphRuntime {
 
   get liveCount(): number {
     return this.ids.length;
+  }
+
+  /**
+   * e2e/debug: how many live render-nodes are present at the current LOGICAL scrub
+   * position (spec/90's membership: born ≤ index < death). Equals liveCount when
+   * not travelling. A pixel-free way for a test to prove the brain shrinks in the
+   * past and grows toward the present.
+   */
+  presentCount(index?: number): number {
+    const s = this.store.getState();
+    if (!s.timeTravel) return this.ids.length;
+    const idx = index ?? s.scrubIndex;
+    let n = 0;
+    for (let i = 0; i < this.ids.length; i++) {
+      const birth = this.birthIdx[i] ?? UNTRACKED_BIRTH;
+      const death = this.deathIdx[i] ?? NO_DEATH;
+      if ((birth < 0 || idx >= birth) && idx < death) n += 1;
+    }
+    return n;
   }
 
   get totalCount(): number {
@@ -238,6 +287,7 @@ export class GraphRuntime {
     this.lastLayer = state.layer;
     this.lastEntityEpoch = state.entityEpoch;
     this.lastAvailability = state.entityAvailability;
+    this.lastTimeline = state.timeline;
 
     // Resolve the active layer into ONE render node/edge set — links (the doc
     // graph, untouched), entities, or the overlay of both — then feed it
@@ -365,6 +415,10 @@ export class GraphRuntime {
       .map((_, i) => i)
       .sort((a, b) => (degrees[b] ?? 0) - (degrees[a] ?? 0) || (ids[a] as string).localeCompare(ids[b] as string));
 
+    // Time Machine: recompute each node's birth/death/mod commit index for the
+    // new id set (a no-op set of sentinels when there is no history).
+    this.computeTimeArrays(state);
+
     // In brain mode, keep the 3D layout in step with the live graph so new
     // nodes stream into their lobe too (recomputed before the version bump).
     if (this.lastMode === 'brain') this.computeBrainPositions(state);
@@ -423,6 +477,33 @@ export class GraphRuntime {
       seed: BRAIN.seed,
       scale: BRAIN.scale,
     });
+  }
+
+  /**
+   * Compute the per-node birth/death/last-modified commit indices for the current
+   * id set from the store's timeline (spec/90). Cheap (one pass over the render
+   * nodes); recomputed on a graph change or when a fresh timeline arrives. Without
+   * history everything is a sentinel (birth -1 = always present), so the shader's
+   * time-travel path is a no-op even if it somehow runs.
+   */
+  private computeTimeArrays(state: UIState): void {
+    const n = this.ids.length;
+    const birthIdx = new Float32Array(n).fill(UNTRACKED_BIRTH);
+    const deathIdx = new Float32Array(n).fill(NO_DEATH);
+    const modIdx = new Float32Array(n).fill(-1);
+    const timeline = state.timeline;
+    if (hasHistory(timeline)) {
+      for (let i = 0; i < n; i++) {
+        const id = this.ids[i] as string;
+        birthIdx[i] = birthIndexOf(timeline, id);
+        const d = deathIndexOf(timeline, id);
+        deathIdx[i] = Number.isFinite(d) ? d : NO_DEATH;
+        modIdx[i] = lastModIndexOf(timeline, id);
+      }
+    }
+    this.birthIdx = birthIdx;
+    this.deathIdx = deathIdx;
+    this.modIdx = modIdx;
   }
 
   private boundsRadiusOf(positions: Float32Array, count: number): number {

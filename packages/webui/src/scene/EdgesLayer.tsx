@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
-import { BRAIN, DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f } from './tuning';
+import { BRAIN, DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 aBrain;
@@ -18,15 +18,21 @@ const VERTEX = /* glsl */ `
   attribute float aStagger;
   attribute float aEnd;    // 0 at the source vertex, 1 at the target
   attribute float aFire;   // scene-time this edge last fired (−1 = never)
+  attribute float aBirthIdx; // TIME MACHINE: commit index the edge forms at (max of endpoints)
+  attribute float aDeathIdx; // commit index it breaks at (min of endpoints)
   uniform float uMorph;
   varying vec3 vColor;
   varying float vT;
   varying float vFire;
+  varying float vBirthIdx;
+  varying float vDeathIdx;
 
   void main() {
     vColor = aColor;
     vT = aEnd;
     vFire = aFire;
+    vBirthIdx = aBirthIdx;
+    vDeathIdx = aDeathIdx;
     float span = ${f(BRAIN.staggerSpan)};
     float m = clamp((uMorph - aStagger * span) / (1.0 - span), 0.0, 1.0);
     vec3 p = mix(position, aBrain, m);
@@ -40,9 +46,13 @@ const FRAGMENT = /* glsl */ `
   uniform float uDim;
   uniform float uMorph;
   uniform float uTime;
+  uniform float uTimeTravel;  // TIME MACHINE: eased 0→1
+  uniform float uScrub;       // animated fractional commit index
   varying vec3 vColor;
   varying float vT;
   varying float vFire;
+  varying float vBirthIdx;
+  varying float vDeathIdx;
 
   void main() {
     float k = uOpacity * mix(1.0, ${f(EDGE_GLOW.dimFactor)}, uDim);
@@ -55,6 +65,25 @@ const FRAGMENT = /* glsl */ `
       if (age >= 0.0 && age <= 1.0) {
         float d = abs(vT - age);
         float pulse = smoothstep(${f(BRAIN.pulseWidth)}, 0.0, d) * (1.0 - age) * uMorph * ${f(BRAIN.pulseGlow)};
+        col += vColor * pulse;
+        a += pulse;
+      }
+    }
+    // TIME MACHINE: the edge exists only while BOTH endpoints do — it fades in as
+    // the later endpoint is born (aBirthIdx) and out before either dies. As it
+    // forms, a pulse travels source→target: the connection lighting up.
+    if (uTimeTravel > 0.001) {
+      // Full exactly at the forming commit (later endpoint's birth), gone at the break.
+      float born = vBirthIdx < 0.0 ? 1.0 : smoothstep(vBirthIdx - ${f(TIME_MACHINE.fadeWindow)}, vBirthIdx, uScrub);
+      float alive = 1.0 - smoothstep(vDeathIdx - ${f(TIME_MACHINE.fadeWindow)}, vDeathIdx, uScrub);
+      float p = mix(1.0, born * alive, uTimeTravel);
+      col *= p;
+      a *= p;
+      float since = uScrub - vBirthIdx;
+      if (vBirthIdx >= 0.0 && since >= 0.0 && since < ${f(TIME_MACHINE.flashWindow)}) {
+        float age = since / ${f(TIME_MACHINE.flashWindow)};
+        float d = abs(vT - age);
+        float pulse = smoothstep(${f(TIME_MACHINE.edgePulseWidth)}, 0.0, d) * (1.0 - age) * uTimeTravel * ${f(TIME_MACHINE.edgePulseGlow)};
         col += vColor * pulse;
         a += pulse;
       }
@@ -72,6 +101,10 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   const stagger = new Float32Array(vertCount);
   const ends = new Float32Array(vertCount);
   const fire = new Float32Array(vertCount).fill(-1);
+  // TIME MACHINE per-edge indices: the edge is born when its LATER endpoint is
+  // (max) and dies when its EARLIER-dying endpoint does (min).
+  const birthIdx = new Float32Array(vertCount).fill(-1);
+  const deathIdx = new Float32Array(vertCount).fill(1e9);
   const bp = runtime.brainPositions;
   const hasBrain = bp.length >= runtime.liveCount * 3;
 
@@ -84,6 +117,10 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
     const tgt = runtime.edgePairs[e * 2 + 1] ?? 0;
     // The edge fires from whichever endpoint saw activity most recently.
     const edgeFire = Math.max(runtime.activityAt[src] ?? -1, runtime.activityAt[tgt] ?? -1);
+    // Present iff both endpoints present: forms at the later birth, breaks at the
+    // earlier death. (−1 birth means an endpoint is present throughout.)
+    const edgeBirth = Math.max(runtime.birthIdx[src] ?? -1, runtime.birthIdx[tgt] ?? -1);
+    const edgeDeath = Math.min(runtime.deathIdx[src] ?? 1e9, runtime.deathIdx[tgt] ?? 1e9);
     for (let end = 0; end < 2; end++) {
       const node = end === 0 ? src : tgt;
       const v = e * 2 + end;
@@ -100,6 +137,8 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
       stagger[v] = nodeStagger(node);
       ends[v] = end;
       fire[v] = edgeFire;
+      birthIdx[v] = edgeBirth;
+      deathIdx[v] = edgeDeath;
       if (kind === 2) {
         colors[v * 3] = ENTITY_EDGE.virtualTint[0] * ENTITY_EDGE.virtualBright;
         colors[v * 3 + 1] = ENTITY_EDGE.virtualTint[1] * ENTITY_EDGE.virtualBright;
@@ -119,6 +158,8 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   geo.setAttribute('aStagger', new THREE.Float32BufferAttribute(stagger, 1));
   geo.setAttribute('aEnd', new THREE.Float32BufferAttribute(ends, 1));
   geo.setAttribute('aFire', new THREE.Float32BufferAttribute(fire, 1));
+  geo.setAttribute('aBirthIdx', new THREE.Float32BufferAttribute(birthIdx, 1));
+  geo.setAttribute('aDeathIdx', new THREE.Float32BufferAttribute(deathIdx, 1));
   return geo;
 }
 
@@ -134,6 +175,8 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
           uOpacity: { value: EDGE_GLOW.opacity },
           uDim: { value: 0 },
           uTime: { value: 0 },
+          uTimeTravel: { value: 0 },
+          uScrub: { value: 0 },
         },
         transparent: true,
         depthWrite: false,
@@ -185,6 +228,8 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
     const s = runtime.store.getState();
     material.uniforms.uMorph!.value = runtime.morph;
     material.uniforms.uTime!.value = runtime.now();
+    material.uniforms.uTimeTravel!.value = runtime.timeTravelAmt;
+    material.uniforms.uScrub!.value = runtime.scrub;
     const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;
     dim.value += (dimTarget - (dim.value as number)) * DIM_EASE;

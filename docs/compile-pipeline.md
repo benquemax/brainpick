@@ -2,7 +2,7 @@
 type: Concept
 title: Compile pipeline
 description: How brainpick compiles a bundle — staged, hash-incremental, cron-able and watchable, with a fast freshness check for commit gates.
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-06T14:30:00Z
 ---
 
 # Compile pipeline
@@ -31,6 +31,11 @@ Three ways to run it:
   designed to sit in a henxels `run_before_commit` gate, where a stale index
   becomes a one-line instruction (`run: brainpick compile`) instead of a
   mystery.
+
+Alongside the T1 artifacts, when the bundle lives in a git repository the
+pipeline distills its history into the advisory timeline that powers the
+[time machine](time-machine.md) — one `git log`, never a per-commit recompile,
+and a git failure just omits it.
 
 T1 always runs and always succeeds on a readable bundle. A failing T2 or T3
 stage marks its tier stale and moves on — the deterministic layers never wait

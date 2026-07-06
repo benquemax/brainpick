@@ -5,6 +5,7 @@
  */
 import type { DocResponse, GraphPayload, SearchMode, SearchResponse } from '../graph/types';
 import type { EntityGraph, GraphLayer, NeighborsResponse } from '../graph/entities';
+import { EMPTY_TIMELINE, type Timeline } from '../time/timeline';
 
 export interface GraphFetchResult {
   graph: GraphPayload;
@@ -72,6 +73,24 @@ export async function fetchNeighbors(
     return (await res.json()) as NeighborsResponse;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The advisory git-history timeline (spec/90). ETag by seq like /api/graph. A
+ * non-repo bundle serves the empty shape `{commits:[],docs:{},span:null}` (200,
+ * not 404) — the Time Machine hides on it. A missing route / transport error is
+ * treated the same way (an empty timeline), so the feature degrades to hidden
+ * rather than throwing.
+ */
+export async function fetchTimeline(bustCache = false): Promise<Timeline> {
+  const url = bustCache ? `/api/timeline?fresh=${Date.now()}` : '/api/timeline';
+  try {
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) return EMPTY_TIMELINE;
+    return (await res.json()) as Timeline;
+  } catch {
+    return EMPTY_TIMELINE;
   }
 }
 

@@ -3,6 +3,7 @@ import type { GraphDelta, GraphEdge, GraphNode, GraphPayload, SearchHit } from '
 import type { EntityGraph } from '../graph/entities';
 import { entityRenderId } from '../graph/entities';
 import { createUIStore } from './store';
+import { EMPTY_TIMELINE as EMPTY_TIMELINE_FIXTURE, type Timeline } from '../time/timeline';
 import { budgetedGraph, isClusterId } from './budget';
 import { treeForGraph, type TreeDir } from './tree';
 import { tierFor } from '../scene/gpuTier';
@@ -676,5 +677,94 @@ describe('entity layer', () => {
     expect(s.selection).toBe('a.md');
     expect(s.entitySelection).toBeNull();
     expect(s.flyTo?.id).toBe('a.md');
+  });
+});
+
+describe('UI store — the Time Machine', () => {
+  const tl: Timeline = {
+    commits: [
+      { sha: 'aaa0000', date: '2026-07-01T00:00:00Z', author: 'Tom', message: 'born', added: ['a.md'], modified: [], deleted: [] },
+      { sha: 'bbb1111', date: '2026-07-02T00:00:00Z', author: 'Tom', message: 'grow', added: ['b.md'], modified: ['a.md'], deleted: [] },
+      { sha: 'ccc2222', date: '2026-07-03T00:00:00Z', author: 'Tom', message: 'more', added: ['c.md'], modified: [], deleted: [] },
+    ],
+    docs: {
+      'a.md': { created: '2026-07-01T00:00:00Z', modified: ['2026-07-02T00:00:00Z'], deleted: null },
+      'b.md': { created: '2026-07-02T00:00:00Z', modified: [], deleted: null },
+      'c.md': { created: '2026-07-03T00:00:00Z', modified: [], deleted: null },
+    },
+    span: { commits: 3, first: '2026-07-01T00:00:00Z', last: '2026-07-03T00:00:00Z' },
+  };
+
+  it('enterTimeTravel needs history — a no-op on the empty timeline', () => {
+    const store = createUIStore();
+    store.getState().enterTimeTravel();
+    expect(store.getState().timeTravel).toBe(false);
+  });
+
+  it('enter opens at the present (last commit); exit stops and restores live', () => {
+    const store = createUIStore();
+    store.getState().ingestTimeline(tl);
+    store.getState().enterTimeTravel();
+    let s = store.getState();
+    expect(s.timeTravel).toBe(true);
+    expect(s.timeTravelActive).toBe(true);
+    expect(s.scrubIndex).toBe(2); // last commit = the present
+    store.getState().exitTimeTravel();
+    s = store.getState();
+    expect(s.timeTravel).toBe(false);
+    expect(s.playing).toBe(false);
+  });
+
+  it('setScrubIndex clamps to [0, commits-1] and a manual scrub stops playback', () => {
+    const store = createUIStore();
+    store.getState().ingestTimeline(tl);
+    store.getState().enterTimeTravel(0);
+    store.getState().setPlaying(true);
+    expect(store.getState().playing).toBe(true);
+    store.getState().setScrubIndex(99); // manual scrub → clamp + stop
+    expect(store.getState().scrubIndex).toBe(2);
+    expect(store.getState().playing).toBe(false);
+    store.getState().setScrubIndex(-5);
+    expect(store.getState().scrubIndex).toBe(0);
+  });
+
+  it('a play tick (fromPlay) advances without stopping playback', () => {
+    const store = createUIStore();
+    store.getState().ingestTimeline(tl);
+    store.getState().enterTimeTravel(0);
+    store.getState().setPlaying(true);
+    store.getState().setScrubIndex(1.2, true);
+    expect(store.getState().scrubIndex).toBeCloseTo(1.2, 6);
+    expect(store.getState().playing).toBe(true);
+  });
+
+  it('stepCommit rounds then steps whole commits', () => {
+    const store = createUIStore();
+    store.getState().ingestTimeline(tl);
+    store.getState().enterTimeTravel(0);
+    store.getState().setScrubIndex(1.4);
+    store.getState().stepCommit(1);
+    expect(store.getState().scrubIndex).toBe(2); // round(1.4)=1, +1 → 2
+    store.getState().stepCommit(-1);
+    expect(store.getState().scrubIndex).toBe(1);
+  });
+
+  it('pressing play at the end restarts the growth movie from the start', () => {
+    const store = createUIStore();
+    store.getState().ingestTimeline(tl);
+    store.getState().enterTimeTravel(); // at the last commit (2)
+    store.getState().setPlaying(true);
+    expect(store.getState().scrubIndex).toBe(0); // rewound to play forward
+    expect(store.getState().playing).toBe(true);
+  });
+
+  it('ingestTimeline re-clamps the scrub and drops travel when history vanishes', () => {
+    const store = createUIStore();
+    store.getState().ingestTimeline(tl);
+    store.getState().enterTimeTravel(2);
+    store.getState().ingestTimeline(EMPTY_TIMELINE_FIXTURE);
+    const s = store.getState();
+    expect(s.timeTravel).toBe(false); // no history → travel drops
+    expect(s.scrubIndex).toBe(0);
   });
 });

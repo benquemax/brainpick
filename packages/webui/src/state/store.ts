@@ -30,6 +30,7 @@ import { GPU_BUDGET } from '../scene/tuning';
 import type { EntityAvailability, EntityGraph, GraphLayer } from '../graph/entities';
 import { entityRenderId } from '../graph/entities';
 import { entityRenderIdsForDoc } from './entityModel';
+import { EMPTY_TIMELINE, hasHistory, type Timeline } from '../time/timeline';
 
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
 
@@ -124,6 +125,25 @@ export interface UIState extends GraphSlice {
    */
   morphActive: boolean;
 
+  /** TIME MACHINE (spec/90): the bundle's git history distilled for time travel. */
+  timeline: Timeline;
+  /** True while scrubbing history — the brain reconstructs a past moment. */
+  timeTravel: boolean;
+  /**
+   * True while the time-travel visuals are on screen — set on enter, held until
+   * the reconstruction eases fully back to the present (TimeController clears it),
+   * so the starfield/field layer stays mounted through the whole fade-out.
+   */
+  timeTravelActive: boolean;
+  /**
+   * The scrub position as a FRACTIONAL COMMIT INDEX in [0, commits-1] (the LOGICAL
+   * target; the scene eases an animated `runtime.scrub` toward it). At integer i
+   * the brain is "as of commit i". Meaningless without history.
+   */
+  scrubIndex: number;
+  /** True while the growth movie auto-advances (space / the play button). */
+  playing: boolean;
+
   /** GPU performance tier (scene/gpuTier) — detected once at startup. */
   gpu: GpuTier;
   /** Active node render budget: the tier's cap, raised by "show more". */
@@ -185,6 +205,24 @@ export interface UIState extends GraphSlice {
   toggleMode(): void;
   /** MorphController reports when the transition is live / has fully settled. */
   setMorphActive(active: boolean): void;
+
+  /** Adopt a fetched timeline; if we were scrubbing, re-clamp to the new range. */
+  ingestTimeline(timeline: Timeline): void;
+  /** Enter time travel at a given commit index (default: the present / last commit). No-op without history. */
+  enterTimeTravel(index?: number): void;
+  /** Leave time travel, stop playback, restore the live present. */
+  exitTimeTravel(): void;
+  /** Flip time travel on/off (key `t`, the pill). */
+  toggleTimeTravel(): void;
+  /** Set the scrub position (clamped to [0, commits-1]); stops playback on a manual scrub. */
+  setScrubIndex(index: number, fromPlay?: boolean): void;
+  /** Step by whole commits (←/→): rounds to the nearest integer commit then ±delta. */
+  stepCommit(delta: number): void;
+  /** Start/stop the growth movie; play from the start when already at the end. */
+  setPlaying(playing: boolean): void;
+  togglePlay(): void;
+  /** TimeController reports when the time-travel visuals have eased fully out. */
+  setTimeTravelActive(active: boolean): void;
 
   /** Adopt a detected GPU tier and its node budget (main.tsx, at startup). */
   initGpu(gpu: GpuTier): void;
@@ -299,6 +337,12 @@ export function createUIStore(): UIStoreApi {
 
       mode: 'cosmos',
       morphActive: false,
+
+      timeline: EMPTY_TIMELINE,
+      timeTravel: false,
+      timeTravelActive: false,
+      scrubIndex: 0,
+      playing: false,
 
       gpu: DEFAULT_GPU_TIER,
       nodeBudget: DEFAULT_GPU_TIER.nodeBudget,
@@ -564,6 +608,70 @@ export function createUIStore(): UIStoreApi {
         if (get().morphActive !== active) set({ morphActive: active });
       },
 
+      ingestTimeline(timeline) {
+        const state = get();
+        // If we were travelling, keep the same commit under the handle where we can,
+        // and drop out of time travel if the new timeline lost its history.
+        const lastIndex = Math.max(0, timeline.commits.length - 1);
+        const scrubIndex = Math.min(state.scrubIndex, lastIndex);
+        const timeTravel = state.timeTravel && hasHistory(timeline);
+        set({ timeline, scrubIndex, timeTravel, playing: timeTravel && state.playing });
+      },
+
+      enterTimeTravel(index) {
+        const state = get();
+        if (!hasHistory(state.timeline)) return; // the control hides without history
+        const last = state.timeline.commits.length - 1;
+        const at = index === undefined ? last : Math.max(0, Math.min(last, index));
+        set({ timeTravel: true, timeTravelActive: true, scrubIndex: at, playing: false });
+      },
+
+      exitTimeTravel() {
+        set({ timeTravel: false, playing: false });
+      },
+
+      toggleTimeTravel() {
+        if (get().timeTravel) get().exitTimeTravel();
+        else get().enterTimeTravel();
+      },
+
+      setScrubIndex(index, fromPlay = false) {
+        const state = get();
+        const last = Math.max(0, state.timeline.commits.length - 1);
+        const clamped = Math.max(0, Math.min(last, index));
+        // A manual scrub takes the wheel from playback; a play tick keeps playing.
+        const playing = fromPlay ? state.playing : false;
+        if (clamped !== state.scrubIndex || playing !== state.playing) {
+          set({ scrubIndex: clamped, playing });
+        }
+      },
+
+      stepCommit(delta) {
+        const state = get();
+        if (!state.timeTravel) return;
+        state.setScrubIndex(Math.round(state.scrubIndex) + delta);
+      },
+
+      setPlaying(playing) {
+        const state = get();
+        if (!state.timeTravel || !hasHistory(state.timeline)) return;
+        const last = state.timeline.commits.length - 1;
+        // Pressing play at (or past) the end restarts the growth movie from the start.
+        if (playing && state.scrubIndex >= last) {
+          set({ scrubIndex: 0, playing: true });
+        } else if (playing !== state.playing) {
+          set({ playing });
+        }
+      },
+
+      togglePlay() {
+        get().setPlaying(!get().playing);
+      },
+
+      setTimeTravelActive(active) {
+        if (get().timeTravelActive !== active) set({ timeTravelActive: active });
+      },
+
       initGpu(gpu) {
         set({ gpu, nodeBudget: gpu.nodeBudget });
       },
@@ -604,3 +712,4 @@ export function useUI<T>(selector: (state: UIState) => T): T {
 }
 
 export type { GhostEdge, Lens };
+export type { Timeline };

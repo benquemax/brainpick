@@ -2,6 +2,7 @@
 
 ## 2026-07-06
 
+- Added: the Time Machine — scrub through the brain's git history and watch it grow; the flat cosmos and the hologram both travel through time.
 - Added: timeline.json — the brain's git history distilled for the coming Time Machine (advisory T1 artifact; /api/timeline serves it).
 
 ## 2026-07-04

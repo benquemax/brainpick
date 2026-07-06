@@ -10,6 +10,7 @@ import { LabelsLayer } from './LabelsLayer';
 import { MorphController } from './MorphController';
 import { NodesLayer } from './NodesLayer';
 import { PointerControls } from './PointerControls';
+import { TimeController } from './TimeController';
 import type { GraphRuntime } from './runtime';
 import { useUI } from '../state/store';
 
@@ -41,6 +42,7 @@ export function CosmosCanvas({
       <CameraRig runtime={runtime} />
       {brainActive && <BrainCameraRig runtime={runtime} />}
       <MorphController runtime={runtime} />
+      <TimeController runtime={runtime} />
       <PointerControls runtime={runtime} />
       {labelContainer !== null && <LabelsLayer runtime={runtime} container={labelContainer} />}
     </Canvas>

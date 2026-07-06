@@ -22,6 +22,10 @@ declare global {
     __bp_runtime: {
       ids: string[];
       liveCount: number;
+      /** TIME MACHINE: animated scrub + travel amount, and the present-node count. */
+      scrub: number;
+      timeTravelAmt: number;
+      presentCount: (index?: number) => number;
       /** Holographic brain: the live morph value + lazy-layout / orbit signals. */
       morph: number;
       brainReady: boolean;
@@ -708,6 +712,137 @@ test.describe('holographic brain', () => {
     // .first(): a doc's markdown body may carry its own ## subheadings, so scope
     // to the panel's title h2 rather than strict-matching every heading.
     await expect(page.locator('.doc-panel h2').first()).toBeVisible();
+  });
+});
+
+test.describe('the Time Machine', () => {
+  // A synthetic history over the REAL fixture graph (its own doc ids), injected
+  // through the store — the "mock path" the task allows, since the copied fixture
+  // bundle is not a git repo and the real /api/timeline is legitimately empty.
+  const T0 = '2026-07-01T00:00:00Z';
+  const T1 = '2026-07-02T00:00:00Z';
+  const T2 = '2026-07-03T00:00:00Z';
+  const SYNTH_TIMELINE = {
+    commits: [
+      { sha: 'aaaaaaa', date: T0, author: 'Tom', message: 'seed the star', added: ['aurinko.md'], modified: [], deleted: [] },
+      { sha: 'bbbbbbb', date: T1, author: 'Tom', message: 'the worlds', added: ['maa.md', 'planeetat.md'], modified: ['aurinko.md'], deleted: [] },
+      {
+        sha: 'ccccccc',
+        date: T2,
+        author: 'Tom',
+        message: 'moon, comet, islands',
+        added: ['komeetta.md', 'kuu.md', 'saaret/atolli.md', 'saaret/laguuni.md', 'yksinainen.md'],
+        modified: [],
+        deleted: [],
+      },
+    ],
+    docs: {
+      'aurinko.md': { created: T0, modified: [T1], deleted: null },
+      'maa.md': { created: T1, modified: [], deleted: null },
+      'planeetat.md': { created: T1, modified: [], deleted: null },
+      'komeetta.md': { created: T2, modified: [], deleted: null },
+      'kuu.md': { created: T2, modified: [], deleted: null },
+      'saaret/atolli.md': { created: T2, modified: [], deleted: null },
+      'saaret/laguuni.md': { created: T2, modified: [], deleted: null },
+      'yksinainen.md': { created: T2, modified: [], deleted: null },
+    },
+    span: { commits: 3, first: T0, last: T2 },
+  };
+
+  test('the real server serves /api/timeline; with no git history the control hides', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    // The endpoint exists (spec/50) and returns the empty shape for a non-repo bundle.
+    const res = await page.request.get(baseURL() + '/api/timeline');
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ commits: [], docs: {}, span: null });
+
+    // No history → the Time Machine control hides, and pressing `t` is a no-op.
+    await expect(page.locator('.time-toggle')).toHaveCount(0);
+    await page.keyboard.press('t');
+    await expect(page.locator('.time-bar')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__bp_store.getState().timeTravel)).toBe(false);
+  });
+
+  test('with history: the scrubber shows and scrubbing changes the visible node count', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    // Inject the synthetic timeline; retry until it sticks (the controller fetches
+    // the real empty timeline once on boot — re-inject past that single overwrite).
+    await expect
+      .poll(async () => {
+        await page.evaluate((tl) => window.__bp_store.getState().ingestTimeline(tl), SYNTH_TIMELINE);
+        return page.evaluate(() => window.__bp_store.getState().timeline.commits.length);
+      })
+      .toBe(3);
+
+    // The control appears now that there is history.
+    await expect(page.locator('.time-toggle')).toBeVisible();
+
+    // Enter (key t) → the scrubber shows, at the present (the full brain).
+    await page.keyboard.press('t');
+    await expect(page.locator('.time-bar')).toBeVisible();
+    await page.waitForFunction(() => window.__bp_store.getState().timeTravel === true);
+    const full = await page.evaluate(() => window.__bp_runtime.presentCount());
+
+    // Scrub to the first commit → the brain SHRINKS (fewer nodes present, spec/90).
+    await page.evaluate(() => window.__bp_store.getState().setScrubIndex(0));
+    await page.waitForFunction((f) => window.__bp_runtime.presentCount() < f, full);
+    const young = await page.evaluate(() => window.__bp_runtime.presentCount());
+    expect(young).toBeLessThan(full); // spec/90: docs born after T0 are absent at index 0
+
+    // Step forward one commit → it GROWS again.
+    await page.evaluate(() => window.__bp_store.getState().stepCommit(1));
+    await page.waitForFunction((y) => window.__bp_runtime.presentCount() > y, young);
+    const grown = await page.evaluate(() => window.__bp_runtime.presentCount());
+    expect(grown).toBeGreaterThan(young);
+    expect(grown).toBeLessThanOrEqual(full);
+
+    // The readout tracks the commit; the ticks match the commit count.
+    await page.evaluate(() => window.__bp_store.getState().setScrubIndex(0));
+    await expect(page.locator('.time-count')).toHaveText('1/3');
+    expect(await page.locator('.time-tick').count()).toBe(3);
+
+    // Play advances the growth movie forward and stops at the end.
+    await page.evaluate(() => window.__bp_store.getState().togglePlay());
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      return s.playing === false && s.scrubIndex >= 2;
+    }, null, { timeout: 15_000 });
+    expect(await page.evaluate(() => window.__bp_runtime.presentCount())).toBe(full);
+
+    // Exit restores the live present (Escape leaves the machine).
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.__bp_store.getState().timeTravel === false);
+    await expect(page.locator('.time-bar')).toHaveCount(0);
+  });
+
+  test('the growth reconstruction works in brain mode too — the hologram grows', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+    await expect
+      .poll(async () => {
+        await page.evaluate((tl) => window.__bp_store.getState().ingestTimeline(tl), SYNTH_TIMELINE);
+        return page.evaluate(() => window.__bp_store.getState().timeline.commits.length);
+      })
+      .toBe(3);
+
+    // Morph into the brain, then travel — presence is reconstructed in 3D too.
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => window.__bp_runtime.morph > 0.9 && window.__bp_runtime.brainReady);
+    await page.keyboard.press('t');
+    await page.waitForFunction(() => window.__bp_store.getState().timeTravel === true);
+    const full = await page.evaluate(() => window.__bp_runtime.presentCount());
+
+    await page.evaluate(() => window.__bp_store.getState().setScrubIndex(0));
+    await page.waitForFunction((f) => window.__bp_runtime.presentCount() < f, full);
+    const young = await page.evaluate(() => window.__bp_runtime.presentCount());
+    expect(young).toBeLessThan(full);
+    // still in the brain, no crash — the morph held through time travel
+    expect(await page.evaluate(() => window.__bp_store.getState().mode)).toBe('brain');
+    expect(await page.evaluate(() => window.__bp_runtime.morph)).toBeGreaterThan(0.9);
   });
 });
 

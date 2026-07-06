@@ -3,9 +3,11 @@ import { App } from './App';
 import { fetchGraph } from './live/api';
 import { LiveConnection } from './live/connection';
 import { EntityLayerController } from './live/entities';
+import { TimelineController } from './live/timeline';
 import { detectGpuTier, readGpuInputs } from './scene/gpuTier';
 import { GraphRuntime } from './scene/runtime';
 import { uiStore } from './state/store';
+import { parseDeepLink } from './time/timeline';
 import './styles.css';
 
 // Detect the GPU tier once, up front, so the very first render already uses
@@ -29,6 +31,33 @@ connection.start();
 // picked (links mode stays byte-for-byte the doc graph).
 const entityLayer = new EntityLayerController({ store: uiStore });
 entityLayer.start();
+
+// The TIME MACHINE's git-history timeline (spec/90): fetched at startup and on
+// every seq change. A non-repo bundle serves the empty shape and the feature hides.
+const timelineController = new TimelineController({ store: uiStore });
+timelineController.start();
+
+// Deep-link a moment (?t=<iso> / ?commit=<sha>): the first time a timeline WITH
+// history lands, open the Time Machine at that moment so a shared URL restores it.
+// The initial query is captured ONCE so the scrubber's own URL rewrites can never
+// feed back here, and the listener detaches BEFORE mutating (enterTimeTravel is a
+// store write that would otherwise re-enter this very subscriber).
+const initialSearch = window.location.search;
+const applyDeepLink = (): boolean => {
+  const moment = parseDeepLink(initialSearch, uiStore.getState().timeline);
+  if (!moment) return false;
+  uiStore.getState().enterTimeTravel(moment.index);
+  return true;
+};
+if (parseDeepLink(initialSearch, uiStore.getState().timeline) === null) {
+  const unsubDeepLink = uiStore.subscribe(() => {
+    if (parseDeepLink(initialSearch, uiStore.getState().timeline) === null) return;
+    unsubDeepLink();
+    applyDeepLink();
+  });
+} else {
+  applyDeepLink();
+}
 
 // PWA: mobile radios drop SSE aggressively — reconnect when we come back.
 document.addEventListener('visibilitychange', () => {

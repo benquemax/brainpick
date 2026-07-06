@@ -199,6 +199,59 @@ export const BRAIN_CAMERA = {
 } as const;
 
 /**
+ * THE TIME MACHINE (spec/90-timeline.md). Scrub through the bundle's git history
+ * and watch the brain grow: nodes fade/pop in as the scrub crosses their birth
+ * commit, edges fire as they form, the whole thing receding into a cool time-fog
+ * like OSX Time Machine — but calm, not bloom-soup (honoring the 2026-07-03 taste
+ * pass). The scene is driven entirely by two uniforms (uTimeTravel, uScrub) into
+ * static per-node birth/death indices, so scrubbing rebuilds no GPU buffers.
+ *
+ * All coordinates are in FRACTIONAL COMMIT INDEX space (see time/timeline.ts):
+ * a `fadeWindow` of 0.4 means a node fades in over ~0.4 of a commit-gap.
+ */
+export const TIME_MACHINE = {
+  /** Per-frame ease of the animated scrub toward its logical target (buttery drag/step). */
+  scrubEase: 0.2,
+  /** Per-frame ease of uTimeTravel 0⇄1 (the dissolve as history switches on/off). */
+  toggleEase: 0.14,
+  /** Below this uTimeTravel the field layer + fog unmount (fully back in the present). */
+  restEps: 0.004,
+  /** Play speed: commits advanced per second — a watchable growth movie. */
+  commitsPerSecond: 1.15,
+
+  /** A node fades in over this many commit-indices once born (and out before death). */
+  fadeWindow: 0.4,
+  /** Birth/modified flash lasts this many commit-indices — the firing pop as it appears. */
+  flashWindow: 0.6,
+  /** Extra scale + additive glow at the peak of a birth flash. */
+  birthPop: 0.5,
+  birthGlow: 1.3,
+  /** A gentler pop + glow when the scrub crosses a doc's last modification. */
+  modPop: 0.28,
+  modGlow: 0.8,
+
+  /** The forming-edge pulse that travels source→target as an edge is born. */
+  edgePulseWidth: 0.2,
+  edgePulseGlow: 1.2,
+
+  /** TIME FOG: the screen tints deeper into this cool haze the further back you scrub. */
+  fogTint: 'rgba(10, 22, 48, 0.62)',
+  /** Max fog opacity, reached at the OLDEST commit (0 at the present). */
+  fogMaxOpacity: 0.5,
+
+  /** THE STARFIELD tunnel behind the brain — depth we fly through when travelling. */
+  starCount: 320,
+  /** Star field half-extent in world units (a box centred on the brain). */
+  starSpread: 2600,
+  /** Star sprite size (world units) and their cool tint. */
+  starSize: 5.5,
+  starTint: [0.55, 0.72, 1.0] as [number, number, number],
+  /** Idle drift speed (world units/sec toward the viewer) and its brightness. */
+  starDrift: 34,
+  starGlow: 0.5,
+} as const;
+
+/**
  * GPU performance budget — how much the cosmos is allowed to render so weak /
  * mobile GPUs stay smooth. A detected tier (scene/gpuTier.ts) picks a node
  * cap; beyond it, degree-ranked culling + per-directory cluster aggregation
