@@ -161,9 +161,9 @@ function walk(dir: string, rel: string, out: string[]): void {
   }
 }
 
-/** fnmatch.fnmatch, minimally: `*` (crosses `/`), `?`, `[seq]`. Only reachable
- * through an explicit exclude list — the 0.1 pipeline never passes one. */
-function fnmatchToRegExp(pattern: string): RegExp {
+/** fnmatch.fnmatch, minimally: `*` (crosses `/`), `?`, `[seq]`. The exclude list
+ * reaches it here; the timeline's include/exclude matching (spec/90) reuses it. */
+export function fnmatchToRegExp(pattern: string): RegExp {
   let re = "";
   for (let i = 0; i < pattern.length; i++) {
     const ch = pattern[i]!;

@@ -224,6 +224,27 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
     res.json(body);
   });
 
+  router.get("/api/timeline", (req: Request, res: Response) => {
+    // The advisory t1/timeline.json (spec/90), or the empty shape when the bundle
+    // has no git history. ETag by manifest seq, like /api/graph.
+    const etag = `"${state.seq}"`;
+    const ifNoneMatch = req.headers["if-none-match"];
+    if (typeof ifNoneMatch === "string" && ifNoneMatch !== "") {
+      const candidates = new Set(ifNoneMatch.split(",").map((value) => value.trim().replace(/^W\//, "")));
+      if (candidates.has(etag) || candidates.has("*")) {
+        res.status(304).set("ETag", etag).end();
+        return;
+      }
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(readFileSync(join(state.root, ".brainpick", "t1", "timeline.json"), "utf8"));
+    } catch {
+      payload = { commits: [], docs: {}, span: null };
+    }
+    res.set("ETag", etag).json(payload);
+  });
+
   router.get("/api/live", liveHandler(state));
 
   router.all(/^\/api\/(.*)$/u, (req: Request, res: Response) => {

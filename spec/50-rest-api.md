@@ -14,6 +14,7 @@ Both servers implement this surface. All responses are JSON (except `/` and
 | `GET /api/search?q=&mode=auto&limit=8` | `{"hits": [{"path", "title", "description", "score", "snippet", "source"}], "used_modes": [...], "degraded_from": null}` |
 | `GET /api/neighbors?id=&depth=1&layer=links` | `{"center", "nodes": [...], "edges": [...]}` — node/edge shapes as in graph.json; `layer=entities` before T3 degrades to links with `"degraded_from": "entities"` (matching MCP semantics — only `/api/graph` 404s) |
 | `GET /api/live` | SSE stream, see `60-live-deltas.md` |
+| `GET /api/timeline` | `timeline.json` (see `90-timeline.md`); `{"commits": [], "docs": {}, "span": null}` when the bundle has no git history. ETag by `seq` |
 | `GET /` | the static web UI (SPA fallback to `index.html`; login page when a password is set and no session) |
 | `POST /api/login` | `{password}` → 204 + signed session cookie, 401 on mismatch |
 | `POST /api/logout` | clears the session |

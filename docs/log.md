@@ -1,5 +1,9 @@
 # Update log
 
+## 2026-07-06
+
+- Added: timeline.json — the brain's git history distilled for the coming Time Machine (advisory T1 artifact; /api/timeline serves it).
+
 ## 2026-07-04
 
 - Fixed: returning from brain to cosmos restores the flat camera cleanly — no more horizontal stretch, and clicking a dot opens its article again.

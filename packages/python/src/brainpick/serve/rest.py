@@ -1,6 +1,8 @@
 """The REST surface (spec/50): JSON everywhere, instructive errors, ETag'd graph."""
 from __future__ import annotations
 
+import json
+
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -54,6 +56,24 @@ async def graph(request: Request) -> Response:
     if layer == "entities":
         return JSONResponse(state.kg.entity_graph(), headers={"ETag": etag})
     return JSONResponse(state.graph, headers={"ETag": etag})
+
+
+async def timeline(request: Request) -> Response:
+    """GET /api/timeline (spec/90): the advisory t1/timeline.json, or the empty
+    shape when the bundle has no git history. ETag by manifest seq, like graph."""
+    state = _state(request)
+    etag = f'"{state.seq}"'
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match:
+        candidates = {value.strip().removeprefix("W/") for value in if_none_match.split(",")}
+        if etag in candidates or "*" in candidates:
+            return Response(status_code=304, headers={"ETag": etag})
+    path = state.root / ".brainpick" / "t1" / "timeline.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        payload = {"commits": [], "docs": {}, "span": None}
+    return JSONResponse(payload, headers={"ETag": etag})
 
 
 async def doc_detail(request: Request) -> JSONResponse:
@@ -194,6 +214,7 @@ def api_routes() -> list[Route]:
         Route("/api/health", health),
         Route("/api/status", status),
         Route("/api/graph", graph),
+        Route("/api/timeline", timeline),
         Route("/api/docs/{path:path}", doc_detail),
         Route("/api/search", search_endpoint),
         Route("/api/neighbors", neighbors_endpoint),

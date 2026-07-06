@@ -8,6 +8,7 @@ import { canonicalJson, canonicalJsonl, cmpStr, type JsonValue } from "../core/c
 import { atomicWrite, readTextOrNull } from "../core/fs";
 import { deepEqual, diffGraphs, type GraphDelta } from "../deltas";
 import { findRepoRoot } from "../detect";
+import { buildTimeline } from "../timeline";
 import { SPEC_VERSION, VERSION } from "../version";
 import {
   applyIndexSection,
@@ -77,6 +78,16 @@ function refreshReport(root: string, graph: Graph, tiers: Record<string, unknown
     const updated = applyReportSection(existing, block);
     if (updated !== null && updated !== existing) atomicWrite(agents, updated);
   }
+}
+
+/** Advisory T1 artifact (spec/90): the bundle's git history distilled for the
+ * Time Machine. A git failure skips the file — it never blocks T1, and it is not
+ * tracked as a normative manifest tier hash (git state is external). */
+function writeTimeline(root: string, config: Config): void {
+  const repoRoot = findRepoRoot(resolve(root));
+  const timeline = buildTimeline(root, repoRoot, config.bundle.include, config.bundle.exclude);
+  if (timeline === null) return; // non-git bundle or unreadable history — the feature hides
+  atomicWrite(join(root, ".brainpick", "t1", "timeline.json"), canonicalJson(timeline as unknown as JsonValue));
 }
 
 export async function runCompile(
@@ -150,6 +161,7 @@ export async function runCompile(
 
   atomicWrite(join(bp, "t1", "graph.json"), graphText);
   atomicWrite(join(bp, "t1", "docs.jsonl"), docsText);
+  writeTimeline(root, cfg); // advisory (spec/90) — rides along, never blocks
 
   // tier-status-only transitions rewrite the manifest without spending a seq
   const seq = oldManifest === null ? 1 : (oldManifest["seq"] as number) + (artifactsChanged ? 1 : 0);

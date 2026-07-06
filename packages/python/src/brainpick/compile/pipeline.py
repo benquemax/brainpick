@@ -3,6 +3,7 @@ byte-stable on no-ops, delta-emitting on change."""
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -24,9 +25,12 @@ from brainpick.core.bundle import scan
 from brainpick.core.canonical import canonical_json, canonical_jsonl
 from brainpick.core.fs import atomic_write
 from brainpick.deltas import diff_graphs
+from brainpick.detect import find_repo_root
+from brainpick.timeline import build_timeline
 
 INDEX_FILE = "index.md"
 _atomic_write = atomic_write  # the historical name; other modules import it from here
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,6 +86,26 @@ def _refresh_report(root: Path, graph: dict, tiers: dict) -> None:
         updated = apply_report_section(existing, block)
         if updated is not None and updated != existing:
             _atomic_write(agents, updated.encode("utf-8"))
+
+
+def _write_timeline(root: Path, config: Config) -> None:
+    """Advisory T1 artifact (spec/90): the bundle's git history distilled for the
+    Time Machine. A git failure logs and skips the file — it never blocks T1, and
+    it is not tracked as a normative manifest tier hash (git state is external)."""
+    try:
+        repo_root = find_repo_root(root)
+        timeline = build_timeline(
+            root, repo_root,
+            include_globs=tuple(config.bundle.include),
+            excludes=tuple(config.bundle.exclude),
+        )
+    except Exception as error:  # never let git surprises break the compile
+        logger.warning("timeline: skipped (%s)", error)
+        return
+    if timeline is None:
+        return  # non-git bundle or unreadable history — the feature simply hides
+    _atomic_write(root / ".brainpick" / "t1" / "timeline.json",
+                  canonical_json(timeline).encode("utf-8"))
 
 
 def _generator() -> dict:
@@ -188,6 +212,7 @@ def run_compile(
 
     _atomic_write(bp / "t1" / "graph.json", graph_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "docs.jsonl", docs_text.encode("utf-8"))
+    _write_timeline(root, config)  # advisory (spec/90) — rides along, never blocks
 
     if old_manifest is None:
         seq = 1

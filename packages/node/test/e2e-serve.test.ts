@@ -177,6 +177,35 @@ test("graph etag roundtrip", async () => {
   expect(cachedEntities.status).toBe(404);
 });
 
+test("timeline empty then served", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  // the fixture copy is not a git repo → no timeline.json → the empty shape
+  const first = await getJson(`${base}/api/timeline`);
+  expect(first.status).toBe(200);
+  expect(first.headers.get("etag")).toBe('"1"');
+  expect(first.body).toEqual({ commits: [], docs: {}, span: null });
+
+  // once an advisory timeline.json exists, the endpoint serves it verbatim
+  const payload = {
+    commits: [
+      { added: ["a.md"], author: "Tom", date: "2026-07-02T20:41:00Z",
+        deleted: [], message: "Founding", modified: [], sha: "abc1234" },
+    ],
+    docs: { "a.md": { created: "2026-07-02T20:41:00Z", deleted: null, modified: [] } },
+    span: { commits: 1, first: "2026-07-02T20:41:00Z", last: "2026-07-02T20:41:00Z" },
+  };
+  writeFileSync(join(root, ".brainpick", "t1", "timeline.json"), JSON.stringify(payload), "utf8");
+  const served = await getJson(`${base}/api/timeline`);
+  expect(served.status).toBe(200);
+  expect(served.headers.get("etag")).toBe('"1"');
+  expect(served.body).toEqual(payload);
+
+  // ETag by seq (spec/90): a matching If-None-Match short-circuits to 304
+  const cached = await fetch(`${base}/api/timeline`, { headers: { "If-None-Match": '"1"' } });
+  expect(cached.status).toBe(304);
+});
+
 test("docs happy and nested", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/docs/kuu.md`);

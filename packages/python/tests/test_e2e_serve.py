@@ -135,6 +135,33 @@ def test_graph_etag_roundtrip(kotiaurinko):
         assert cached_entities.status_code == 404
 
 
+def test_timeline_empty_then_served(kotiaurinko):
+    with TestClient(make_app(kotiaurinko)) as client:
+        # the fixture copy is not a git repo → no timeline.json → the empty shape
+        first = client.get("/api/timeline")
+        assert first.status_code == 200
+        assert first.headers["etag"] == '"1"'
+        assert first.json() == {"commits": [], "docs": {}, "span": None}
+
+        # once an advisory timeline.json exists, the endpoint serves it verbatim
+        payload = {
+            "commits": [{"added": ["a.md"], "author": "Tom", "date": "2026-07-02T20:41:00Z",
+                         "deleted": [], "message": "Founding", "modified": [], "sha": "abc1234"}],
+            "docs": {"a.md": {"created": "2026-07-02T20:41:00Z", "deleted": None, "modified": []}},
+            "span": {"commits": 1, "first": "2026-07-02T20:41:00Z", "last": "2026-07-02T20:41:00Z"},
+        }
+        tl_path = kotiaurinko / ".brainpick" / "t1" / "timeline.json"
+        tl_path.write_text(json.dumps(payload), encoding="utf-8")
+        served = client.get("/api/timeline")
+        assert served.status_code == 200
+        assert served.headers["etag"] == '"1"'
+        assert served.json() == payload
+
+        # ETag by seq (spec/90): a matching If-None-Match short-circuits to 304
+        cached = client.get("/api/timeline", headers={"If-None-Match": '"1"'})
+        assert cached.status_code == 304
+
+
 def test_docs_happy_and_nested(kotiaurinko):
     with TestClient(make_app(kotiaurinko)) as client:
         body = client.get("/api/docs/kuu.md").json()
