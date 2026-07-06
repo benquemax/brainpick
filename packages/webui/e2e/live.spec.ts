@@ -608,12 +608,18 @@ test.describe('holographic brain', () => {
     });
 
     // The idle turntable advances the azimuth WITHOUT any interaction — active the
-    // moment we enter brain mode (it is a movie shot, not a still).
+    // moment we enter brain mode (it is a movie shot, not a still). Measure the
+    // FREE spin rate over a short window, to compare the paused rate against
+    // relatively (robust to machine speed, unlike an absolute threshold).
     const a0 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
     await page.waitForFunction((prev) => Math.abs(window.__bp_runtime.brainAzimuth - prev) > 0.05, a0);
+    const f0 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
+    await page.waitForTimeout(500);
+    const freeDelta = Math.abs((await page.evaluate(() => window.__bp_runtime.brainAzimuth)) - f0);
 
-    // A drag pauses the spin: within the resume window the azimuth barely moves
-    // (the idle spin would advance ~0.14 rad over the same ~0.9 s).
+    // A drag pauses the spin. Measure over a SHORT window kept well inside the
+    // resume window (autoRotateResumeMs ~2.6 s) so the spin can't resume mid-
+    // measurement under e2e load — the flake this replaces.
     const box = await page.locator('canvas').boundingBox();
     if (!box) throw new Error('canvas has no box');
     const cx = box.x + box.width / 2;
@@ -623,11 +629,13 @@ test.describe('holographic brain', () => {
     for (let i = 1; i <= 8; i++) await page.mouse.move(cx + i * 12, cy - i * 2);
     await page.mouse.up();
     await page.waitForFunction(() => window.__bp_runtime.orbited === true);
-    await page.waitForTimeout(700); // let the drag's damping settle, still inside the pause window
+    await page.waitForTimeout(350); // let the drag's damping settle (draggingSmoothTime ~0.14 s)
     const b0 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
-    await page.waitForTimeout(900);
-    const b1 = await page.evaluate(() => window.__bp_runtime.brainAzimuth);
-    expect(Math.abs(b1 - b0)).toBeLessThan(0.03); // paused by the gesture
+    await page.waitForTimeout(500);
+    const pausedDelta = Math.abs((await page.evaluate(() => window.__bp_runtime.brainAzimuth)) - b0);
+
+    expect(freeDelta).toBeGreaterThan(0.03); // the spin was genuinely running
+    expect(pausedDelta).toBeLessThan(freeDelta * 0.4); // the gesture clearly paused it
   });
 
   test('returning from brain restores the flat camera cleanly: no stretch, dots clickable again', async ({ page }) => {
