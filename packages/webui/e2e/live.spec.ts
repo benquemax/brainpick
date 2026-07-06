@@ -594,7 +594,7 @@ test.describe('holographic brain', () => {
       return s.selection !== null && s.selection.endsWith('.md');
     });
     await expect(page.locator('.doc-panel')).toBeVisible();
-    await expect(page.locator('.doc-panel h2')).toBeVisible();
+    await expect(page.locator('.doc-panel h2').first()).toBeVisible(); // title, not body ## headings
   });
 
   test('the brain turns on its own axis like a galaxy, and a gesture pauses the spin', async ({ page }) => {
@@ -705,7 +705,9 @@ test.describe('holographic brain', () => {
     await page.mouse.click(target!.x, target!.y);
     await page.waitForFunction((id) => window.__bp_store.getState().selection === id, target!.id);
     await expect(page.locator('.doc-panel')).toBeVisible();
-    await expect(page.locator('.doc-panel h2')).toBeVisible();
+    // .first(): a doc's markdown body may carry its own ## subheadings, so scope
+    // to the panel's title h2 rather than strict-matching every heading.
+    await expect(page.locator('.doc-panel h2').first()).toBeVisible();
   });
 });
 
