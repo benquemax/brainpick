@@ -323,7 +323,9 @@ export function entityGraph() {
     degree.get(r.dst)?.add(r.src);
   }
   return {
-    nodes: ENTITIES.map((e) => ({ id: e.id, name: e.name, type: e.type, description: e.description, degree: degree.get(e.id)?.size ?? 0 })),
+    // source_docs travels on the graph payload now (spec/40, spec/50) — sorted —
+    // so the entity panel shows provenance without the /api/neighbors walk.
+    nodes: ENTITIES.map((e) => ({ id: e.id, name: e.name, type: e.type, description: e.description, degree: degree.get(e.id)?.size ?? 0, source_docs: [...e.source_docs].sort() })),
     edges: [...RELATIONS].sort((a, b) => a.src.localeCompare(b.src) || a.dst.localeCompare(b.dst)).map((r) => ({ src: r.src, dst: r.dst, weight: r.weight })),
   };
 }

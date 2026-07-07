@@ -4,7 +4,7 @@ import { fetchGraph, fetchStatus, writesEnabledFromStatus } from './live/api';
 import { LiveConnection } from './live/connection';
 import { EntityLayerController } from './live/entities';
 import { TimelineController } from './live/timeline';
-import { detectGpuTier, readGpuInputs } from './scene/gpuTier';
+import { detectGpuTier, isMobileViewport, readGpuInputs } from './scene/gpuTier';
 import { GraphRuntime } from './scene/runtime';
 import { uiStore } from './state/store';
 import { parseDeepLink } from './time/timeline';
@@ -24,10 +24,16 @@ void fetchGraph(false, 0)
     /* server not up yet — the SSE reconnect loop keeps trying */
   });
 
-// Writes-availability (spec/50): GET /api/status tells the client whether the
-// in-browser editor's save path is open, so the Edit / New affordances only show
-// when the server accepts writes.
-void fetchStatus().then((status) => uiStore.getState().setWritesEnabled(writesEnabledFromStatus(status)));
+// GET /api/status (spec/50) carries two client policies at boot:
+//  - writes: whether the in-browser editor's save path is open (Edit / New show).
+//  - ui: the operator's [ui] block (spec/80) — the mobile node cap (preferred over
+//    the GPU-tier guess) and the opening view (cosmos / brain), applied here so the
+//    client stops guessing from the device alone.
+void fetchStatus().then((status) => {
+  const s = uiStore.getState();
+  s.setWritesEnabled(writesEnabledFromStatus(status));
+  s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport() });
+});
 
 const connection = new LiveConnection({ store: uiStore, fetchGraph });
 connection.start();

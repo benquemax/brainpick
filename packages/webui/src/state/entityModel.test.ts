@@ -8,6 +8,7 @@ import {
   entitiesForDoc,
   entityRenderGraph,
   entityRenderIdsForDoc,
+  entitySourceDocs,
   overlayRenderGraph,
   VIRTUAL_WEIGHT,
 } from './entityModel';
@@ -159,5 +160,30 @@ describe('grounding helpers', () => {
     expect(entitiesForDoc(GROUNDING, 'aurinko.md')).toEqual(['aurinko', 'kuu']);
     expect(entityRenderIdsForDoc(GROUNDING, 'kuu.md')).toEqual([entityRenderId('kuu'), entityRenderId('vuorovesi')]);
     expect(entitiesForDoc(GROUNDING, 'missing.md')).toEqual([]);
+  });
+});
+
+describe('entitySourceDocs — provenance for the entity panel', () => {
+  it('prefers the graph node’s own source_docs (available without a neighbors walk)', () => {
+    const node = { source_docs: ['planeetat.md', 'aurinko.md'] };
+    // node source_docs unioned with grounding, de-duped and sorted.
+    expect(entitySourceDocs(node, new Map(), 'aurinko')).toEqual(['aurinko.md', 'planeetat.md']);
+  });
+
+  it('unions the node’s source_docs with any reconstructed grounding', () => {
+    const node = { source_docs: ['aurinko.md'] };
+    const grounding = new Map<string, string[]>([['aurinko', ['aurinko.md', 'komeetta.md']]]);
+    expect(entitySourceDocs(node, grounding, 'aurinko')).toEqual(['aurinko.md', 'komeetta.md']);
+  });
+
+  it('falls back to the grounding when the node carries no source_docs', () => {
+    const grounding = new Map<string, string[]>([['kuu', ['kuu.md', 'maa.md']]]);
+    expect(entitySourceDocs({}, grounding, 'kuu')).toEqual(['kuu.md', 'maa.md']);
+    expect(entitySourceDocs(null, grounding, 'kuu')).toEqual(['kuu.md', 'maa.md']);
+  });
+
+  it('is empty when neither source names the entity (graceful "no provenance")', () => {
+    expect(entitySourceDocs({ source_docs: [] }, new Map(), 'ghost')).toEqual([]);
+    expect(entitySourceDocs(null, new Map(), 'ghost')).toEqual([]);
   });
 });

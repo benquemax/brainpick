@@ -171,6 +171,23 @@ export function docsForEntity(grounding: ReadonlyMap<string, string[]>, entityId
   return grounding.get(entityId) ?? [];
 }
 
+/**
+ * The source docs to show for a selected entity. The entity graph node now
+ * carries `source_docs` directly (spec/50), so those are authoritative and
+ * available immediately; they are unioned with any grounding reconstructed from
+ * /api/neighbors so nothing already discovered is dropped. Sorted + de-duped;
+ * empty when the entity has no known provenance (the panel degrades gracefully).
+ */
+export function entitySourceDocs(
+  node: { source_docs?: string[] } | null,
+  grounding: ReadonlyMap<string, string[]>,
+  entityId: string,
+): string[] {
+  const union = new Set<string>(node?.source_docs ?? []);
+  for (const doc of docsForEntity(grounding, entityId)) union.add(doc);
+  return [...union].sort();
+}
+
 /** The entity ids grounded in a doc (inverse of the grounding map), sorted. */
 export function entitiesForDoc(grounding: ReadonlyMap<string, string[]>, doc: string): string[] {
   const ids: string[] = [];

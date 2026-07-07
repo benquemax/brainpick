@@ -25,8 +25,9 @@ import type {
 } from '../graph/types';
 import { applyDelta, applySnapshot, emptyGraphSlice, type GraphSlice } from './applyDelta';
 import { lensNodeSet, NO_LENS, sameLens, type Lens } from './lens';
-import { DEFAULT_GPU_TIER, type GpuTier } from '../scene/gpuTier';
+import { DEFAULT_GPU_TIER, mobileNodeBudget, type GpuTier } from '../scene/gpuTier';
 import { GPU_BUDGET } from '../scene/tuning';
+import type { StatusUi } from '../live/api';
 import type { EntityAvailability, EntityGraph, GraphLayer } from '../graph/entities';
 import { entityRenderId } from '../graph/entities';
 import { entityRenderIdsForDoc } from './entityModel';
@@ -169,6 +170,8 @@ export interface UIState extends GraphSlice {
   nodeBudget: number;
   /** Top-level dirs the user revealed by expanding a cluster proxy. */
   expandedDirs: ReadonlySet<string>;
+  /** The operator's `[ui]` policy from GET /api/status once applied, or null. */
+  serverUi: StatusUi | null;
 
   /** EDITOR: writes are exposed by the server (spec/50 [serve] writes = "guarded"). */
   writesEnabled: boolean;
@@ -252,6 +255,12 @@ export interface UIState extends GraphSlice {
 
   /** Adopt a detected GPU tier and its node budget (main.tsx, at startup). */
   initGpu(gpu: GpuTier): void;
+  /**
+   * Adopt the operator's `[ui]` policy from /api/status (spec/80): prefer its
+   * mobile node cap over the GPU guess (GPU tier stays the secondary safety cap),
+   * and honor its opening view on first load. Absent/null → the GPU guess stands.
+   */
+  applyServerUi(ui: StatusUi | null, env: { isMobile: boolean }): void;
   /** Override the render budget (clamped to [1, ceiling]). */
   setNodeBudget(budget: number): void;
   /** "Show more": raise the budget by the tuning factor, up to the ceiling. */
@@ -384,6 +393,7 @@ export function createUIStore(): UIStoreApi {
       gpu: DEFAULT_GPU_TIER,
       nodeBudget: DEFAULT_GPU_TIER.nodeBudget,
       expandedDirs: new Set<string>(),
+      serverUi: null,
 
       writesEnabled: false,
       editor: null,
@@ -715,6 +725,18 @@ export function createUIStore(): UIStoreApi {
 
       initGpu(gpu) {
         set({ gpu, nodeBudget: gpu.nodeBudget });
+      },
+
+      applyServerUi(ui, env) {
+        const firstApply = get().serverUi === null;
+        const budget = mobileNodeBudget(get().gpu, ui?.max_nodes_mobile, env.isMobile);
+        set({ serverUi: ui });
+        get().setNodeBudget(budget); // no-op when it equals the GPU-tier value
+        // Honor the operator's opening view ONCE, on first load — never yank a
+        // view the user has since chosen for themselves.
+        if (firstApply && (ui?.default_mode === 'brain' || ui?.default_mode === 'cosmos')) {
+          get().setMode(ui.default_mode);
+        }
       },
 
       setNodeBudget(budget) {

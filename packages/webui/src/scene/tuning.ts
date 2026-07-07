@@ -161,6 +161,21 @@ export const BRAIN = {
   pulseSeconds: 1.6,
   pulseWidth: 0.16,
   pulseGlow: 1.4,
+
+  /** HOLOGRAM LABELS. The flat cosmos earns labels from semantic zoom; the
+   * perspective brain has no ortho zoom, so it labels a fixed handful of the
+   * top hubs (plus the hovered/selected node), capped by the GPU tier's ceiling.
+   * Kept small so names stay legible over the 3D dot cloud. */
+  labelBudget: 22,
+  /** Extra pixels lifting a hologram label above its (distance-scaled) dot. */
+  labelLift: 7,
+  /**
+   * Far-side label cull: a node whose camera-distance exceeds the brain centre's
+   * by more than this fraction sits deep on the occluded back of the hologram, so
+   * its name is hidden. Depth-based (not a hemisphere split through the origin), so
+   * the visible front + central cloud — most of a volumetric brain — always labels.
+   */
+  labelBackMargin: 0.2,
 } as const;
 
 /**
@@ -185,6 +200,13 @@ export const BRAIN_CAMERA = {
    */
   autoRotateSpeed: 0.16,
   autoRotateResumeMs: 2600,
+  /**
+   * SEARCH-AS-FLIGHT. A search focus / entity select in brain mode re-centres the
+   * orbit on the hit's 3D position and dollies to this distance (× brain radius) —
+   * the perspective-camera mirror of the cosmos flyTo. Between min (1.05) and the
+   * resting 2.05 so the hit reads prominent without the camera diving inside.
+   */
+  focusDistanceFactor: 1.5,
   /**
    * The starting (and reference) orbit orientation, in camera-controls spherical
    * coords. The polar angle is a gentle DOWNWARD tilt — well off the equator — so

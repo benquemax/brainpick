@@ -31,6 +31,8 @@ declare global {
       brainReady: boolean;
       orbited: boolean;
       brainAzimuth: number;
+      /** The orbit camera's look-at target — a search-flight moves it to the hit. */
+      brainTarget: { x: number; y: number; z: number };
       brainPositions: Float32Array;
       /** Set while brain mode is mounted: project a node to client pixels. */
       projectNodeToScreen: ((i: number) => { x: number; y: number } | null) | null;
@@ -273,6 +275,23 @@ test('PWA: the manifest is linked and served', async ({ page }) => {
   const manifest = await page.request.get(baseURL() + '/manifest.webmanifest');
   expect(manifest.status()).toBe(200);
   expect((await manifest.json()).name).toBe('brainpick');
+});
+
+test('the operator [ui] policy from /api/status reaches the client (spec/80)', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  // The engine ships the [ui] block on /api/status: the mobile node cap + opening view.
+  const status = await (await page.request.get(baseURL() + '/api/status')).json();
+  expect(status.ui).toBeTruthy();
+  expect(typeof status.ui.max_nodes_mobile).toBe('number');
+  expect(['cosmos', 'brain']).toContain(status.ui.default_mode);
+
+  // The client captured it — it no longer guesses the mobile cap / opening view
+  // from the GPU tier alone.
+  await page.waitForFunction(() => window.__bp_store.getState().serverUi !== null);
+  const consumed = await page.evaluate(() => window.__bp_store.getState().serverUi);
+  expect(consumed).toEqual(status.ui);
 });
 
 test('the navigator opens via key n and the HUD button, mirroring the bundle tree', async ({ page }) => {
@@ -722,6 +741,81 @@ test.describe('holographic brain', () => {
     // .first(): a doc's markdown body may carry its own ## subheadings, so scope
     // to the panel's title h2 rather than strict-matching every heading.
     await expect(page.locator('.doc-panel h2').first()).toBeVisible();
+  });
+
+  test('labels ride the nodes inside the hologram — they no longer hide past mid-morph', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return window.__bp_store.getState().morphActive && rt.brainReady && rt.morph > 0.9;
+    });
+
+    // The regression this guards: labels used to hide once the morph passed 0.5.
+    // Now at least one label is placed while the settled brain is on screen.
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('.node-label')].filter((d) => (d as HTMLElement).style.display !== 'none').length > 0,
+    );
+
+    // A selected node is always labeled — its name renders over its dot in 3D.
+    await page.evaluate(() => window.__bp_store.getState().select('aurinko.md', false));
+    const label = page.locator('.node-label', { hasText: /^Aurinko$/ });
+    await expect(label).toBeVisible();
+    // and it is positioned somewhere on the canvas (a real transform, not parked off-screen)
+    const onScreen = await label.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return r.left > -50 && r.top > -50 && r.right < window.innerWidth + 50 && r.bottom < window.innerHeight + 50;
+    });
+    expect(onScreen).toBe(true);
+  });
+
+  test('search in brain mode flies the perspective camera to frame the hit', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return window.__bp_store.getState().mode === 'brain' && rt.brainReady && rt.morph > 0.99;
+    });
+
+    // Pick the doc whose brain position is FARTHEST from the centre, so a flight to
+    // it is unambiguous (the orbit target starts at the origin the camera looks at).
+    const hit = await page.evaluate(() => {
+      const rt = window.__bp_runtime;
+      const bp = rt.brainPositions;
+      let best = -1;
+      let bestR = -1;
+      for (let i = 0; i < rt.ids.length; i++) {
+        if (!rt.ids[i]!.endsWith('.md')) continue;
+        const r = Math.hypot(bp[i * 3]!, bp[i * 3 + 1]!, bp[i * 3 + 2]!);
+        if (r > bestR) {
+          bestR = r;
+          best = i;
+        }
+      }
+      const t = rt.brainTarget;
+      return { id: rt.ids[best]!, r: bestR, targetDist: Math.hypot(t.x, t.y, t.z) };
+    });
+    expect(hit.r).toBeGreaterThan(10); // a hit well off the brain centre
+    expect(hit.targetDist).toBeLessThan(hit.r * 0.5); // the orbit starts near the origin
+
+    // Focus the hit as a search would (select + fly). The perspective camera's
+    // orbit target flies to the hit's 3D position (BrainCameraRig).
+    await page.evaluate((id) => window.__bp_store.getState().select(id, true), hit.id);
+    await page.waitForFunction((h) => {
+      const rt = window.__bp_runtime;
+      const i = rt.ids.indexOf(h.id);
+      if (i < 0) return false;
+      const bp = rt.brainPositions;
+      const t = rt.brainTarget;
+      const d = Math.hypot(t.x - bp[i * 3]!, t.y - bp[i * 3 + 1]!, t.z - bp[i * 3 + 2]!);
+      return d < h.r * 0.25; // the target arrived at the hit
+    }, hit);
+    // still in the brain, no crash
+    expect(await page.evaluate(() => window.__bp_store.getState().mode)).toBe('brain');
   });
 });
 

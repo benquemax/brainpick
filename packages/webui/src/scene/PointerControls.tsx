@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { pickNearest, pickNearest3D, type Projected } from './pick';
 import { dirOfClusterId, isClusterId } from '../state/budget';
 import { bareEntityId, isEntityRenderId } from '../graph/entities';
-import { nodeStagger, type GraphRuntime } from './runtime';
+import { morphedWorldOf, type GraphRuntime } from './runtime';
 import { BRAIN } from './tuning';
 
 const CLICK_SLOP_PX = 6;
@@ -49,23 +49,6 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       return pickNearest(runtime.positions, runtime.liveCount, runtime.radii, v.x, v.y, 14 / zoom);
     };
 
-    // The node's CURRENT world position under the morph — mix of its flat cosmos
-    // target and its 3D brain target, with the same per-node stagger the shader uses.
-    const worldOfNode = (i: number, out: THREE.Vector3): boolean => {
-      const bp = runtime.brainPositions;
-      if (bp.length < (i + 1) * 3) return false;
-      const span = BRAIN.staggerSpan;
-      const m = Math.min(1, Math.max(0, (runtime.morph - nodeStagger(i) * span) / (1 - span)));
-      const cx = runtime.positions[i * 2] ?? 0;
-      const cy = runtime.positions[i * 2 + 1] ?? 0;
-      out.set(
-        cx + (bp[i * 3]! - cx) * m,
-        cy + (bp[i * 3 + 1]! - cy) * m,
-        bp[i * 3 + 2]! * m,
-      );
-      return true;
-    };
-
     // --- BRAIN: project each morphed node to the screen; nearest dot wins. ---
     const pickAt3D = (e: PointerEvent, camera: THREE.Camera): number => {
       const rect = el.getBoundingClientRect();
@@ -73,7 +56,9 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       const py = e.clientY - rect.top;
       const halfH = rect.height / 2;
       const project = (i: number): Projected | null => {
-        if (!worldOfNode(i, world)) return null;
+        // The node's CURRENT morphed world position — the exact mix (flat cosmos
+        // target ⇄ 3D brain target, per-node stagger) the shader + labels share.
+        if (!morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, world)) return null;
         const depth = world.distanceTo(camera.position);
         ndc.copy(world).project(camera);
         if (ndc.z >= 1) return null; // behind the camera / beyond far

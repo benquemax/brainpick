@@ -5,7 +5,7 @@
  * doc layer (the store switches to overlay and flies there).
  */
 import { useUI, uiStore } from '../state/store';
-import { docsForEntity } from '../state/entityModel';
+import { entitySourceDocs } from '../state/entityModel';
 
 export function EntityPanel() {
   const entitySelection = useUI((s) => s.entitySelection);
@@ -15,7 +15,12 @@ export function EntityPanel() {
 
   if (entitySelection === null) return null;
   const node = entityGraph?.nodes.find((n) => n.id === entitySelection) ?? null;
-  const sources = docsForEntity(grounding, entitySelection);
+  // Provenance: the graph node's own source_docs (immediate) unioned with any
+  // neighbors-reconstructed grounding.
+  const sources = entitySourceDocs(node, grounding, entitySelection);
+  // We KNOW the provenance once the node carried source_docs (even if empty) or
+  // the grounding walk finished — only then is "no sources" a fact, not a wait.
+  const sourcesKnown = node?.source_docs !== undefined || groundingLoaded;
 
   return (
     <aside className="doc-panel entity-panel panel">
@@ -42,8 +47,8 @@ export function EntityPanel() {
         <p className="entity-description">{node.description}</p>
       )}
 
-      <div className="neighbors">
-        <h3>source docs</h3>
+      <div className="neighbors entity-sources">
+        <h3>from</h3>
         {sources.length > 0 ? (
           <ul>
             {sources.map((path) => (
@@ -55,7 +60,7 @@ export function EntityPanel() {
             ))}
           </ul>
         ) : (
-          <p className="entity-sources-empty">{groundingLoaded ? 'no source docs on record' : 'finding sources…'}</p>
+          <p className="entity-sources-empty">{sourcesKnown ? 'no source docs on record' : 'finding sources…'}</p>
         )}
       </div>
     </aside>

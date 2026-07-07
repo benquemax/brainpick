@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyTier, detectGpuTier, tierFor, type GpuInputs } from './gpuTier';
+import { classifyTier, detectGpuTier, mobileNodeBudget, tierFor, type GpuInputs } from './gpuTier';
 import { GPU_BUDGET } from './tuning';
 
 /** A strong desktop baseline; individual tests override the fields they probe. */
@@ -114,5 +114,27 @@ describe('detectGpuTier (tier -> budget)', () => {
     expect(high.tier).toBe('high');
     expect(high.nodeBudget).toBe(40_000);
     expect(high.bloomEnabled).toBe(true);
+  });
+});
+
+describe('mobileNodeBudget — operator [ui] cap vs the GPU guess', () => {
+  const high = tierFor('high'); // 40_000
+  const low = tierFor('low'); // 2_500
+
+  it('prefers the operator cap over the GPU guess on mobile', () => {
+    expect(mobileNodeBudget(high, 1200, true)).toBe(1200); // server value wins over 40k
+  });
+
+  it('falls back to the GPU-tier guess when no cap is configured', () => {
+    expect(mobileNodeBudget(low, undefined, true)).toBe(2_500);
+    expect(mobileNodeBudget(low, 0, true)).toBe(2_500); // 0 = unset, not "draw nothing"
+  });
+
+  it('keeps the GPU tier as a SECONDARY safety cap (never exceeds it)', () => {
+    expect(mobileNodeBudget(low, 5000, true)).toBe(2_500); // weak phone caps a generous config
+  });
+
+  it('leaves desktop / non-mobile on the GPU tier budget untouched', () => {
+    expect(mobileNodeBudget(high, 1200, false)).toBe(40_000);
   });
 });

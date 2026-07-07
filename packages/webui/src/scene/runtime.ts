@@ -37,6 +37,45 @@ export function nodeStagger(i: number): number {
   return (i * 0.618033988749895) % 1;
 }
 
+/** Minimal 3-component sink so the morph projection needs no `three` import here. */
+export interface MutableVec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * A live node's CURRENT world position under the morph: the mix of its flat
+ * cosmos target (`positions[i*2..]`, z = 0) and its 3D brain target
+ * (`brainPositions[i*3..]`), with the SAME per-node stagger the sprite shader,
+ * the 3D picker (PointerControls) and the hologram labels (LabelsLayer) all
+ * share — one source for the "stream into the brain" math. Writes into `out`;
+ * returns true when a brain slot existed (false → it fell back to the flat
+ * cosmos position with z = 0, e.g. before the brain layout is computed).
+ */
+export function morphedWorldOf(
+  i: number,
+  morph: number,
+  positions: Float32Array,
+  brainPositions: Float32Array,
+  staggerSpan: number,
+  out: MutableVec3,
+): boolean {
+  const cx = positions[i * 2] ?? 0;
+  const cy = positions[i * 2 + 1] ?? 0;
+  if (i < 0 || brainPositions.length < (i + 1) * 3) {
+    out.x = cx;
+    out.y = cy;
+    out.z = 0;
+    return false;
+  }
+  const m = Math.min(1, Math.max(0, (morph - nodeStagger(i) * staggerSpan) / (1 - staggerSpan)));
+  out.x = cx + ((brainPositions[i * 3] ?? 0) - cx) * m;
+  out.y = cy + ((brainPositions[i * 3 + 1] ?? 0) - cy) * m;
+  out.z = (brainPositions[i * 3 + 2] ?? 0) * m;
+  return true;
+}
+
 export interface DyingNode {
   x: number;
   y: number;
@@ -122,11 +161,32 @@ export class GraphRuntime {
   brainAzimuth = 0;
   orbited = false;
   /**
+   * e2e/debug: the orbit camera's current look-at target in brain mode. A
+   * search-as-flight (BrainCameraRig) moves it toward the focused hit's 3D
+   * position, so a test can prove the camera flew without reading pixels.
+   */
+  brainTarget: MutableVec3 = { x: 0, y: 0, z: 0 };
+  /**
    * e2e/debug: project a live node's CURRENT (morphed) 3D position to client
    * pixels, or null if off-screen. Installed by BrainCameraRig while brain mode
    * is mounted (it owns the perspective camera); null in the flat cosmos.
    */
   projectNodeToScreen: ((i: number) => { x: number; y: number } | null) | null = null;
+  /**
+   * The brain orbit camera's authoritative pose, PUBLISHED by BrainCameraRig at
+   * the end of its per-frame update (after it positions the camera). The hologram
+   * labels (LabelsLayer) project from this snapshot — never from the live render
+   * camera, whose pose drei's makeDefault CameraControls reset to the origin at the
+   * top of every frame (BrainCameraRig restores it only later in the frame, so a
+   * mid-frame read of the live camera sees it parked at the origin and every label
+   * is culled). `brainViewProj` is projectionMatrix·matrixWorldInverse (16 floats,
+   * column-major); `brainCamPos` the world eye; `brainCamRight` its world X axis
+   * (dot-radius lift). Valid only while brain mode is mounted.
+   */
+  brainCamValid = false;
+  brainCamPos: MutableVec3 = { x: 0, y: 0, z: 0 };
+  brainCamRight: MutableVec3 = { x: 0, y: 0, z: 0 };
+  brainViewProj: Float32Array = new Float32Array(16);
   /**
    * e2e/debug: a per-frame mirror of the ACTIVE R3F render camera — the exact
    * camera the scene was drawn with this frame (PointerControls refreshes it).

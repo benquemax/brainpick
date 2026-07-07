@@ -106,6 +106,38 @@ export function detectGpuTier(inputs: GpuInputs): GpuTier {
 }
 
 /**
+ * The effective MOBILE node budget, reconciling the operator's `[ui]
+ * max_nodes_mobile` (spec/80, shipped on /api/status) with the detected GPU
+ * tier:
+ *
+ *  - Not mobile → the GPU tier's own budget, untouched.
+ *  - Mobile + a configured cap → the operator's value WINS over the GPU guess,
+ *    with the GPU tier kept as a SECONDARY SAFETY CAP (`min`) so an over-generous
+ *    config can never melt a weak phone.
+ *  - Mobile + no cap → fall back to the GPU-tier guess.
+ *
+ * Pure and deterministic — the store applies it once /api/status lands.
+ */
+export function mobileNodeBudget(gpu: GpuTier, serverMax: number | undefined, isMobile: boolean): number {
+  if (!isMobile) return gpu.nodeBudget;
+  if (typeof serverMax === 'number' && serverMax > 0) return Math.min(serverMax, gpu.nodeBudget);
+  return gpu.nodeBudget;
+}
+
+/**
+ * A touch-first / narrow viewport — the audience `[ui] max_nodes_mobile` targets.
+ * Viewport + pointer based (not the user agent) so it tracks the device the
+ * cosmos actually renders on. Impure (reads window); called from main.tsx, not
+ * in unit tests (SSR / node returns false, like readGpuInputs's defensiveness).
+ */
+export function isMobileViewport(): boolean {
+  if (typeof window === 'undefined') return false;
+  const coarse = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+  const narrow = window.innerWidth > 0 && window.innerWidth <= 820;
+  return narrow || coarse;
+}
+
+/**
  * Default before real detection runs (and the value tests/SSR see): the top
  * tier, so nothing is ever capped by accident — real detection only lowers it.
  */

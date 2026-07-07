@@ -104,6 +104,14 @@ function synthFullContent(doc) {
 }
 // T3 is fresh in the mock so the entity/overlay layers are developable offline.
 const TIERS = { t1: 'fresh', t2: 'off', t3: 'fresh' };
+// The [ui] policy block (spec/80) the real engines now ship on /api/status, so
+// the client sizes the mobile cosmos + picks its opening view from the operator
+// instead of guessing from the GPU. Env-overridable so a low cap / brain-on-load
+// can be exercised in the browser: MOCK_UI_MAX_NODES_MOBILE=200 MOCK_UI_DEFAULT_MODE=brain.
+const UI = {
+  max_nodes_mobile: Number(process.env.MOCK_UI_MAX_NODES_MOBILE ?? '8000'),
+  default_mode: process.env.MOCK_UI_DEFAULT_MODE === 'brain' ? 'brain' : 'cosmos',
+};
 // MOCK_BIG serves a 66-doc synthetic brain instead of the 10-doc kotiaurinko —
 // used to make the holographic brain's VOLUME obvious in manual/screenshot review.
 const START_GRAPH = process.env.MOCK_BIG ? bigGraph() : initialGraph();
@@ -495,6 +503,8 @@ export function createMockServer({ stepMs = 6000 } = {}) {
         // spec/50: the editor's gate. The mock is writable so the whole editor is
         // developable offline; a real engine defaults to "guarded" as well.
         writes: 'guarded',
+        // spec/50, spec/80: the [ui] policy — mobile node cap + opening view.
+        ui: UI,
       });
     } else if (path === '/api/graph') {
       const layer = url.searchParams.get('layer') ?? 'links';

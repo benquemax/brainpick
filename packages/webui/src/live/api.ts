@@ -18,6 +18,16 @@ export interface GraphFetchResult {
  * (the save path still hits the server's 403 guard). A `sha` on GET /api/docs is
  * the same story — a spec/50 follow-up, present in the mock today.
  */
+/**
+ * The `[ui]` policy block (spec/80) served on /api/status so the client stops
+ * guessing the mobile node cap + opening view from the GPU tier alone. Both
+ * engines ship it; older ones (or the field's absence) degrade gracefully.
+ */
+export interface StatusUi {
+  max_nodes_mobile?: number;
+  default_mode?: 'cosmos' | 'brain';
+}
+
 export interface StatusResponse {
   seq: number;
   tiers: TierMap;
@@ -28,6 +38,7 @@ export interface StatusResponse {
   bundle_root: string;
   watching: boolean;
   writes?: string;
+  ui?: StatusUi;
 }
 
 export async function fetchStatus(): Promise<StatusResponse | null> {

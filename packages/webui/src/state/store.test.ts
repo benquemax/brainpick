@@ -768,3 +768,44 @@ describe('UI store — the Time Machine', () => {
     expect(s.scrubIndex).toBe(0);
   });
 });
+
+describe('applyServerUi — the operator [ui] policy reaches the store', () => {
+  it('the mobile cap wins over the GPU guess, and serverUi is captured', () => {
+    const store = createUIStore();
+    store.getState().initGpu(tierFor('high')); // 40_000
+    store.getState().applyServerUi({ max_nodes_mobile: 1200, default_mode: 'cosmos' }, { isMobile: true });
+    expect(store.getState().nodeBudget).toBe(1200);
+    expect(store.getState().serverUi).toEqual({ max_nodes_mobile: 1200, default_mode: 'cosmos' });
+  });
+
+  it('desktop keeps the GPU-tier budget (the mobile cap does not apply)', () => {
+    const store = createUIStore();
+    store.getState().initGpu(tierFor('mid')); // 8_000
+    store.getState().applyServerUi({ max_nodes_mobile: 1200 }, { isMobile: false });
+    expect(store.getState().nodeBudget).toBe(8_000);
+  });
+
+  it('an absent [ui] block falls back to the GPU guess and leaves serverUi null', () => {
+    const store = createUIStore();
+    store.getState().initGpu(tierFor('low')); // 2_500
+    store.getState().applyServerUi(null, { isMobile: true });
+    expect(store.getState().nodeBudget).toBe(2_500);
+    expect(store.getState().serverUi).toBeNull();
+  });
+
+  it('default_mode "brain" opens the hologram on first load', () => {
+    const store = createUIStore();
+    store.getState().applyServerUi({ default_mode: 'brain' }, { isMobile: false });
+    expect(store.getState().mode).toBe('brain');
+    expect(store.getState().morphActive).toBe(true);
+  });
+
+  it('default_mode is honored ONCE — a later status never yanks a user’s chosen view', () => {
+    const store = createUIStore();
+    store.getState().applyServerUi({ default_mode: 'cosmos' }, { isMobile: false });
+    store.getState().toggleMode(); // the user goes to the brain
+    expect(store.getState().mode).toBe('brain');
+    store.getState().applyServerUi({ default_mode: 'cosmos' }, { isMobile: false }); // a second /api/status
+    expect(store.getState().mode).toBe('brain'); // not pulled back to cosmos
+  });
+});

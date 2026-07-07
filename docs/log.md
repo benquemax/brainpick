@@ -2,6 +2,7 @@
 
 ## 2026-07-07
 
+- Polished: labels and search-flight now work inside the hologram, entity panels show their source docs, and the operator's [ui] node cap reaches the client.
 - Parity: the Node engine now proposes three-way (and LLM) merges on a stale write, matching Python's conflict response.
 - Added: the in-browser WYSIWYG editor — write formatted pages on any device, photos and title-linked references included, saved through the guarded write path.
 - Added: guarded REST writes (PUT /api/docs) + image upload (POST /api/assets) — the engine half of the in-browser editor, reusing brain_write's referee + merge.

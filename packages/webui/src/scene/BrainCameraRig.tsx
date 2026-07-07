@@ -17,7 +17,7 @@ import CameraControlsImpl from 'camera-controls';
 import { bounds } from './brainSDF';
 import { orbitStartPosition } from './brainCamera';
 import { BRAIN, BRAIN_CAMERA } from './tuning';
-import { nodeStagger, type GraphRuntime } from './runtime';
+import { morphedWorldOf, type GraphRuntime } from './runtime';
 
 // camera-controls needs THREE installed once; full THREE is a safe superset of
 // the subset drei installs for the cosmos rig.
@@ -60,6 +60,9 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
   const controlsRef = useRef<CameraControlsImpl | null>(null);
   const lastInteract = useRef(-Infinity);
   const returning = useRef(false);
+  const targetTmp = useMemo(() => new THREE.Vector3(), []);
+  // Scratch for the per-frame pose snapshot the labels project from.
+  const pose = useMemo(() => ({ viewProj: new THREE.Matrix4(), right: new THREE.Vector3() }), []);
 
   useEffect(() => {
     const prevCamera = get().camera;
@@ -102,13 +105,8 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
     // real dot in the hologram. Lives only while brain mode is mounted.
     const wp = new THREE.Vector3();
     runtime.projectNodeToScreen = (i: number) => {
-      const bp = runtime.brainPositions;
-      if (i < 0 || bp.length < (i + 1) * 3) return null;
-      const span = BRAIN.staggerSpan;
-      const m = Math.min(1, Math.max(0, (runtime.morph - nodeStagger(i) * span) / (1 - span)));
-      const cx = runtime.positions[i * 2] ?? 0;
-      const cy = runtime.positions[i * 2 + 1] ?? 0;
-      wp.set(cx + (bp[i * 3]! - cx) * m, cy + (bp[i * 3 + 1]! - cy) * m, bp[i * 3 + 2]! * m).project(camera);
+      if (!morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, wp)) return null;
+      wp.project(camera);
       if (wp.z >= 1) return null;
       const rect = gl.domElement.getBoundingClientRect();
       return { x: rect.left + (wp.x * 0.5 + 0.5) * rect.width, y: rect.top + (-wp.y * 0.5 + 0.5) * rect.height };
@@ -121,6 +119,7 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
       controls.dispose();
       controlsRef.current = null;
       runtime.projectNodeToScreen = null;
+      runtime.brainCamValid = false; // the published pose is stale once we leave the brain
       // Hand the ortho cosmos camera back with a frustum matched to the CURRENT
       // viewport. R3F only refreshes the ACTIVE camera's frustum on resize, so a
       // resize while the perspective brain camera was active left the ortho one
@@ -141,6 +140,28 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
     camera.aspect = size.width / size.height || 1;
     camera.updateProjectionMatrix();
   }, [camera, size.width, size.height]);
+
+  // SEARCH-AS-FLIGHT: a flyTo (search focus / entity select) frames the hit's 3D
+  // position — re-centre the orbit on its CURRENT morphed world position (the same
+  // stagger math the dots use) and dolly to a reading distance. The perspective
+  // mirror of the cosmos flyTo (CameraRig), reading controlsRef lazily so it works
+  // whichever effect created the controls. Mounted only in brain mode, so this is
+  // inherently the brain-mode path; touch + desktop share it via the store.
+  useEffect(() => {
+    const world = new THREE.Vector3();
+    return runtime.store.subscribe((state, prev) => {
+      if (!state.flyTo || state.flyTo === prev.flyTo) return;
+      const controls = controlsRef.current;
+      if (!controls) return;
+      const i = runtime.index.get(state.flyTo.id);
+      if (i === undefined) return;
+      morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, world);
+      const dist = Math.max(controls.minDistance, brainRadius() * BRAIN_CAMERA.focusDistanceFactor);
+      void controls.moveTo(world.x, world.y, world.z, true);
+      void controls.dollyTo(dist, true);
+      lastInteract.current = performance.now(); // hold the idle spin so the hit stays framed
+    });
+  }, [runtime]);
 
   useFrame((_, dt) => {
     const controls = controlsRef.current;
@@ -169,6 +190,28 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
     }
     controls.update(dt);
     runtime.brainAzimuth = controls.azimuthAngle;
+    // Mirror the orbit target for e2e/debug: a search-flight moves it to the hit.
+    controls.getTarget(targetTmp);
+    runtime.brainTarget.x = targetTmp.x;
+    runtime.brainTarget.y = targetTmp.y;
+    runtime.brainTarget.z = targetTmp.z;
+
+    // Publish the pose the labels project from. controls.update() just refreshed
+    // the camera's world matrix (and, being a Camera, its matrixWorldInverse); we
+    // compose projection·viewInverse ONCE so LabelsLayer needs no live camera.
+    // This runs at priority 0 (after drei's -1 frame-start reset), so the snapshot
+    // is the true render pose, not the origin the reset left behind.
+    camera.updateMatrixWorld();
+    pose.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    pose.viewProj.toArray(runtime.brainViewProj);
+    runtime.brainCamPos.x = camera.position.x;
+    runtime.brainCamPos.y = camera.position.y;
+    runtime.brainCamPos.z = camera.position.z;
+    pose.right.setFromMatrixColumn(camera.matrixWorld, 0);
+    runtime.brainCamRight.x = pose.right.x;
+    runtime.brainCamRight.y = pose.right.y;
+    runtime.brainCamRight.z = pose.right.z;
+    runtime.brainCamValid = true;
   });
 
   return null;
