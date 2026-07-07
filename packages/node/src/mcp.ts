@@ -2,9 +2,9 @@
  *
  * The payload builders are plain functions over ServeState so they unit-test
  * without a transport; createMcpServer() wraps them in an McpServer (official
- * TS SDK) for stdio and /mcp alike. Ports mcp_server.py — plus the spec/70
- * optimistic-concurrency addition: brain_write's base_sha conflict DETECTION
- * (the `merged` proposal is a later chunk, Python-first).
+ * TS SDK) for stdio and /mcp alike. Ports mcp_server.py — including the spec/70
+ * base_sha optimistic concurrency and the stale-write merge ladder (a `merged`
+ * three-way / LLM proposal on the 409, at parity with the Python engine).
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync, statSync, unlinkSync } from "node:fs";
@@ -21,6 +21,8 @@ import { splitFrontmatter } from "./core/frontmatter";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
 import { which } from "./detect";
+import { makeChat } from "./llm";
+import { findBase, resolve as resolveMerge } from "./merge";
 import { KNOWN_MODES, runSearch } from "./query/router";
 import type { SearchHit } from "./query/keyword";
 import { bfsNeighborhood, jsonable, resolveDoc, type ServeState } from "./serve/state";
@@ -29,6 +31,8 @@ import { VERSION } from "./version";
 
 export const WRITES_OFF_REFUSAL =
   'writes are disabled here — set [serve] writes = "guarded" in brainpick.toml to enable brain_write';
+export const CONFLICT_INSTRUCTION =
+  "the doc changed since you read it — re-read, reconcile, retry with the new base_sha";
 
 const HEADING = new RegExp(`^(#{1,6}) +([^\\n]+?)[${PY_SPACE_CLASS}]*$`, "u");
 const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -518,14 +522,51 @@ function utcNowSeconds(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/** Shape the conflict's `theirs` to the budget, brain_read style. */
-function shapeTheirs(result: Record<string, unknown>, theirs: string, budget: number): void {
-  result["theirs"] = theirs;
+/** The spec/70 conflict shape — nothing was written. `merged`, when the
+ * resolution ladder produced one, is a PROPOSAL and is never auto-applied.
+ * Port of mcp_server.conflict_payload; key order matches so tokensOf agrees. */
+export async function conflictPayload(
+  state: ServeState,
+  rel: string,
+  previous: Buffer,
+  yours: string,
+  baseSha: string,
+  budgetTokens: number | null,
+): Promise<Record<string, unknown>> {
+  const budget = budgetTokens || 2000;
+  const theirs = previous.toString("utf8");
+  const currentSha = sha256Hex(previous);
+  const result: Record<string, unknown> = {
+    ok: false,
+    conflict: true,
+    current_sha: currentSha,
+    theirs,
+    truncated: false,
+    instruction: CONFLICT_INSTRUCTION,
+    hint: `reconcile against theirs, then brain_write again with base_sha '${currentSha}'.`,
+  };
+  const proposal = await resolveMerge(
+    findBase(state.root, rel, baseSha),
+    theirs,
+    yours,
+    makeChat(state.config.models.extraction),
+  );
+  if (proposal !== null) {
+    result["merged"] = proposal;
+    result["hint"] =
+      `merged is a ${proposal.strategy} proposal, NOT applied — review it, ` +
+      `then brain_write it with base_sha '${currentSha}'.`;
+  }
+  // Only theirs is budget-shaped; a trimmed merged proposal would be a corrupted write-back.
   if (tokensOf(result) > budget) {
     const overhead = tokensOf({ ...result, theirs: "" });
     const allowed = Math.max(160, (budget - overhead) * 4);
-    if (cpLen(theirs) > allowed) result["theirs"] = headToLastSpace(theirs, allowed) + " …";
+    if (cpLen(theirs) > allowed) {
+      result["theirs"] = headToLastSpace(theirs, allowed) + " …";
+      result["truncated"] = true;
+    }
   }
+  return result;
 }
 
 export interface WritePayloadOptions {
@@ -547,8 +588,9 @@ export type WriteStatus = "ok" | "badpath" | "conflict" | "violation" | "exists"
  *   "exists"    → {instruction}               (create mode, target present)
  *
  * Both brain_write (MCP, via writePayload) and PUT /api/docs (REST) call this —
- * one source of truth, mapped onto each surface's shape. (The `merged` proposal
- * remains Python-first, so the conflict shape here carries detection only.) */
+ * one source of truth, mapped onto each surface's shape. On a stale base_sha the
+ * conflict carries a `merged` proposal (three-way / LLM) when the ladder resolves
+ * one — the same shape the Python engine returns. */
 export async function guardedWrite(
   state: ServeState,
   doc: string,
@@ -572,21 +614,23 @@ export async function guardedWrite(
     previous = null;
   }
 
-  // spec/70 optimistic concurrency: the DETECTION half — never write over a
-  // doc the writer has not seen. (`merged` proposals land in a later chunk.)
+  let text = content.endsWith("\n") ? content : content + "\n";
+
+  // spec/70 optimistic concurrency + the merge ladder. A mismatched base_sha
+  // means the writer's knowledge is stale — the server MUST NOT write; it returns
+  // the conflict plus, when the ladder resolves one, a merged PROPOSAL (never
+  // auto-applied). An omitted base_sha keeps today's last-write-wins.
   const base = typeof baseSha === "string" ? baseSha.trim().toLowerCase() : "";
   if (base !== "") {
-    const currentSha = previous === null ? null : sha256Hex(previous);
-    if (currentSha !== base) {
-      const result: Record<string, unknown> = {
-        ok: false,
-        conflict: true,
-        current_sha: currentSha,
-        theirs: null,
-        instruction: "the doc changed since you read it — re-read, reconcile, retry with the new base_sha",
-      };
-      if (previous !== null) shapeTheirs(result, previous.toString("utf8"), budgetTokens || 2000);
-      return ["conflict", result];
+    if (previous === null) {
+      // deleted-since-read (spec/70 edge semantics: current_sha and theirs are null)
+      return [
+        "conflict",
+        { ok: false, conflict: true, current_sha: null, theirs: null, instruction: CONFLICT_INSTRUCTION },
+      ];
+    }
+    if (sha256Hex(previous) !== base) {
+      return ["conflict", await conflictPayload(state, rel!, previous, text, base, budgetTokens)];
     }
   }
 
@@ -594,7 +638,6 @@ export async function guardedWrite(
     return ["exists", { instruction: `'${rel}' already exists — use mode 'replace' or 'append_section'` }];
   }
 
-  let text = content.endsWith("\n") ? content : content + "\n";
   if (writeMode === "append_section" && previous !== null) {
     text = previous.toString("utf8").replace(/\n+$/, "") + "\n\n" + text;
   }
@@ -738,9 +781,10 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
       description:
         "Write a markdown doc into the bundle, guarded by its henxels contract. mode is " +
         "create (default, never overwrites), replace, or append_section. Pass base_sha " +
-        "(the sha256 of the doc you last read) to be told about concurrent edits instead " +
-        "of overwriting them. On a contract violation nothing changes and instruction " +
-        "says exactly what to fix.",
+        "(the sha256 of the content you last read) to catch concurrent edits: on a " +
+        "mismatch nothing is written and the result returns the current content, its " +
+        "current_sha to retry with, and — when resolvable — a merged proposal. On a " +
+        "contract violation nothing changes and instruction says exactly what to fix.",
       inputSchema: {
         doc: z.string(),
         content: z.string(),

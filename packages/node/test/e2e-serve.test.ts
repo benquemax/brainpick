@@ -862,8 +862,9 @@ test("PUT /api/docs on a non-localhost bind without a token is 401", async () =>
 });
 
 test("PUT /api/docs conflict body matches brain_write's conflict shape", async () => {
-  // Node's merge ladder is Python-first: the conflict carries no `merged` yet,
-  // exactly as brain_write returns it (mcp-tools.test.ts). REST reuses that shape.
+  // The REST 409 reuses brain_write's conflict shape (mcp-tools.test.ts). Here the
+  // claimed base_sha ("0"*64) hash-verifies against nothing — not the git HEAD —
+  // and no model is configured, so the ladder yields no proposal (the manual path).
   const root = copyBundle();
   git(root, "init", "-q");
   git(root, "add", "-A");
@@ -875,7 +876,40 @@ test("PUT /api/docs conflict body matches brain_write's conflict shape", async (
     base_sha: "0".repeat(64),
   });
   expect(body.conflict).toBe(true);
-  expect(body.merged).toBeUndefined(); // detection only, no proposal (Python-first)
+  expect(body.merged).toBeUndefined(); // base unresolvable + no model → no proposal
+});
+
+test("PUT /api/docs stale base_sha returns a three-way merged proposal", async () => {
+  // The parity the editor consumes: a stale save whose base IS resolvable (git HEAD)
+  // and whose edits do not overlap comes back with a mechanical three-way proposal.
+  const root = copyBundle();
+  git(root, "init", "-q");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "base");
+  const baseBytes = readFileSync(join(root, "kuu.md"));
+  const baseText = baseBytes.toString("utf8");
+
+  // A foreign writer edits the tides line after the editor last read the doc.
+  const theirs = baseText.replaceAll(
+    "The moon pulls the tides of [Maa](maa.md).",
+    "The moon pulls the spring tides of [Maa](maa.md).",
+  );
+  writeFileSync(join(root, "kuu.md"), theirs, "utf8");
+
+  const { base } = await serve(await makeApp(root));
+  const yours = baseText + "\n## Vaiheet\n\nNew moon, then full moon.\n";
+  const { status, body } = await putJson(`${base}/api/docs/kuu.md`, {
+    content: yours,
+    mode: "replace",
+    base_sha: sha256Hex(baseBytes),
+  });
+  expect(status).toBe(409);
+  expect(body.conflict).toBe(true);
+  expect(body.current_sha).toBe(sha256Hex(Buffer.from(theirs, "utf8")));
+  expect(body.merged.strategy).toBe("three-way");
+  expect(body.merged.content).toContain("spring tides"); // the foreign edit survives
+  expect(body.merged.content).toContain("## Vaiheet"); // this edit survives
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).not.toContain("## Vaiheet"); // proposal only, never written
 });
 
 // -- image assets (spec/50): POST /api/assets ---------------------------------------

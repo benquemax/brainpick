@@ -1,5 +1,6 @@
 /** MCP tool payloads (spec/70): budget shaping, forgiving resolution, guarded
  * writes, base_sha conflicts (the twin of packages/python/tests/test_mcp_tools.py). */
+import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -20,6 +21,17 @@ import { cleanup, copyBundle, stageT3Export, tempDir } from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
+const KUU_REWRITE =
+  "---\ntype: Concept\ntags: [kuu]\ntimestamp: 2026-06-15T08:30:00Z\n---\n\n" +
+  "# Kuu\n\nThe moon pulls the tides of [Maa](maa.md), rewritten.\n";
+
+function git(cwd: string, ...args: string[]): void {
+  execFileSync(
+    "git",
+    ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args],
+    { cwd, stdio: "ignore" },
+  );
+}
 
 const savedPath = process.env["PATH"];
 afterEach(() => {
@@ -376,7 +388,7 @@ test("write with stale base_sha conflicts without writing", async () => {
   expect(result["current_sha"]).toBe(sha256Hex(before));
   expect(result["theirs"]).toContain("tides");
   expect(result["instruction"]).toContain("re-read");
-  expect(result["merged"]).toBeUndefined(); // the resolver is a later chunk
+  expect(result["merged"]).toBeUndefined(); // no git base, no model → the manual path
   expect(readFileSync(join(root, "kuu.md"))).toEqual(before); // nothing written
   expect(state.seq).toBe(1);
 });
@@ -419,7 +431,50 @@ test("conflict theirs is budget-shaped", async () => {
     budgetTokens: 200,
   });
   expect(result["conflict"]).toBe(true);
+  expect(result["truncated"]).toBe(true);
   const theirs = result["theirs"] as string;
   expect(theirs.endsWith(" …")).toBe(true);
   expect(theirs.length).toBeLessThan(3000 * 5);
+  expect(result["current_sha"]).toBe(sha256Hex(readFileSync(join(root, "pitka.md")))); // retry key never trimmed
+});
+
+// -- the merge ladder on a stale write (spec/70): three-way | llm | manual ------------
+
+test("conflict merged proposal from the configured model", async () => {
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.local.toml"), '[models.extraction]\nkind = "mock"\n', "utf8");
+  const state = await makeState(root);
+  const result = await writePayload(state, "kuu.md", KUU_REWRITE, "replace", { baseSha: "0".repeat(64) });
+  expect(result["conflict"]).toBe(true);
+  const merged = result["merged"] as { strategy: string; content: string };
+  expect(merged.strategy).toBe("llm"); // no git base → the two-input model merge
+  expect(merged.content).toBe(KUU_REWRITE); // MockChat echoes the YOURS section
+  expect(result["hint"]).toContain("proposal");
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).not.toContain("rewritten"); // never applied
+});
+
+test("conflict three-way from a git base", async () => {
+  const root = copyBundle();
+  git(root, "init", "-q");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "base");
+  const baseBytes = readFileSync(join(root, "kuu.md"));
+  const baseText = baseBytes.toString("utf8");
+
+  // A foreign writer edits the tides line after our writer read the doc.
+  const theirs = baseText.replaceAll(
+    "The moon pulls the tides of [Maa](maa.md).",
+    "The moon pulls the spring tides of [Maa](maa.md).",
+  );
+  writeFileSync(join(root, "kuu.md"), theirs, "utf8");
+
+  const state = await makeState(root);
+  const yours = baseText + "\n## Vaiheet\n\nNew moon, then full moon.\n";
+  const result = await writePayload(state, "kuu.md", yours, "replace", { baseSha: sha256Hex(baseBytes) });
+  expect(result["conflict"]).toBe(true);
+  const merged = result["merged"] as { strategy: string; content: string };
+  expect(merged.strategy).toBe("three-way"); // git HEAD supplied the verified base
+  expect(merged.content).toContain("spring tides"); // their edit survives
+  expect(merged.content).toContain("## Vaiheet"); // your edit survives
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).not.toContain("## Vaiheet"); // proposal only
 });

@@ -57,6 +57,27 @@ export class SequenceMatcher {
     this.chainB();
   }
 
+  /** Set the sequences as pre-split element arrays (e.g. keepends lines) instead
+   * of code points — the shape the three-way merge diffs on, mirroring Python's
+   * `SequenceMatcher(None, base, other, autojunk=False)` over line lists (spec/70).
+   * The elements are opaque strings compared by `===`, so any hashable token works. */
+  setElementSeqs(a: string[], b: string[]): void {
+    this.setElementSeq2(b);
+    this.setElementSeq1(a);
+  }
+
+  setElementSeq1(a: string[]): void {
+    this.a = a;
+    this.matchingBlocks = null;
+  }
+
+  setElementSeq2(b: string[]): void {
+    this.b = b;
+    this.matchingBlocks = null;
+    this.fullbcount = null;
+    this.chainB();
+  }
+
   private chainB(): void {
     const b = this.b;
     const b2j = new Map<string, number[]>();

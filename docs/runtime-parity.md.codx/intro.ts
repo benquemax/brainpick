@@ -5,7 +5,7 @@ export const content = `---
 type: Reference
 title: Runtime parity
 description: What the pip and npm packages each do natively — the capability matrix that keeps "one spec, two engines" honest, and how the claims are proven.
-timestamp: 2026-07-04T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Runtime parity
@@ -26,7 +26,7 @@ capability ladder these rows walk.
 | Serve: REST + web UI + live channel | native | native |
 | MCP stdio + streamable HTTP (5 tools) | native | native |
 | [Guarded writes](guarded-writes.md) + base_sha conflict detection | native | native |
-| Stale-write merge proposal (three-way / LLM) | native | detects only — resolver is Python-first |
+| Stale-write merge proposal (three-way / LLM) | native | native |
 | Auth: tokens, password, sessions | native | native |
 | init / doctor / integrate / the skill / CLI query mirrors | native | native |
 | T3 compile — entity extraction (LightRAG) | M3, Python-only | M3, delegates to sibling |
@@ -36,9 +36,10 @@ The asymmetries are principled, not accidental. Entity extraction (T3) is
 anchored to the Python ecosystem, so when it lands the Node engine will
 delegate that one compile step to an installed Python sibling or skip it with
 an instruction — while still querying the resulting artifacts natively. The
-merge-proposal resolver behind [guarded writes](guarded-writes.md) is
-Python-first today; the Node engine detects the conflict identically and
-returns the same shape, minus the proposed merge. \`brainpick doctor\` in each
+merge-proposal resolver behind [guarded writes](guarded-writes.md) now runs
+natively in both engines: the Node engine returns the same three-way (and, with
+a configured \`[models.extraction]\` model, LLM) merge proposal on a stale write,
+byte-identical to Python's conflict response. \`brainpick doctor\` in each
 runtime names exactly what the sibling would add.
 `;
 
@@ -89,12 +90,13 @@ export const validate = async () => {
     throw new Error('lancedb is a CORE python dep — the matrix keeps it in the [vectors] extra so T1 stays lean');
   }
 
-  // Self-expiring tripwire: the "detects only — resolver is Python-first" row.
-  // The moment the Node engine grows a merge resolver, this fires so the row gets updated.
-  if (fs.existsSync(path.join(repo, 'packages/node/src/merge.ts'))) {
+  // Claim: the "Stale-write merge proposal" row now reads native/native. Assert
+  // the Node merge resolver is present, so deleting it re-breaks the matrix (the
+  // former self-expiring tripwire, inverted now that the resolver has landed).
+  if (!fs.existsSync(path.join(repo, 'packages/node/src/merge.ts'))) {
     throw new Error(
-      'packages/node/src/merge.ts exists — the Node merge resolver landed. Update the ' +
-        '"Stale-write merge proposal" row (npm is no longer "detects only") and remove this tripwire.',
+      'packages/node/src/merge.ts is missing — the "Stale-write merge proposal" row claims npm ' +
+        'parity (native). Restore the Node merge resolver, or update the row.',
     );
   }
 };
@@ -103,7 +105,7 @@ export const errorContent = `
 [Validation Failed] The runtime-parity matrix drifted from the code.
 
 Every row is a checked claim: identical CLIs (parsed from both cli files),
-no Python in the npm package, LanceDB kept optional, and the Node merge-resolver
-gap. Fix the code to match the matrix, or update docs/runtime-parity.md.codx/intro.ts
+no Python in the npm package, LanceDB kept optional, and the Node merge
+resolver present. Fix the code to match the matrix, or update docs/runtime-parity.md.codx/intro.ts
 and run \`npx codumentation build\`. A parity change is worth a human's eyes.
 `;

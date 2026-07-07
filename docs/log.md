@@ -2,6 +2,7 @@
 
 ## 2026-07-07
 
+- Parity: the Node engine now proposes three-way (and LLM) merges on a stale write, matching Python's conflict response.
 - Added: the in-browser WYSIWYG editor — write formatted pages on any device, photos and title-linked references included, saved through the guarded write path.
 - Added: guarded REST writes (PUT /api/docs) + image upload (POST /api/assets) — the engine half of the in-browser editor, reusing brain_write's referee + merge.
 - Improved: entity payloads carry source_docs, tiers.t3 resets honestly, and [ui] config reaches the client via /api/status.

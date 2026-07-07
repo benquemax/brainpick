@@ -9,8 +9,8 @@ skips of a claimed case class; a pinned cross-engine scrypt vector makes auth
 hashes identical byte-for-byte; and the LanceDB dataset one engine writes is
 read by the other in a live interop test. This very page is codumented — its
 matrix claims (identical CLIs, no Python in the npm package, LanceDB kept
-optional, the merge-resolver gap) are validated on every push, so the doc
-cannot quietly drift from the code.
+optional, the Node merge resolver present) are validated on every push, so the
+doc cannot quietly drift from the code.
 `;
 
 export const validate = async () => {

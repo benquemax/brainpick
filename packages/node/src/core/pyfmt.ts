@@ -42,6 +42,25 @@ export function pySplitLines(s: string): string[] {
   return parts;
 }
 
+const PY_LINE_BREAKS_G = new RegExp(PY_LINE_BREAKS.source, "g");
+
+/** Python `str.splitlines(keepends=True)`: each line keeps its terminator, and
+ * a string ending on a terminator yields no trailing empty. The three-way merge
+ * diffs on these keepends lines so the joined output is byte-exact (spec/70). */
+export function pySplitLinesKeepends(s: string): string[] {
+  const lines: string[] = [];
+  let last = 0;
+  PY_LINE_BREAKS_G.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = PY_LINE_BREAKS_G.exec(s)) !== null) {
+    const end = match.index + match[0].length;
+    lines.push(s.slice(last, end));
+    last = end;
+  }
+  if (last < s.length) lines.push(s.slice(last));
+  return lines;
+}
+
 /** Python `len(str)` — code points, not UTF-16 units. */
 export function cpLen(s: string): number {
   let n = 0;
