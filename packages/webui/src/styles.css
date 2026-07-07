@@ -1367,6 +1367,136 @@ button:focus-visible,
   }
 }
 
+/* ---- PRESENTATIONS: the agent-driven caption (spec/95, brain.show) ---------
+   A calm, dismissible banner at top-centre marking a view an agent pushed live.
+   The spotlight itself (dimmed cosmos, glowing nodes) rides the shared highlight
+   path; this is only its caption. Violet is the agent's hand on the brain. It
+   floats over cosmos, hologram and time travel alike. */
+
+.show-caption {
+  position: absolute;
+  /* Below the top-centre control column (search pill + layer toggle) and clear
+     of the top-left HUD, so the caption never fights an existing control. */
+  top: calc(max(12px, env(safe-area-inset-top)) + 128px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'marker dismiss'
+    'text dismiss';
+  align-items: start;
+  gap: 3px 14px;
+  max-width: min(540px, calc(100vw - 24px));
+  padding: 11px 13px 12px 17px;
+  border-color: rgba(167, 139, 250, 0.42);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 26px rgba(167, 139, 250, 0.18),
+    0 10px 34px rgba(0, 0, 0, 0.5),
+    inset 0 0 24px rgba(167, 139, 250, 0.05);
+  animation: show-caption-in 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* a thin violet→cyan rail down the leading edge — "an agent is presenting" */
+.show-caption::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(var(--violet), var(--cyan));
+  box-shadow: 0 0 10px rgba(167, 139, 250, 0.6);
+}
+
+.show-marker {
+  grid-area: marker;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: var(--violet);
+  white-space: nowrap;
+}
+
+.show-diamond {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--violet);
+  text-shadow: 0 0 8px currentColor;
+  animation: show-diamond-pulse 2.6s ease-in-out infinite;
+}
+
+.show-annotation {
+  grid-area: text;
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+  max-width: 60ch;
+}
+
+.show-dismiss {
+  grid-area: dismiss;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.show-dismiss:hover {
+  color: #eaf9ff;
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(167, 139, 250, 0.08);
+}
+
+@keyframes show-caption-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes show-diamond-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 12px currentColor;
+  }
+}
+
+@media (max-width: 640px) {
+  .show-caption {
+    max-width: calc(100vw - 20px);
+    padding: 10px 12px 11px 15px;
+  }
+  .show-annotation {
+    font-size: 13px;
+  }
+}
+
 /* ---- TIME MACHINE: travel the brain's git history (spec/90) ---------------
    The entry pill sits above the mode pill; activating it raises a scrubber bar
    with a time readout, play/step controls and commit ticks. Around the scene a

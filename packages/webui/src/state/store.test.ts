@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { GraphDelta, GraphEdge, GraphNode, GraphPayload, SearchHit } from '../graph/types';
+import type { GraphDelta, GraphEdge, GraphNode, GraphPayload, Presentation, SearchHit } from '../graph/types';
 import type { EntityGraph } from '../graph/entities';
 import { entityRenderId } from '../graph/entities';
-import { createUIStore } from './store';
+import { createUIStore, presentationRenderId } from './store';
 import { EMPTY_TIMELINE as EMPTY_TIMELINE_FIXTURE, type Timeline } from '../time/timeline';
 import { budgetedGraph, isClusterId } from './budget';
 import { treeForGraph, type TreeDir } from './tree';
@@ -807,5 +807,143 @@ describe('applyServerUi — the operator [ui] policy reaches the store', () => {
     expect(store.getState().mode).toBe('brain');
     store.getState().applyServerUi({ default_mode: 'cosmos' }, { isMobile: false }); // a second /api/status
     expect(store.getState().mode).toBe('brain'); // not pulled back to cosmos
+  });
+});
+
+describe('presentations (brain_show, spec/95)', () => {
+  const pres = (over: Partial<Presentation> & { seq: number }): Presentation => ({
+    annotation: null,
+    focus: null,
+    mode: null,
+    nodes: [],
+    ...over,
+  });
+
+  it('maps presentation ids into the render-id space (docs pass through, entity slugs namespaced)', () => {
+    expect(presentationRenderId('aurinko.md')).toBe('aurinko.md'); // doc path
+    expect(presentationRenderId('saaret/atolli.md')).toBe('saaret/atolli.md'); // nested doc path
+    expect(presentationRenderId('aurinko')).toBe(entityRenderId('aurinko')); // bare entity slug
+    expect(presentationRenderId(entityRenderId('kuu'))).toBe(entityRenderId('kuu')); // already a render id
+  });
+
+  it('spotlights the nodes (dims the rest), flies to the focus, switches mode and captions the view', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(
+      pres({ nodes: ['a.md'], focus: 'a.md', mode: 'brain', annotation: 'the sun and its worlds', seq: 1 }),
+    );
+    const s = store.getState();
+    expect(s.presentationSeq).toBe(1);
+    expect([...s.highlight]).toEqual(['a.md']); // spotlight = the shared highlight set
+    expect(s.dimOthers).toBe(true); // the rest of the cosmos fades
+    expect(s.mode).toBe('brain'); // the view switched
+    expect(s.morphActive).toBe(true);
+    expect(s.flyTo?.id).toBe('a.md'); // the camera flew to the focus
+    expect(s.presentationCaptionVisible).toBe(true);
+    expect(s.presentation?.annotation).toBe('the sun and its worlds');
+  });
+
+  it('maps a bare entity slug into its render id while doc paths pass through', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['a.md', 'aurinko'], seq: 1 }));
+    const hl = store.getState().highlight;
+    expect(hl.has('a.md')).toBe(true);
+    expect(hl.has(entityRenderId('aurinko'))).toBe(true);
+  });
+
+  it('with no focus, frames the set by flying to its first node (the engine default)', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['b.md', 'a.md'], seq: 1 }));
+    expect(store.getState().flyTo?.id).toBe('b.md');
+  });
+
+  it('ignores an older or duplicate seq — a later frame never regresses to an earlier one', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['a.md'], annotation: 'first', seq: 5 }));
+    store.getState().applyPresentation(pres({ nodes: ['b.md'], annotation: 'stale', seq: 3 })); // older
+    let s = store.getState();
+    expect(s.presentationSeq).toBe(5);
+    expect([...s.highlight]).toEqual(['a.md']);
+    expect(s.presentation?.annotation).toBe('first');
+    store.getState().applyPresentation(pres({ nodes: ['b.md'], annotation: 'dupe', seq: 5 })); // duplicate
+    s = store.getState();
+    expect(s.presentationSeq).toBe(5);
+    expect([...s.highlight]).toEqual(['a.md']);
+  });
+
+  it('a higher seq replaces the previous presentation', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['a.md'], annotation: 'first', seq: 5 }));
+    store.getState().applyPresentation(pres({ nodes: ['b.md'], annotation: 'second', seq: 6 }));
+    const s = store.getState();
+    expect(s.presentationSeq).toBe(6);
+    expect([...s.highlight]).toEqual(['b.md']);
+    expect(s.presentation?.annotation).toBe('second');
+  });
+
+  it('a cleared (empty) presentation removes the spotlight and the caption', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['a.md'], annotation: 'here', seq: 1 }));
+    store.getState().applyPresentation(pres({ nodes: [], focus: null, mode: null, annotation: null, seq: 2 }));
+    const s = store.getState();
+    expect(s.presentationSeq).toBe(2);
+    expect(s.highlight.size).toBe(0);
+    expect(s.dimOthers).toBe(false);
+    expect(s.presentation).toBeNull();
+    expect(s.presentationCaptionVisible).toBe(false);
+  });
+
+  it('dismissCaption hides the caption but keeps the spotlight', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['a.md'], annotation: 'stay lit', seq: 1 }));
+    store.getState().dismissCaption();
+    const s = store.getState();
+    expect(s.presentationCaptionVisible).toBe(false);
+    expect([...s.highlight]).toEqual(['a.md']); // the spotlight remains
+    expect(s.presentation).not.toBeNull();
+  });
+
+  it('an open search overrides the presentation spotlight; closing it restores the presentation', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    store.getState().applyPresentation(pres({ nodes: ['a.md'], seq: 1 }));
+    expect([...store.getState().highlight]).toEqual(['a.md']);
+    store.getState().openSearch();
+    store.getState().setSearchHits([
+      { path: 'b.md', title: 'B', description: null, score: 1, snippet: null, source: 'keyword' },
+    ]);
+    expect([...store.getState().highlight]).toEqual(['b.md']); // user intent wins
+    store.getState().closeSearch();
+    expect([...store.getState().highlight]).toEqual(['a.md']); // the presentation resurfaces
+  });
+
+  it('applies while time-travelling — the spotlight rides the present nodes, travel unaffected', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(payload, 10);
+    const timeline: Timeline = {
+      commits: [
+        { sha: 'aaa', date: '2026-07-01T00:00:00Z', author: 'T', message: 'seed', added: ['a.md'], modified: [], deleted: [] },
+        { sha: 'bbb', date: '2026-07-02T00:00:00Z', author: 'T', message: 'grow', added: ['b.md'], modified: [], deleted: [] },
+      ],
+      docs: {
+        'a.md': { created: '2026-07-01T00:00:00Z', modified: [], deleted: null },
+        'b.md': { created: '2026-07-02T00:00:00Z', modified: [], deleted: null },
+      },
+      span: { commits: 2, first: '2026-07-01T00:00:00Z', last: '2026-07-02T00:00:00Z' },
+    };
+    store.getState().ingestTimeline(timeline);
+    store.getState().enterTimeTravel(0);
+    expect(store.getState().timeTravel).toBe(true);
+    store.getState().applyPresentation(pres({ nodes: ['a.md'], focus: 'a.md', annotation: 'in the past', seq: 1 }));
+    const s = store.getState();
+    expect(s.timeTravel).toBe(true); // a presentation never disturbs time travel
+    expect([...s.highlight]).toEqual(['a.md']); // the spotlight still applies
+    expect(s.presentationCaptionVisible).toBe(true);
   });
 });

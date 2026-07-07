@@ -11,6 +11,7 @@ import { LensCluster } from './ui/LensCluster';
 import { ModeToggle } from './ui/ModeToggle';
 import { NavigatorPanel } from './ui/NavigatorPanel';
 import { SearchOverlay } from './ui/SearchOverlay';
+import { ShowCaption } from './ui/ShowCaption';
 import { StatusHUD } from './ui/StatusHUD';
 import { TimeMachine } from './ui/TimeMachine';
 import { Toast } from './ui/Toast';
@@ -115,6 +116,7 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <ModeToggle />
       <TimeMachine />
       <CameraCluster />
+      <ShowCaption />
       <Toast />
       {editor !== null && (
         <Suspense fallback={<div className="editor-sheet panel editor-loading">loading the editor…</div>}>

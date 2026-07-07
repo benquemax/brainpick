@@ -98,6 +98,23 @@ export interface CompileStatus {
   tier: TierName;
 }
 
+/**
+ * SSE `brain.show` event payload — an agent-driven presentation (spec/95). It is
+ * ephemeral and advisory: it changes what the UI spotlights/frames, never the
+ * brain. `nodes`/`focus` are graph ids (doc paths and/or bare entity slugs) in the
+ * same id space the graph + entity layers use; `seq` is a monotonic PRESENTATION
+ * counter distinct from the manifest seq — the UI applies the highest it has seen
+ * and ignores older frames. A cleared presentation is
+ * `{nodes:[], focus:null, mode:null, annotation:null, seq:N}`.
+ */
+export interface Presentation {
+  annotation: string | null;
+  focus: string | null;
+  mode: 'cosmos' | 'brain' | null;
+  nodes: string[];
+  seq: number;
+}
+
 /** GET /api/search hit. */
 export interface SearchHit {
   path: string;

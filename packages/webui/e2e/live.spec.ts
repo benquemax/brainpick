@@ -1089,3 +1089,131 @@ test.describe('mobile', () => {
     await expect(page.locator('.navigator-panel')).toHaveCount(0);
   });
 });
+
+// Agent presentations (spec/95, brain_show): drive the REAL engine via POST
+// /api/show — it resolves the body, broadcasts a brain.show event over /api/live,
+// and the UI spotlights + captions + flies + morphs. Placed LAST so a leaked
+// presentation (should a step fail before the clear) cannot bleed into any other
+// serial test — and each run clears at the end regardless.
+test.describe('agent presentations (brain_show)', () => {
+  const ANNOTATION = 'The star and the worlds it holds — shown to you by an agent.';
+  const ANNOTATION_2 = 'And now just one world, framed on its own.';
+
+  test('brain.show spotlights, captions, switches mode and flies the camera; replace + lower-seq + clear behave', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+    // Find the doc whose brain position is FARTHEST from centre so a flight to it is
+    // unambiguous (the orbit target starts at the origin): dip into the brain to read
+    // the layout, then return to the cosmos to test the mode SWITCH via the show.
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => {
+      const rt = window.__bp_runtime;
+      return window.__bp_store.getState().mode === 'brain' && rt.brainReady && rt.morph > 0.99;
+    });
+    const far = await page.evaluate(() => {
+      const rt = window.__bp_runtime;
+      const bp = rt.brainPositions;
+      let best = -1;
+      let bestR = -1;
+      for (let i = 0; i < rt.ids.length; i++) {
+        if (!rt.ids[i]!.endsWith('.md')) continue;
+        const r = Math.hypot(bp[i * 3]!, bp[i * 3 + 1]!, bp[i * 3 + 2]!);
+        if (r > bestR) {
+          bestR = r;
+          best = i;
+        }
+      }
+      return { id: rt.ids[best]!, r: bestR };
+    });
+    expect(far.r).toBeGreaterThan(10); // a focus well off the brain centre
+    const others = await page.evaluate(
+      (farId) => window.__bp_runtime.ids.filter((id) => id.endsWith('.md') && id !== farId).slice(0, 2),
+      far.id,
+    );
+    expect(others.length).toBe(2);
+
+    await page.keyboard.press('b');
+    await page.waitForFunction(() => window.__bp_store.getState().mode === 'cosmos' && window.__bp_runtime.morph < 0.05);
+
+    // POST the presentation to the running engine — the real brain.show path.
+    const res = await page.request.post(baseURL() + '/api/show', {
+      data: { nodes: [far.id, ...others], focus: far.id, mode: 'brain', annotation: ANNOTATION },
+    });
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.shown).toBe(3);
+    expect(body.dropped).toEqual([]);
+
+    // The spotlight lit the right nodes (dimming the rest) and the mode switched.
+    await page.waitForFunction(
+      (ids) => {
+        const s = window.__bp_store.getState();
+        return (
+          s.presentationSeq > 0 &&
+          s.mode === 'brain' &&
+          s.dimOthers &&
+          ids.every((id: string) => s.highlight.has(id))
+        );
+      },
+      [far.id, ...others],
+    );
+
+    // The caption shows with the "presented by an agent" marker and the annotation.
+    const caption = page.locator('.show-caption');
+    await expect(caption).toBeVisible();
+    await expect(caption).toContainText('presented by an agent');
+    await expect(caption).toContainText(ANNOTATION);
+
+    // The camera flew toward the focus: the orbit target arrives at the far node's 3D
+    // position (it began ~far.r away at the origin) — the brain search-flight path.
+    await page.waitForFunction(
+      (f) => {
+        const rt = window.__bp_runtime;
+        if (rt.morph < 0.9) return false;
+        const i = rt.ids.indexOf(f.id);
+        if (i < 0) return false;
+        const bp = rt.brainPositions;
+        const t = rt.brainTarget;
+        const d = Math.hypot(t.x - bp[i * 3]!, t.y - bp[i * 3 + 1]!, t.z - bp[i * 3 + 2]!);
+        return d < f.r * 0.35;
+      },
+      far,
+      { timeout: 15_000 },
+    );
+
+    // A higher-seq presentation REPLACES the previous one (new spotlight + caption).
+    const replace = await page.request.post(baseURL() + '/api/show', {
+      data: { nodes: [others[0]], focus: others[0], annotation: ANNOTATION_2 },
+    });
+    expect(replace.ok()).toBeTruthy();
+    await page.waitForFunction(
+      (only) => {
+        const s = window.__bp_store.getState();
+        return s.presentationSeq >= 2 && s.highlight.size === 1 && s.highlight.has(only);
+      },
+      others[0],
+    );
+    await expect(caption).toContainText(ANNOTATION_2);
+
+    // A LOWER-seq frame is ignored — an out-of-order/replayed frame never regresses.
+    const seqNow = await page.evaluate(() => window.__bp_store.getState().presentationSeq);
+    await page.evaluate(() =>
+      window.__bp_store
+        .getState()
+        .applyPresentation({ annotation: 'stale', focus: null, mode: null, nodes: [], seq: 1 }),
+    );
+    expect(await page.evaluate(() => window.__bp_store.getState().presentationSeq)).toBe(seqNow);
+    await expect(caption).toBeVisible(); // the live presentation still stands
+
+    // An explicit clear removes the spotlight AND the caption.
+    const cleared = await page.request.post(baseURL() + '/api/show', { data: { clear: true } });
+    expect(cleared.ok()).toBeTruthy();
+    await page.waitForFunction(() => {
+      const s = window.__bp_store.getState();
+      return s.presentation === null && s.highlight.size === 0 && !s.dimOthers;
+    });
+    await expect(page.locator('.show-caption')).toHaveCount(0);
+  });
+});

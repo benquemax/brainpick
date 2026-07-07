@@ -19,6 +19,7 @@ import type {
   GraphNode,
   GraphPayload,
   HelloEvent,
+  Presentation,
   SearchHit,
   SearchMode,
   TierMap,
@@ -29,7 +30,7 @@ import { DEFAULT_GPU_TIER, mobileNodeBudget, type GpuTier } from '../scene/gpuTi
 import { GPU_BUDGET } from '../scene/tuning';
 import type { StatusUi } from '../live/api';
 import type { EntityAvailability, EntityGraph, GraphLayer } from '../graph/entities';
-import { entityRenderId } from '../graph/entities';
+import { entityRenderId, isEntityRenderId } from '../graph/entities';
 import { entityRenderIdsForDoc } from './entityModel';
 import { EMPTY_TIMELINE, hasHistory, type Timeline } from '../time/timeline';
 
@@ -116,11 +117,23 @@ export interface UIState extends GraphSlice {
   searchHits: SearchHit[];
   searchActive: number;
   searchMeta: SearchMeta | null;
-  /** Effective emphasis set (search hits, a focused hit, or the lens). */
+  /** Effective emphasis set (search hits, a focused hit, the lens, or a presentation). */
   highlight: ReadonlySet<string>;
   /** True while an emphasis source wants the rest of the cosmos dimmed. */
   dimOthers: boolean;
   flyTo: FlyRequest | null;
+
+  /**
+   * PRESENTATIONS (spec/95, brain.show): the latest agent-driven presentation
+   * applied to this UI, or null (never shown / cleared). Ephemeral + advisory —
+   * it spotlights `nodes`, flies to `focus`, switches `mode` and captions the
+   * view, but never touches the brain.
+   */
+  presentation: Presentation | null;
+  /** The highest presentation seq applied — older/duplicate frames are ignored. */
+  presentationSeq: number;
+  /** Whether the "◆ presented by an agent" caption shows (annotation, not dismissed). */
+  presentationCaptionVisible: boolean;
 
   lens: Lens;
   showGhosts: boolean;
@@ -206,6 +219,17 @@ export interface UIState extends GraphSlice {
   /** From the entity panel: reach a source doc in the doc layer (overlay + fly). */
   selectSourceDoc(path: string): void;
 
+  /**
+   * PRESENTATIONS (spec/95): apply an incoming brain.show frame. Only frames with
+   * a seq strictly higher than the last applied take effect (out-of-order/replayed
+   * frames are ignored). Spotlights `nodes` (via the shared highlight path), flies
+   * to `focus` (or the first node), switches `mode`, and shows `annotation`. An
+   * empty/cleared frame removes the spotlight + caption.
+   */
+  applyPresentation(presentation: Presentation): void;
+  /** Dismiss the caption (the ✕) — the spotlight remains until a clear/replace. */
+  dismissCaption(): void;
+
   openSearch(): void;
   closeSearch(): void;
   setSearchQuery(q: string): void;
@@ -286,11 +310,24 @@ export type UIStoreApi = StoreApi<UIState>;
 
 const EMPTY_HIGHLIGHT: ReadonlySet<string> = new Set();
 
+/**
+ * Map one presentation id (spec/95) into the scene's render-id space so it drives
+ * the SAME highlight/flyTo path as search. Doc paths (…\.md) and existing entity
+ * render-ids pass through; a bare entity slug ("aurinko") becomes its render-id
+ * ("\0entity:aurinko"), matching how the graph + entity layers key their nodes.
+ */
+export function presentationRenderId(id: string): string {
+  if (isEntityRenderId(id) || id.endsWith('.md')) return id;
+  return entityRenderId(id);
+}
+
 interface EmphasisSource {
   searchOpen: boolean;
   searchHits: SearchHit[];
   /** What search last decided (live hits or a focused hit). */
   searchEmphasis: ReadonlySet<string>;
+  /** PRESENTATIONS: the agent-spotlit render-id set (empty when none/cleared). */
+  presentationEmphasis: ReadonlySet<string>;
   lens: Lens;
   nodes: ReadonlyMap<string, GraphNode>;
   /** Overlay: a selected doc whose grounded entities should light up. */
@@ -300,13 +337,17 @@ interface EmphasisSource {
 
 /**
  * Resolve the effective highlight + dim from the emphasis drivers, by priority:
- * an open search with hits wins; then an active lens; then an overlay doc's
- * entities; otherwise any lingering search mark (a focused hit) stays lit
- * without dimming. One mechanism, several drivers — the scene reads `highlight`.
+ * an open search with hits wins (immediate user intent); then an agent
+ * presentation's spotlight; then an active lens; then an overlay doc's entities;
+ * otherwise any lingering search mark (a focused hit) stays lit without dimming.
+ * One mechanism, several drivers — the scene reads `highlight`.
  */
 function deriveEmphasis(src: EmphasisSource): { highlight: ReadonlySet<string>; dimOthers: boolean } {
   if (src.searchOpen && src.searchHits.length > 0) {
     return { highlight: src.searchEmphasis, dimOthers: true };
+  }
+  if (src.presentationEmphasis.size > 0) {
+    return { highlight: src.presentationEmphasis, dimOthers: true };
   }
   if (src.lens.kind !== 'none') {
     return { highlight: lensNodeSet(src.nodes, src.lens), dimOthers: true };
@@ -322,6 +363,8 @@ export function createUIStore(): UIStoreApi {
   // The search-owned emphasis set, tracked outside the public state so the
   // derived `highlight` is the only set the scene ever reads.
   let searchEmphasis: ReadonlySet<string> = EMPTY_HIGHLIGHT;
+  // The presentation-owned spotlight set (render ids), tracked the same way.
+  let presentationEmphasis: ReadonlySet<string> = EMPTY_HIGHLIGHT;
 
   return createStore<UIState>()((set, get) => {
     const emphasisOf = (over: Partial<EmphasisSource> = {}) => {
@@ -330,6 +373,7 @@ export function createUIStore(): UIStoreApi {
         searchOpen: s.searchOpen,
         searchHits: s.searchHits,
         searchEmphasis,
+        presentationEmphasis,
         lens: s.lens,
         nodes: s.nodes,
         docEntityFocus: s.docEntityFocus,
@@ -369,6 +413,10 @@ export function createUIStore(): UIStoreApi {
       highlight: EMPTY_HIGHLIGHT,
       dimOthers: false,
       flyTo: null,
+
+      presentation: null,
+      presentationSeq: 0,
+      presentationCaptionVisible: false,
 
       lens: NO_LENS,
       showGhosts: true,
@@ -552,6 +600,45 @@ export function createUIStore(): UIStoreApi {
         get().select(path, true);
       },
 
+      applyPresentation(incoming) {
+        const state = get();
+        // Apply the highest seq seen; ignore older/duplicate frames (the
+        // replay-on-connect re-delivers the latest, so this is idempotent).
+        if (incoming.seq <= state.presentationSeq) return;
+
+        const renderNodes = incoming.nodes.map(presentationRenderId);
+        presentationEmphasis = renderNodes.length > 0 ? new Set(renderNodes) : EMPTY_HIGHLIGHT;
+
+        // A frame with nothing to show is a CLEAR — drop the held presentation.
+        const meaningful =
+          renderNodes.length > 0 ||
+          incoming.focus !== null ||
+          incoming.mode !== null ||
+          incoming.annotation !== null;
+
+        // Fly to the focus, or (no focus) frame the set by flying to its first
+        // node — the SAME flyTo path search uses, honored in cosmos AND brain.
+        const focusId =
+          incoming.focus !== null ? presentationRenderId(incoming.focus) : (renderNodes[0] ?? null);
+        const flyTo =
+          focusId !== null ? { id: focusId, nonce: (state.flyTo?.nonce ?? 0) + 1 } : state.flyTo;
+
+        set({
+          presentation: meaningful ? incoming : null,
+          presentationSeq: incoming.seq,
+          presentationCaptionVisible: incoming.annotation !== null,
+          flyTo,
+          ...emphasisOf(),
+        });
+        // Switch view if asked — reuses setMode (plays the morph). After the set
+        // above so morphActive bookkeeping sees the fresh state.
+        if (incoming.mode === 'cosmos' || incoming.mode === 'brain') get().setMode(incoming.mode);
+      },
+
+      dismissCaption() {
+        if (get().presentationCaptionVisible) set({ presentationCaptionVisible: false });
+      },
+
       openSearch() {
         set({ searchOpen: true, searchActive: 0, ...emphasisOf({ searchOpen: true }) });
       },
@@ -733,8 +820,12 @@ export function createUIStore(): UIStoreApi {
         set({ serverUi: ui });
         get().setNodeBudget(budget); // no-op when it equals the GPU-tier value
         // Honor the operator's opening view ONCE, on first load — never yank a
-        // view the user has since chosen for themselves.
-        if (firstApply && (ui?.default_mode === 'brain' || ui?.default_mode === 'cosmos')) {
+        // view the user has since chosen for themselves, nor override a LIVE
+        // agent presentation that already set the mode (a UI joining a brain
+        // presentation must land in the brain, not be pulled back by the static
+        // default — the /api/status fetch and the replayed brain.show race).
+        const presentationMode = get().presentation?.mode ?? null;
+        if (firstApply && presentationMode === null && (ui?.default_mode === 'brain' || ui?.default_mode === 'cosmos')) {
           get().setMode(ui.default_mode);
         }
       },
@@ -797,3 +888,4 @@ export function useUI<T>(selector: (state: UIState) => T): T {
 
 export type { GhostEdge, Lens };
 export type { Timeline };
+export type { Presentation };

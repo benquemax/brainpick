@@ -166,6 +166,31 @@ describe('LiveConnection', () => {
     conn.dispose();
   });
 
+  it('routes brain.show (spec/95) into the store, applying by presentation seq', async () => {
+    const { store, conn } = setup([{ graph: payloadWith(['a.md', 'b.md']), seq: 10 }]);
+    conn.start();
+    FakeEventSource.latest().emit('hello', hello(10));
+    await vi.runAllTimersAsync();
+    FakeEventSource.latest().emit('brain.show', {
+      annotation: 'the pair',
+      focus: 'a.md',
+      mode: 'brain',
+      nodes: ['a.md', 'b.md'],
+      seq: 2,
+    });
+    let s = store.getState();
+    expect(s.presentationSeq).toBe(2);
+    expect(s.highlight.has('a.md')).toBe(true);
+    expect(s.mode).toBe('brain');
+    expect(s.presentationCaptionVisible).toBe(true);
+    // A replayed/older frame (seq ≤ applied) is ignored — no regression.
+    FakeEventSource.latest().emit('brain.show', { annotation: 'stale', focus: null, mode: null, nodes: [], seq: 1 });
+    s = store.getState();
+    expect(s.presentationSeq).toBe(2);
+    expect(s.highlight.has('a.md')).toBe(true);
+    conn.dispose();
+  });
+
   it('reconnects with backoff after errors', async () => {
     const { store, conn } = setup([{ graph: payloadWith(['a.md']), seq: 10 }]);
     conn.start();

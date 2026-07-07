@@ -60,7 +60,12 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
   const controlsRef = useRef<CameraControlsImpl | null>(null);
   const lastInteract = useRef(-Infinity);
   const returning = useRef(false);
+  // The last flyTo nonce this rig has flown to. 0 = none handled yet, so a flyTo
+  // already present at mount (e.g. a brain_show that flies AND enters the brain
+  // in one turn, set before this rig existed) is replayed once the morph settles.
+  const lastFlyNonce = useRef(0);
   const targetTmp = useMemo(() => new THREE.Vector3(), []);
+  const flyWorld = useMemo(() => new THREE.Vector3(), []);
   // Scratch for the per-frame pose snapshot the labels project from.
   const pose = useMemo(() => ({ viewProj: new THREE.Matrix4(), right: new THREE.Vector3() }), []);
 
@@ -141,32 +146,32 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
     camera.updateProjectionMatrix();
   }, [camera, size.width, size.height]);
 
-  // SEARCH-AS-FLIGHT: a flyTo (search focus / entity select) frames the hit's 3D
-  // position — re-centre the orbit on its CURRENT morphed world position (the same
-  // stagger math the dots use) and dolly to a reading distance. The perspective
-  // mirror of the cosmos flyTo (CameraRig), reading controlsRef lazily so it works
-  // whichever effect created the controls. Mounted only in brain mode, so this is
-  // inherently the brain-mode path; touch + desktop share it via the store.
-  useEffect(() => {
-    const world = new THREE.Vector3();
-    return runtime.store.subscribe((state, prev) => {
-      if (!state.flyTo || state.flyTo === prev.flyTo) return;
-      const controls = controlsRef.current;
-      if (!controls) return;
-      const i = runtime.index.get(state.flyTo.id);
-      if (i === undefined) return;
-      morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, world);
-      const dist = Math.max(controls.minDistance, brainRadius() * BRAIN_CAMERA.focusDistanceFactor);
-      void controls.moveTo(world.x, world.y, world.z, true);
-      void controls.dollyTo(dist, true);
-      lastInteract.current = performance.now(); // hold the idle spin so the hit stays framed
-    });
-  }, [runtime]);
-
   useFrame((_, dt) => {
     const controls = controlsRef.current;
     if (!controls) return;
-    const leaving = runtime.store.getState().mode === 'cosmos';
+    const state = runtime.store.getState();
+
+    // SEARCH / PRESENTATION-AS-FLIGHT: a flyTo (search focus, entity select, or an
+    // agent presentation's focus) frames the target's 3D position — re-centre the
+    // orbit on its CURRENT morphed world position (the same stagger math the dots
+    // use) and dolly to a reading distance. Handled per-frame + nonce-tracked (not
+    // via a store subscription) so a flyTo issued BEFORE this rig mounted — a
+    // brain_show that flies AND switches cosmos→brain in one turn — is replayed
+    // once the morph has settled enough for the brain positions to be real.
+    const fly = state.flyTo;
+    if (fly && fly.nonce !== lastFlyNonce.current && runtime.morph > 0.85) {
+      lastFlyNonce.current = fly.nonce;
+      const i = runtime.index.get(fly.id);
+      if (i !== undefined) {
+        morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, flyWorld);
+        const dist = Math.max(controls.minDistance, brainRadius() * BRAIN_CAMERA.focusDistanceFactor);
+        void controls.moveTo(flyWorld.x, flyWorld.y, flyWorld.z, true);
+        void controls.dollyTo(dist, true);
+        lastInteract.current = performance.now(); // hold the idle spin so the focus stays framed
+      }
+    }
+
+    const leaving = state.mode === 'cosmos';
     if (leaving) {
       // Returning to the flat cosmos: ease the perspective camera to a HEAD-ON,
       // face-the-viewer pose (azimuth → the nearest whole turn, polar → the

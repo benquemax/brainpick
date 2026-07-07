@@ -115,6 +115,26 @@ const UI = {
 // MOCK_BIG serves a 66-doc synthetic brain instead of the 10-doc kotiaurinko —
 // used to make the holographic brain's VOLUME obvious in manual/screenshot review.
 const START_GRAPH = process.env.MOCK_BIG ? bigGraph() : initialGraph();
+// MOCK_SHOW_DEMO=1 cycles a scripted brain_show presentation every few seconds so
+// `dev:mock` demonstrates agent presentations live. Off by default — the REAL
+// trigger is POST /api/show (which the e2e + screenshots drive); this is only a
+// hands-off dev affordance and must never perturb deterministic test runs.
+const SHOW_DEMO = process.env.MOCK_SHOW_DEMO === '1';
+const SHOW_DEMO_STEPS = [
+  {
+    nodes: ['aurinko.md', 'planeetat.md', 'maa.md'],
+    focus: 'aurinko.md',
+    mode: 'cosmos',
+    annotation: 'The star and the worlds that orbit it — the core of the system.',
+  },
+  {
+    nodes: ['maa.md', 'kuu.md'],
+    focus: 'kuu.md',
+    mode: 'brain',
+    annotation: 'The earth and its moon — a tide answered across the dark.',
+  },
+  { clear: true },
+];
 
 /** A calm sci-fi placeholder image for an embedded asset (dev only). */
 function assetPlaceholderSvg(name) {
@@ -159,8 +179,14 @@ export function createMockServer({ stepMs = 6000 } = {}) {
   const docs = new Map(mockDocs().map((d) => [d.path, d]));
   /** path -> sha256 of its full content — the editor's base_sha (spec/50 follow-up). */
   const contentShas = new Map();
+  // Presentations (spec/95): a monotonic counter distinct from the manifest seq,
+  // and the LATEST presentation replayed to every new SSE client (after the
+  // graph snapshot), so a UI joining mid-presentation sees it.
+  let presentationSeq = 0;
+  let presentation = null;
   let stepTimer = null;
   let pingTimer = null;
+  let showTimer = null;
 
   function currentSha(path) {
     if (contentShas.has(path)) return contentShas.get(path);
@@ -387,6 +413,80 @@ export function createMockServer({ stepMs = 6000 } = {}) {
     sendJson(res, 201, { path: `assets/${name}`, sha: sha256(raw), bytes: raw.length });
   }
 
+  /**
+   * Resolve ONE presentation token to a graph id (spec/95), forgivingly, like the
+   * engine: a doc path / basename / title → its node id; else a T3 entity slug /
+   * name → its bare slug (docs win ties). Unresolved → null (dropped, never an error).
+   */
+  function resolveShowToken(token) {
+    const text = String(token ?? '').trim();
+    if (!text) return null;
+    const lower = text.toLowerCase();
+    if (graph.nodes.some((n) => n.id === text)) return text; // exact id
+    const doc = graph.nodes.find(
+      (n) =>
+        n.id.toLowerCase() === lower ||
+        n.id.replace(/\.md$/, '').toLowerCase() === lower ||
+        n.id.split('/').pop().replace(/\.md$/, '').toLowerCase() === lower ||
+        (docFor(n.id)?.title ?? '').toLowerCase() === lower,
+    );
+    if (doc) return doc.id;
+    const ent = entityGraph().nodes.find(
+      (e) => String(e.id).toLowerCase() === lower || String(e.name ?? '').toLowerCase() === lower,
+    );
+    if (ent) return ent.id; // bare slug — the webui namespaces it into a render id
+    return null;
+  }
+
+  /**
+   * Resolve, store and broadcast a presentation (spec/95). Ephemeral + advisory:
+   * no write, no delta — its own monotonic seq. An empty call or clear=true
+   * broadcasts the cleared shape. Returns {presentation, dropped}.
+   */
+  function present({ nodes, focus, mode, annotation, clear } = {}) {
+    const tokens = Array.isArray(nodes) ? nodes : typeof nodes === 'string' ? [nodes] : [];
+    const modeValue = mode === 'cosmos' || mode === 'brain' ? mode : null; // forgiving enum
+    const focusText = focus == null ? '' : String(focus).trim();
+    const annotationText = annotation == null ? '' : String(annotation).trim();
+    const cleared = Boolean(clear) || !(tokens.length || focusText || annotationText || modeValue);
+
+    const resolved = [];
+    const dropped = [];
+    let focusId = null;
+    if (!cleared) {
+      for (const token of tokens) {
+        const text = String(token ?? '').trim();
+        if (!text) continue;
+        const gid = resolveShowToken(text);
+        if (gid === null) dropped.push(text);
+        else if (!resolved.includes(gid)) resolved.push(gid);
+      }
+      focusId = focusText ? resolveShowToken(focusText) : null;
+      if (focusId === null) focusId = resolved[0] ?? null; // default focus (spec/95)
+    }
+
+    presentationSeq += 1;
+    presentation = cleared
+      ? { annotation: null, focus: null, mode: null, nodes: [], seq: presentationSeq }
+      : { annotation: annotationText || null, focus: focusId, mode: modeValue, nodes: resolved, seq: presentationSeq };
+    broadcast(sseFrame('brain.show', presentation));
+    return { presentation, dropped };
+  }
+
+  /** POST /api/show — the tool/CLI/REST face of brain_show (spec/50, spec/95). */
+  async function handleShow(req, res) {
+    const raw = await readBody(req);
+    let body = null;
+    try {
+      body = JSON.parse(raw.toString('utf-8'));
+    } catch {
+      body = null;
+    }
+    if (!body || typeof body !== 'object') body = {};
+    const { presentation: shown, dropped } = present(body);
+    sendJson(res, 200, { ok: true, shown: shown.nodes.length, dropped, seq: shown.seq });
+  }
+
   function handleSearch(url, res) {
     const q = url.searchParams.get('q') ?? '';
     const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? '8') || 8));
@@ -460,6 +560,10 @@ export function createMockServer({ stepMs = 6000 } = {}) {
       }
     }
 
+    // spec/95: replay the latest presentation once (after the graph snapshot), so
+    // a UI joining mid-presentation sees it. No SSE id — it is out of the delta ring.
+    if (presentation !== null) res.write(sseFrame('brain.show', presentation));
+
     clients.add(res);
     req.on('close', () => clients.delete(res));
   }
@@ -485,6 +589,11 @@ export function createMockServer({ stepMs = 6000 } = {}) {
     }
     if (req.method === 'POST' && path === '/api/assets') {
       void handleAssetUpload(req, res);
+      return;
+    }
+    // spec/95: agent-driven presentations. Resolve loosely + broadcast brain.show.
+    if (req.method === 'POST' && path === '/api/show') {
+      void handleShow(req, res);
       return;
     }
 
@@ -570,6 +679,13 @@ export function createMockServer({ stepMs = 6000 } = {}) {
         server.listen(port, host, () => {
           stepTimer = setInterval(tickMutation, stepMs);
           pingTimer = setInterval(() => broadcast(': ping\n\n'), 25_000);
+          if (SHOW_DEMO) {
+            let showStep = 0;
+            showTimer = setInterval(() => {
+              present(SHOW_DEMO_STEPS[showStep % SHOW_DEMO_STEPS.length]);
+              showStep += 1;
+            }, 7000);
+          }
           resolve(server.address());
         });
       });
@@ -577,10 +693,13 @@ export function createMockServer({ stepMs = 6000 } = {}) {
     stop() {
       if (stepTimer) clearInterval(stepTimer);
       if (pingTimer) clearInterval(pingTimer);
+      if (showTimer) clearInterval(showTimer);
       for (const res of clients) res.end();
       clients.clear();
       server.close();
     },
+    /** Test/dev handle: broadcast a presentation directly (mirrors POST /api/show). */
+    present,
   };
 }
 

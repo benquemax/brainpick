@@ -11,12 +11,17 @@
  *    (SSE has no request channel).
  *  - `graph.snapshot` replaces the graph wholesale.
  *  - `compile.status` lands in the status HUD.
+ *  - `brain.show` (spec/95) is an agent-driven presentation — spotlight/caption/
+ *    camera, applied by seq (older frames ignored). It carries a PRESENTATION seq,
+ *    not a manifest seq, and is out of the delta ring; the server replays the
+ *    latest once to each new client (after the snapshot), so a UI joining
+ *    mid-presentation sees it.
  *
  * Reconnects are managed manually with exponential backoff so behavior is
  * deterministic and testable; every (re)connect re-verifies seq via hello.
  * The PWA additionally pokes the connection on visibilitychange.
  */
-import type { CompileStatus, GraphDelta, HelloEvent, SnapshotEvent } from '../graph/types';
+import type { CompileStatus, GraphDelta, HelloEvent, Presentation, SnapshotEvent } from '../graph/types';
 import type { UIStoreApi } from '../state/store';
 import type { GraphFetchResult } from './api';
 
@@ -125,6 +130,11 @@ export class LiveConnection {
     source.addEventListener('compile.status', (ev) => {
       const status = JSON.parse(ev.data) as CompileStatus;
       this.store.getState().setCompile(status);
+    });
+
+    source.addEventListener('brain.show', (ev) => {
+      const presentation = JSON.parse(ev.data) as Presentation;
+      this.store.getState().applyPresentation(presentation);
     });
 
     source.addEventListener('error', () => {
