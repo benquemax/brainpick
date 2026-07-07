@@ -210,15 +210,31 @@ export class KnowledgeGraph {
   }
 
   /** The whole entity layer for /api/graph?layer=entities: nodes
-   * {id,name,type,description,degree}, edges {src,dst,weight} (spec/40). */
+   * {id,name,type,description,degree,source_docs}, edges {src,dst,weight}
+   * (spec/40, spec/50). `source_docs` is sorted so the UI's entity panel can show
+   * an entity's provenance without N extra calls. */
   entityGraph(): {
-    nodes: Array<{ id: string; name: string; type: string | null; description: string | null; degree: number }>;
+    nodes: Array<{
+      id: string;
+      name: string;
+      type: string | null;
+      description: string | null;
+      degree: number;
+      source_docs: string[];
+    }>;
     edges: Array<{ src: string; dst: string; weight: number }>;
   } {
     const nodes = this.ids.map((id) => {
       const entity = this.entities.get(id)!;
       const degree = new Set((this.adjacency.get(id) ?? []).map(([n]) => n)).size;
-      return { id, name: entity.name, type: entity.type ?? null, description: entity.description ?? null, degree };
+      return {
+        id,
+        name: entity.name,
+        type: entity.type ?? null,
+        description: entity.description ?? null,
+        degree,
+        source_docs: [...(entity.source_docs ?? [])].sort(cmpStr),
+      };
     });
     const edges = [...this.relations]
       .sort((a, b) => cmpStr(a.src, b.src) || cmpStr(a.dst, b.dst))

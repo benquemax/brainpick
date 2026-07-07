@@ -51,6 +51,15 @@ class ValidateConfig:
 
 
 @dataclass
+class UiConfig:
+    """[ui] — presentation policy the engine ships to the browser via /api/status
+    (spec/50, spec/80), so the client stops guessing from the GPU tier."""
+
+    max_nodes_mobile: int = 8000   # node cap the web UI applies on mobile/weak GPUs
+    default_mode: str = "cosmos"   # cosmos | brain — the view the UI opens in
+
+
+@dataclass
 class ModulesConfig:
     vectors: str = "auto"  # auto | on | off — T2 (spec/30)
     graph: str = "off"     # auto | on | off — T3 (M3)
@@ -90,10 +99,11 @@ class Config:
     modules: ModulesConfig = field(default_factory=ModulesConfig)
     models: ModelsConfig = field(default_factory=ModelsConfig)
     serve: ServeConfig = field(default_factory=ServeConfig)
+    ui: UiConfig = field(default_factory=UiConfig)
     validate: ValidateConfig = field(default_factory=ValidateConfig)
 
 
-_SECTIONS = ("bundle", "index", "modules", "serve", "validate")
+_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate")
 _MODEL_TABLES = ("embedding", "extraction")
 # [models.*] tables are nested and handled separately below.
 _KNOWN_TOP = {"spec", "models", *_SECTIONS}

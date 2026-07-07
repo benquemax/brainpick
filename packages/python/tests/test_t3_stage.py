@@ -163,6 +163,41 @@ def test_deleting_a_doc_rebuilds_and_drops_its_entities(kotiaurinko):
     assert "komeetta.md" not in {d for e in entities_of(kotiaurinko) for d in e["source_docs"]}
 
 
+# -- tier honesty (tiers.t3 reflects what is actually on disk) ------------------------
+
+
+def test_graph_off_resets_a_fresh_tier_to_off(kotiaurinko):
+    """Turning [modules] graph off after a fresh extraction resets tiers.t3 to 'off'
+    (spec/40) — /api/status and the AGENTS.md report would otherwise misreport T3."""
+    with_t3(kotiaurinko)
+    run_compile(kotiaurinko)
+    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "fresh"
+    (kotiaurinko / "brainpick.toml").write_text(
+        '[modules]\ngraph = "off"\n[models.extraction]\nkind = "mock"\n', encoding="utf-8",
+    )
+    run_compile(kotiaurinko)
+    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "off"  # honestly reset, not lingering
+
+
+def test_removed_export_never_lingers_as_fresh(kotiaurinko):
+    """A T3 export deleted out of band must never leave tiers.t3 lying 'fresh'
+    (spec/40 tier honesty). The incremental fast-path would otherwise see 'no chunk
+    changed' from the surviving .extract-state.json and keep 'fresh' though
+    entities.jsonl is gone; the compile forces a rebuild so the manifest stays
+    consistent with what is on disk."""
+    with_t3(kotiaurinko)
+    run_compile(kotiaurinko)
+    entities = kotiaurinko / ".brainpick" / "t3" / "entities.jsonl"
+    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "fresh" and entities.is_file()
+
+    entities.unlink()  # the export vanishes; .extract-state.json lingers
+    run_compile(kotiaurinko)
+    tier = manifest_of(kotiaurinko)["tiers"]["t3"]
+    present = entities.is_file() and bool(entities.read_text(encoding="utf-8").strip())
+    assert (tier == "fresh") == present  # never 'fresh' without an export behind it
+    assert tier == "fresh" and present  # the mock extractor is still on → rebuilt
+
+
 # -- degradation ---------------------------------------------------------------------
 
 

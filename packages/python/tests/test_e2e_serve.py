@@ -123,6 +123,18 @@ def test_status(kotiaurinko):
         assert body["bundle_root"]
         assert body["writes"] is True  # default [serve] writes = "guarded" → editor shows Edit
         assert body["edges"] > 0
+        # [ui] policy reaches the client so it stops guessing from the GPU (spec/50, spec/80)
+        assert body["ui"] == {"max_nodes_mobile": 8000, "default_mode": "cosmos"}
+
+
+def test_status_ships_configured_ui(kotiaurinko):
+    (kotiaurinko / "brainpick.toml").write_text(
+        '[ui]\nmax_nodes_mobile = 1200\ndefault_mode = "brain"\n', encoding="utf-8",
+    )
+    with TestClient(make_app(kotiaurinko)) as client:
+        assert client.get("/api/status").json()["ui"] == {
+            "max_nodes_mobile": 1200, "default_mode": "brain",
+        }
 
 
 def test_graph_etag_roundtrip(kotiaurinko):
@@ -277,8 +289,11 @@ def test_t3_entity_graph_endpoint(kotiaurinko):
             "aurinko", "komeetta", "kuu", "maa", "planeetat", "vuorovesi",
         ]
         aurinko = next(n for n in payload["nodes"] if n["id"] == "aurinko")
-        assert set(aurinko) == {"id", "name", "type", "description", "degree"}
+        assert set(aurinko) == {"id", "name", "type", "description", "degree", "source_docs"}
         assert aurinko["type"] == "star" and aurinko["degree"] == 2
+        # source_docs (spec/50): the entity's provenance, sorted, so the entity panel
+        # need not make N follow-up calls.
+        assert aurinko["source_docs"] == ["aurinko.md", "komeetta.md", "planeetat.md"]
         assert {"src": "komeetta", "dst": "aurinko", "weight": 0.6} in payload["edges"]
         assert len(payload["edges"]) == 5
 

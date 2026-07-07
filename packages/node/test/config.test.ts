@@ -123,6 +123,21 @@ test("modules and embedding from toml", () => {
   expect(warnings).toEqual([]);
 });
 
+test("ui defaults, toml, and env overrides", () => {
+  // [ui] policy the engine ships to the client via /api/status (spec/80)
+  const base = load(tempDir()).cfg;
+  expect(base.ui.max_nodes_mobile).toBe(8000);
+  expect(base.ui.default_mode).toBe("cosmos");
+
+  const { cfg, warnings } = load(withToml('[ui]\nmax_nodes_mobile = 1200\ndefault_mode = "brain"\n'));
+  expect(cfg.ui.max_nodes_mobile).toBe(1200);
+  expect(cfg.ui.default_mode).toBe("brain");
+  expect(warnings).toEqual([]);
+
+  const env = load(tempDir(), { BRAINPICK_UI_MAX_NODES_MOBILE: "500" }).cfg;
+  expect(env.ui.max_nodes_mobile).toBe(500);
+});
+
 test("embedding env overrides", () => {
   const root = withToml('[models.embedding]\nkind = "ollama"\nmodel = "nomic-embed-text"\n');
   const { cfg } = load(root, {

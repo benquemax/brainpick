@@ -34,6 +34,11 @@ export interface ValidateConfig {
   henxels: string;
 }
 
+export interface UiConfig {
+  max_nodes_mobile: number; // node cap the web UI applies on mobile/weak GPUs
+  default_mode: string; // cosmos | brain — the view the UI opens in (spec/80)
+}
+
 export interface ModulesConfig {
   vectors: string; // auto | on | off — T2 (spec/30)
   graph: string; // auto | on | off — T3 (M3)
@@ -66,6 +71,7 @@ export interface Config {
   modules: ModulesConfig;
   models: ModelsConfig;
   serve: ServeConfig;
+  ui: UiConfig;
   validate: ValidateConfig;
 }
 
@@ -88,11 +94,12 @@ export function defaultConfig(): Config {
       token: "",
       max_asset_bytes: 8388608,
     },
+    ui: { max_nodes_mobile: 8000, default_mode: "cosmos" },
     validate: { henxels: "auto" },
   };
 }
 
-const SECTIONS = ["bundle", "index", "modules", "serve", "validate"] as const;
+const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate"] as const;
 // [models.*] tables are nested and handled separately below.
 const KNOWN_TOP = new Set(["spec", "models", ...SECTIONS]);
 

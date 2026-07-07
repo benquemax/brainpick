@@ -46,6 +46,14 @@ interface ManifestFileEntry {
   sha256: string;
 }
 
+/** Whether a current T3 export is staged under `.brainpick/t3/` — mirrors loadKg's
+ * "an empty export is nothing to query" gate (spec/40): the file must exist and
+ * carry at least one entity line. */
+function t3ExportPresent(bp: string): boolean {
+  const text = readTextOrNull(join(bp, "t3", "entities.jsonl"));
+  return text !== null && text.trim() !== "";
+}
+
 /** (what index.md should contain, what it contains now). */
 function prospectiveIndex(root: string, docs: Document[]): [string, string | null] {
   const block = renderIndexBlock(docs);
@@ -149,7 +157,14 @@ export async function runCompile(
     }
   }
 
-  const tiers = { t1: "fresh", t2: t2Status, t3: "off" };
+  // T3 (spec/40): the Node engine never extracts, but the manifest must honestly
+  // reflect whether a current T3 export (a Python sibling's product) exists on disk.
+  // A vanished export resets the tier to "off" instead of lingering "fresh"; a prior
+  // non-off status set by the extractor (fresh|stale) is preserved while it is present.
+  const t3Present = t3ExportPresent(bp);
+  const t3Prev = oldTiers["t3"];
+  const t3Status = t3Present ? (t3Prev && t3Prev !== "off" ? t3Prev : "fresh") : "off";
+  const tiers = { t1: "fresh", t2: t2Status, t3: t3Status };
   // The opt-in AGENTS.md brain report rides along on every compile so it stays
   // true even when nothing else changed (e.g. the markers were just installed).
   refreshReport(root, graph, tiers);

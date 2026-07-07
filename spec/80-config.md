@@ -22,6 +22,10 @@ vectors = "auto"                # auto | on | off   (T2 — M2)
 graph = "off"                   # auto | on | off   (T3 — M3)
 ui = true
 
+[ui]                            # presentation policy shipped to the client (spec/50 /api/status)
+max_nodes_mobile = 8000         # node cap the web UI applies on mobile/weak GPUs
+default_mode = "cosmos"         # cosmos | brain — the view the UI opens in
+
 [serve]
 host = "127.0.0.1"
 port = 4747

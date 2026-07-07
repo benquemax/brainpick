@@ -147,7 +147,9 @@ class KnowledgeGraph:
 
     def entity_graph(self) -> dict:
         """The whole entity layer for /api/graph?layer=entities: nodes
-        {id,name,type,description,degree}, edges {src,dst,weight} (spec/40)."""
+        {id,name,type,description,degree,source_docs}, edges {src,dst,weight}
+        (spec/40, spec/50). `source_docs` is sorted so the UI's entity panel can
+        show an entity's provenance without N extra calls."""
         degree = {eid: len({n for n, _ in self.adjacency[eid]}) for eid in self._ids}
         nodes = [
             {
@@ -156,6 +158,7 @@ class KnowledgeGraph:
                 "type": self.entities[eid].get("type"),
                 "description": self.entities[eid].get("description"),
                 "degree": degree[eid],
+                "source_docs": sorted(self.entities[eid].get("source_docs", [])),
             }
             for eid in self._ids
         ]

@@ -195,13 +195,17 @@ test("graphSearch respects limit", () => {
 // -- entity graph (for /api/graph?layer=entities) ------------------------------------
 
 test("entityGraph nodes and edges", () => {
-  const graph = loaded().entityGraph();
+  const kg = loaded();
+  const graph = kg.entityGraph();
   expect(graph.nodes.find((n) => n.id === "aurinko")).toEqual({
     id: "aurinko",
     name: "Aurinko",
     type: "star",
     description: "The star at the center that everything orbits.",
     degree: 2,
+    // source_docs (spec/50): the docs the entity was extracted from, sorted, so
+    // the UI's entity panel shows provenance without N extra calls.
+    source_docs: ["aurinko.md", "komeetta.md", "planeetat.md"],
   });
   expect(graph.nodes.map((n) => n.id)).toEqual([
     "aurinko",
@@ -211,6 +215,10 @@ test("entityGraph nodes and edges", () => {
     "planeetat",
     "vuorovesi",
   ]);
+  // every node carries its sorted source_docs, matching the fixture export
+  for (const node of graph.nodes) {
+    expect(node.source_docs).toEqual([...kg.entities.get(node.id)!.source_docs].sort());
+  }
   expect(graph.edges).toContainEqual({ src: "komeetta", dst: "aurinko", weight: 0.6 });
   expect(graph.edges).toHaveLength(5);
 });

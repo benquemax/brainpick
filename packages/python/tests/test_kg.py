@@ -195,10 +195,16 @@ def test_entity_graph_nodes_and_edges(tmp_path):
     assert aurinko == {
         "id": "aurinko", "name": "Aurinko", "type": "star",
         "description": "The star at the center that everything orbits.", "degree": 2,
+        # source_docs (spec/50): the docs the entity was extracted from, sorted, so
+        # the UI's entity panel shows provenance without N extra calls.
+        "source_docs": ["aurinko.md", "komeetta.md", "planeetat.md"],
     }
     assert [n["id"] for n in graph["nodes"]] == [
         "aurinko", "komeetta", "kuu", "maa", "planeetat", "vuorovesi",
     ]
+    # every node carries its sorted source_docs, matching the fixture export
+    for node in graph["nodes"]:
+        assert node["source_docs"] == sorted(kg.entities[node["id"]]["source_docs"])
     assert {"src": "komeetta", "dst": "aurinko", "weight": 0.6} in graph["edges"]
     assert len(graph["edges"]) == 5
 

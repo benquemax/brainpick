@@ -1,10 +1,10 @@
-import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { cpSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
 
 import { checkFresh, runCompile } from "../src/compile/pipeline";
-import { cleanup, copyBundle } from "./helpers";
+import { cleanup, copyBundle, EXPECTED } from "./helpers";
 
 afterEach(cleanup);
 
@@ -123,6 +123,26 @@ test("tier-status-only transition rewrites the manifest without spending a seq",
   expect(result.seq).toBe(1); // no artifact changed — seq not spent
   expect(JSON.parse(read(manifestPath)).tiers).toEqual({ t1: "fresh", t2: "off", t3: "off" });
   expect((await runCompile(root)).changed).toBe(false); // and now it settles
+});
+
+test("tiers.t3 reflects the export and resets to off when it vanishes", async () => {
+  // The Node engine never extracts, but a Python sibling may stage a T3 export; the
+  // manifest must honestly track whether one is present (spec/40). A vanished export
+  // resets tiers.t3 to "off" instead of lingering "fresh".
+  const root = copyBundle();
+  await runCompile(root);
+  const bp = join(root, ".brainpick");
+  const manifestPath = join(bp, "manifest.json");
+  const t3 = (): string => JSON.parse(read(manifestPath)).tiers.t3;
+  expect(t3()).toBe("off"); // no export yet
+
+  cpSync(join(EXPECTED, "kotiaurinko", "t3"), join(bp, "t3"), { recursive: true });
+  await runCompile(root);
+  expect(t3()).toBe("fresh"); // a present export is detected and honored
+
+  unlinkSync(join(bp, "t3", "entities.jsonl")); // the export vanishes
+  await runCompile(root);
+  expect(t3()).toBe("off"); // honestly reset, never lingering "fresh"
 });
 
 test("delta carries cause paths and seq after a change", async () => {

@@ -100,6 +100,24 @@ def test_modules_and_embedding_from_toml(tmp_path):
     assert cfg.models.embedding.dim == 768
 
 
+def test_ui_defaults_and_from_toml(tmp_path):
+    # [ui] policy the engine ships to the client via /api/status (spec/80)
+    cfg = load_config(tmp_path)
+    assert cfg.ui.max_nodes_mobile == 8000
+    assert cfg.ui.default_mode == "cosmos"
+    (tmp_path / "brainpick.toml").write_text(
+        '[ui]\nmax_nodes_mobile = 1200\ndefault_mode = "brain"\n', encoding="utf-8",
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.ui.max_nodes_mobile == 1200
+    assert cfg.ui.default_mode == "brain"
+
+
+def test_ui_env_overrides(tmp_path):
+    cfg = load_config(tmp_path, env={"BRAINPICK_UI_MAX_NODES_MOBILE": "500"})
+    assert cfg.ui.max_nodes_mobile == 500
+
+
 def test_embedding_env_overrides(tmp_path):
     (tmp_path / "brainpick.toml").write_text(
         '[models.embedding]\nkind = "ollama"\nmodel = "nomic-embed-text"\n', encoding="utf-8",

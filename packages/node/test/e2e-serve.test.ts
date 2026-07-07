@@ -175,6 +175,16 @@ test("status", async () => {
   expect(body.bundle_root).toBeTruthy();
   expect(body.edges).toBeGreaterThan(0);
   expect(body.writes).toBe(true); // default [serve] writes = "guarded" → editor shows Edit
+  // [ui] policy reaches the client so it stops guessing from the GPU (spec/50, spec/80)
+  expect(body.ui).toEqual({ max_nodes_mobile: 8000, default_mode: "cosmos" });
+});
+
+test("status ships configured ui", async () => {
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[ui]\nmax_nodes_mobile = 1200\ndefault_mode = "brain"\n', "utf8");
+  const { base } = await serve(await makeApp(root));
+  const { body } = await getJson(`${base}/api/status`);
+  expect(body.ui).toEqual({ max_nodes_mobile: 1200, default_mode: "brain" });
 });
 
 test("graph etag roundtrip", async () => {
@@ -334,9 +344,14 @@ test("t3 entity graph endpoint", async () => {
     "aurinko", "komeetta", "kuu", "maa", "planeetat", "vuorovesi",
   ]);
   const aurinko = response.body.nodes.find((n: { id: string }) => n.id === "aurinko");
-  expect(new Set(Object.keys(aurinko))).toEqual(new Set(["id", "name", "type", "description", "degree"]));
+  expect(new Set(Object.keys(aurinko))).toEqual(
+    new Set(["id", "name", "type", "description", "degree", "source_docs"]),
+  );
   expect(aurinko.type).toBe("star");
   expect(aurinko.degree).toBe(2);
+  // source_docs (spec/50): the entity's provenance, sorted, so the entity panel
+  // need not make N follow-up calls.
+  expect(aurinko.source_docs).toEqual(["aurinko.md", "komeetta.md", "planeetat.md"]);
   expect(response.body.edges).toContainEqual({ src: "komeetta", dst: "aurinko", weight: 0.6 });
   expect(response.body.edges).toHaveLength(5);
 

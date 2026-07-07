@@ -58,6 +58,10 @@ async def status(request: Request) -> JSONResponse:
         "bundle_root": str(state.root),
         "watching": state.watching,
         "writes": state.config.serve.writes == "guarded",  # the editor shows Edit only when true
+        "ui": {  # [ui] policy shipped to the client so it stops guessing from the GPU (spec/50, spec/80)
+            "max_nodes_mobile": state.config.ui.max_nodes_mobile,
+            "default_mode": state.config.ui.default_mode,
+        },
     })
 
 

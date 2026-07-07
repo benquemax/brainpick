@@ -115,7 +115,14 @@ def run_t3_stage(
 
     removed = set(prev_chunks) - set(current)
     changed = [c for c in enriched if prev_chunks.get(c["id"]) != c["sha256"]]
-    full_rebuild = full or state.get("fingerprint") != fingerprint or bool(removed)
+    # A vanished export must never be reported "fresh" (spec/40 tier honesty): if
+    # entities.jsonl is gone (deleted out of band) the state file alone would say
+    # "nothing changed", so force a rebuild so tiers.t3 reflects reality — the graph
+    # is re-extracted, or, if the extractor is now unreachable, degrades to "stale".
+    export_present = (t3 / "entities.jsonl").is_file()
+    full_rebuild = (
+        full or state.get("fingerprint") != fingerprint or bool(removed) or not export_present
+    )
     to_insert = enriched if full_rebuild else changed
 
     if not full_rebuild and not to_insert:
