@@ -233,6 +233,7 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
       orphans: stats.orphans ?? 0,
       bundle_root: state.root,
       watching: state.watching,
+      writes: state.config.serve.writes === "guarded", // the editor shows Edit only when true
     });
   });
 
@@ -271,11 +272,20 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
       return;
     }
     const [frontmatter, body] = docFrontmatter(state, path)!;
+    // sha of the raw file bytes (matches the write path's base_sha), null if deleted
+    let sha: string | null = null;
+    try {
+      const filePath = join(state.root, path);
+      if (statSync(filePath).isFile()) sha = sha256Hex(readFileSync(filePath));
+    } catch {
+      sha = null;
+    }
     res.json({
       path,
       frontmatter: jsonable(frontmatter),
       title: record.title,
       text: body,
+      sha,
       neighbors: state.neighborsOf(path),
     });
   });

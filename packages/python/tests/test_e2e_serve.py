@@ -121,6 +121,7 @@ def test_status(kotiaurinko):
         assert body["orphans"] == 1
         assert body["watching"] is False
         assert body["bundle_root"]
+        assert body["writes"] is True  # default [serve] writes = "guarded" → editor shows Edit
         assert body["edges"] > 0
 
 
@@ -170,7 +171,8 @@ def test_timeline_empty_then_served(kotiaurinko):
 def test_docs_happy_and_nested(kotiaurinko):
     with TestClient(make_app(kotiaurinko)) as client:
         body = client.get("/api/docs/kuu.md").json()
-        assert set(body) == {"path", "frontmatter", "title", "text", "neighbors"}
+        assert set(body) == {"path", "frontmatter", "title", "text", "sha", "neighbors"}
+        assert len(body["sha"]) == 64  # sha256 of the raw file bytes — the editor's next base_sha
         assert body["title"] == "Kuu"
         assert body["frontmatter"]["type"] == "Concept"
         assert body["frontmatter"]["timestamp"] == "2026-06-15T08:30:00Z"

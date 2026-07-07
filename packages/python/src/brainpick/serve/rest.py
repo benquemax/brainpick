@@ -57,6 +57,7 @@ async def status(request: Request) -> JSONResponse:
         "orphans": stats.get("orphans", 0),
         "bundle_root": str(state.root),
         "watching": state.watching,
+        "writes": state.config.serve.writes == "guarded",  # the editor shows Edit only when true
     })
 
 
@@ -107,9 +108,12 @@ async def doc_detail(request: Request) -> JSONResponse:
             "suggestions": suggest_paths(state.records, path),
         }, status_code=404)
     file_path = state.root / path
+    sha: str | None = None
     if file_path.is_file():
-        frontmatter, body = split_frontmatter(file_path.read_text(encoding="utf-8"))
-    else:  # deleted since the last compile — serve the held record
+        raw = file_path.read_bytes()
+        sha = sha256_hex(raw)  # matches the write path's base_sha (sha256 of raw file bytes)
+        frontmatter, body = split_frontmatter(raw.decode("utf-8"))
+    else:  # deleted since the last compile — serve the held record (no sha to arm base_sha)
         frontmatter = {k: record[k] for k in ("type", "title", "description", "tags", "timestamp")
                        if record.get(k)}
         body = record["text"]
@@ -118,6 +122,7 @@ async def doc_detail(request: Request) -> JSONResponse:
         "frontmatter": jsonable(frontmatter),
         "title": record["title"],
         "text": body,
+        "sha": sha,
         "neighbors": state.neighbors_of(path),
     })
 

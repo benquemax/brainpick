@@ -174,6 +174,7 @@ test("status", async () => {
   expect(body.watching).toBe(false);
   expect(body.bundle_root).toBeTruthy();
   expect(body.edges).toBeGreaterThan(0);
+  expect(body.writes).toBe(true); // default [serve] writes = "guarded" → editor shows Edit
 });
 
 test("graph etag roundtrip", async () => {
@@ -224,7 +225,8 @@ test("timeline empty then served", async () => {
 test("docs happy and nested", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/docs/kuu.md`);
-  expect(new Set(Object.keys(body))).toEqual(new Set(["path", "frontmatter", "title", "text", "neighbors"]));
+  expect(new Set(Object.keys(body))).toEqual(new Set(["path", "frontmatter", "title", "text", "sha", "neighbors"]));
+  expect(body.sha).toHaveLength(64); // sha256 of the raw file bytes — the editor's next base_sha
   expect(body.title).toBe("Kuu");
   expect(body.frontmatter.type).toBe("Concept");
   expect(body.frontmatter.timestamp).toBe("2026-06-15T08:30:00Z");
