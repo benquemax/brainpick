@@ -47,6 +47,13 @@ async def live_endpoint(request: Request) -> StreamingResponse:
                     for name, event_id, data in replay:
                         yield sse_frame(name, event_id, data)
 
+            # Replay the latest presentation once (spec/95), after the graph
+            # snapshot, so a UI joining mid-presentation sees it. No SSE id — it
+            # is out of the delta ring, and a cleared presentation replays as the
+            # empty shape.
+            if state.presentation is not None:
+                yield sse_frame("brain.show", None, _dumps(state.presentation))
+
             while True:
                 try:
                     name, event_id, data = await asyncio.wait_for(queue.get(), timeout=PING_INTERVAL)

@@ -15,6 +15,7 @@ Both servers implement this surface. All responses are JSON (except `/` and
 | `GET /api/neighbors?id=&depth=1&layer=links` | `{"center", "nodes": [...], "edges": [...]}` — node/edge shapes as in graph.json; `layer=entities` before T3 degrades to links with `"degraded_from": "entities"` (matching MCP semantics — only `/api/graph` 404s) |
 | `GET /api/live` | SSE stream, see `60-live-deltas.md` |
 | `GET /api/timeline` | `timeline.json` (see `90-timeline.md`); `{"commits": [], "docs": {}, "span": null}` when the bundle has no git history. ETag by `seq` |
+| `POST /api/show` | agent-driven presentation (see `95-presentations.md`); `{nodes?, focus?, mode?, annotation?, clear?}` → broadcasts a `brain.show` live event → `{ok, shown, dropped, seq}` |
 | `PUT /api/docs/{path}` | guarded doc write (see "Writing" below); `{content, base_sha?, mode?}` → `200 {ok,path,seq,sha}` / `422` henxels / `409` conflict |
 | `POST /api/assets` | upload an image into the bundle's `assets/` (see "Writing"); → `201 {path, sha, bytes}` |
 | `GET /` | the static web UI (SPA fallback to `index.html`; login page when a password is set and no session) |

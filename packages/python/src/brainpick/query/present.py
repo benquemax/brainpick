@@ -94,6 +94,19 @@ def present_read(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def present_show(payload: dict) -> str:
+    """The brainpick show result (spec/95): what the live server broadcast."""
+    if "error" in payload:
+        return payload["error"]
+    shown = payload.get("shown", 0)
+    seq = payload.get("seq")
+    lines = [f"presented (seq {seq}): {shown} node(s) spotlighted in every open UI"]
+    dropped = payload.get("dropped") or []
+    if dropped:
+        lines.append(f"dropped (unresolved): {', '.join(dropped)}")
+    return "\n".join(lines)
+
+
 def present_neighbors(payload: dict) -> str:
     miss = _present_resolution_miss(payload)
     if miss is not None:

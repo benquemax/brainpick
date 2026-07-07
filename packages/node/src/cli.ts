@@ -78,6 +78,82 @@ function runT3Delegate(root: string): number {
   return proc.status ?? 0;
 }
 
+export interface ShowResult {
+  result?: Record<string, unknown>;
+  error?: string;
+}
+
+/** POST a presentation body to a running server's /api/show (spec/95). The CLI is
+ * a client here, never resolving locally: the live server resolves and broadcasts
+ * to open UIs. Returns the parsed response or a clear instruction (never throws). */
+export async function postShow(
+  baseUrl: string,
+  body: Record<string, unknown>,
+  token?: string | null,
+): Promise<ShowResult> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (token) headers["authorization"] = `Bearer ${token}`;
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/api/show`, { method: "POST", headers, body: JSON.stringify(body) });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return { error: `no brainpick server at ${baseUrl} — start one with 'brainpick serve' (${reason})` };
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    let message = text;
+    try {
+      message = (JSON.parse(text) as { error?: string }).error ?? text;
+    } catch {
+      /* non-JSON error body — keep the raw text */
+    }
+    return { error: `the server rejected the presentation (${res.status}): ${message}` };
+  }
+  return { result: text === "" ? {} : (JSON.parse(text) as Record<string, unknown>) };
+}
+
+export interface ShowOptions {
+  nodes: string[];
+  focus?: string;
+  mode?: string;
+  annotate?: string;
+  clear?: boolean;
+  host?: string;
+  port?: number;
+  token?: string;
+  json?: boolean;
+}
+
+/** brainpick show: build the /api/show body from config + flags, POST it, format.
+ * Returns what to print (out/err) and the process exit code. */
+export async function showAction(
+  root: string,
+  opts: ShowOptions,
+): Promise<{ out?: string; err?: string; code: number }> {
+  const { presentShow, toJson } = await import("./query/present");
+  const config = loadConfig(root);
+  const host = opts.host ?? config.serve.host;
+  const port = opts.port ?? config.serve.port;
+  const displayHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
+  const baseUrl = `http://${displayHost}:${port}`;
+  const token = opts.token ?? (config.serve.token || null);
+
+  const body: Record<string, unknown> = { nodes: opts.nodes };
+  if (opts.focus) body["focus"] = opts.focus;
+  if (opts.mode) body["mode"] = opts.mode;
+  if (opts.annotate !== undefined) body["annotation"] = opts.annotate;
+  if (opts.clear) body["clear"] = true;
+
+  const { result, error } = await postShow(baseUrl, body, token);
+  if (error !== undefined) {
+    return opts.json
+      ? { out: toJson({ error, hint: "start the server with: brainpick serve" }), code: 1 }
+      : { err: error, code: 1 };
+  }
+  return { out: opts.json ? toJson(result) : presentShow(result!), code: 0 };
+}
+
 /** Open the UI in the platform browser — the CLI must not block on it. */
 function openBrowser(url: string): void {
   const [cmd, args] =
@@ -281,6 +357,49 @@ program
     const { overviewMirror } = await import("./query/mirrors");
     emit(await overviewMirror(resolve(opts.root), Boolean(opts.json)));
   });
+
+program
+  .command("show [nodes...]")
+  .description("present a subgraph live in every open UI (posts to a running server)")
+  .option("--focus <id>", "a single id to fly the camera to (defaults to the first node)")
+  .option("--mode <mode>", "cosmos | brain — switch the UI view")
+  .option("--annotate <text>", "a short caption shown over the presentation")
+  .option("--clear", "dismiss the current presentation")
+  .option("--host <host>", "server host (default: config or 127.0.0.1)")
+  .option("--port <port>", "server port (default: config or 4747)", intOption)
+  .option("--token <token>", "bearer token for a guarded server")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--json", "print the raw server response as JSON")
+  .action(
+    async (
+      nodes: string[],
+      opts: {
+        focus?: string;
+        mode?: string;
+        annotate?: string;
+        clear?: boolean;
+        host?: string;
+        port?: number;
+        token?: string;
+        root: string;
+        json?: boolean;
+      },
+    ) => {
+      const result = await showAction(resolve(opts.root), {
+        nodes: nodes ?? [],
+        focus: opts.focus,
+        mode: opts.mode,
+        annotate: opts.annotate,
+        clear: opts.clear,
+        host: opts.host,
+        port: opts.port,
+        token: opts.token,
+        json: opts.json,
+      });
+      emit(result);
+      process.exitCode = result.code;
+    },
+  );
 
 program
   .command("integrate <target>")

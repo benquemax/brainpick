@@ -57,7 +57,10 @@ test("mcp stdio roundtrip", { timeout: 120_000 }, async () => {
   await withSession(root, async (client) => {
     const tools = (await client.listTools()).tools.map((t) => t.name);
     expect(new Set(tools)).toEqual(
-      new Set(["brain_overview", "brain_search", "brain_read", "brain_neighbors", "brain_write"]),
+      new Set([
+        "brain_overview", "brain_search", "brain_read",
+        "brain_neighbors", "brain_write", "brain_show",
+      ]),
     );
 
     const overview = await call(client, "brain_overview", {});
@@ -87,6 +90,15 @@ test("mcp stdio roundtrip", { timeout: 120_000 }, async () => {
     const rejected = await call(client, "brain_write", { doc: "../ulos.md", content: "# Ulos\n" });
     expect(rejected.ok).toBe(false);
     expect(rejected.instruction).toBeTruthy();
+
+    const shown = await call(client, "brain_show", {
+      nodes: ["aurinko.md", "ei-ole"],
+      annotation: "the star",
+    });
+    expect(shown.ok).toBe(true);
+    expect(shown.shown).toBe(1);
+    expect(shown.dropped).toEqual(["ei-ole"]);
+    expect(shown.seq).toBe(1); // presentation seq, distinct from the manifest seq
 
     // spec/70 optimistic concurrency: a stale base_sha conflicts without writing…
     const conflict = await call(client, "brain_write", {

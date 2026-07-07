@@ -55,7 +55,12 @@ data: {"seq":4213,"state":"running","tier":"t1"}
   `.brainpick/`, `.git/`, `_temp/`, `node_modules/`; unchanged content
   hashes MUST NOT produce deltas or bump `seq`.
 
-## Planned event types (reserved names, post-0.1)
+## brain.show (agent presentations)
 
-`ui.presentation` — agent-driven highlight/tour commands relayed to open
-UIs (the `brain_show` feature).
+`brain.show` carries an agent-driven presentation — the highlight/focus/caption
+commands `brain_show` (and `POST /api/show`) relay to every open UI — over this
+same stream. It carries the PRESENTATION seq (not a manifest seq), sets no SSE
+`id`, is EXCLUDED from the graph-delta ring buffer, and the server replays the
+latest presentation once to each newly connected client (after the graph
+snapshot) so a late joiner sees the current presentation. Its payload and
+lifecycle are the contract of `95-presentations.md`.

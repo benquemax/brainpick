@@ -13,6 +13,7 @@ import {
   overviewPayload,
   readPayload,
   searchPayload,
+  showPayload,
   tokensOf,
   writePayload,
 } from "../src/mcp";
@@ -477,4 +478,35 @@ test("conflict three-way from a git base", async () => {
   expect(merged.content).toContain("spring tides"); // their edit survives
   expect(merged.content).toContain("## Vaiheet"); // your edit survives
   expect(readFileSync(join(root, "kuu.md"), "utf8")).not.toContain("## Vaiheet"); // proposal only
+});
+
+// -- brain_show (spec/95): the 6th tool — ephemeral presentations, not write-gated --
+
+test("showPayload reports shown, dropped, seq, and a hint", async () => {
+  const state = await makeState(copyBundle());
+  const queue = state.subscribe();
+  const result = showPayload(state, ["aurinko.md", "ei-ole"], null, null, "hi");
+  expect(result["ok"]).toBe(true);
+  expect(result["shown"]).toBe(1);
+  expect(result["dropped"]).toEqual(["ei-ole"]);
+  expect(result["seq"]).toBe(1);
+  // the exact hint — pinned so it stays byte-identical to the Python twin (parity)
+  expect(result["hint"]).toBe(
+    "showing 1 node(s) live in every open UI — " +
+      "call brain_show again to change it, or with clear:true to dismiss. (dropped 1: ei-ole)",
+  );
+  expect(queue.drain().map((e) => e[0])).toEqual(["brain.show"]); // the open UIs light up
+  expect(state.seq).toBe(1); // never writes / compiles
+});
+
+test("showPayload clear has a dedicated hint", async () => {
+  const state = await makeState(copyBundle());
+  const result = showPayload(state, null, null, null, null, true);
+  expect(result).toEqual({
+    ok: true,
+    shown: 0,
+    dropped: [],
+    seq: 1,
+    hint: "cleared — every open UI dropped its spotlight and caption.",
+  });
 });

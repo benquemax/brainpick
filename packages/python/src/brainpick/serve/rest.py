@@ -201,6 +201,53 @@ async def neighbors_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(body)
 
 
+def _show_gate(request: Request) -> JSONResponse | None:
+    """spec/95: POST /api/show is gated by the normal auth ONLY — a bearer on a
+    non-localhost bind — and is independent of [serve] writes (a presentation never
+    touches the brain). When credentials exist the auth middleware has already
+    gated; this closes the no-auth-file non-localhost case, matching brain_write's
+    bind rule without its writes check."""
+    config = _state(request).config
+    if config.serve.host not in _LOCAL_HOSTS and not config.serve.token \
+            and not auth_active(request.app.state.auth.current()):
+        return JSONResponse({"error": AUTH_REQUIRED_ERROR}, status_code=401,
+                            headers={"WWW-Authenticate": "Bearer"})
+    return None
+
+
+async def show_endpoint(request: Request) -> JSONResponse:
+    """POST /api/show (spec/95): resolve the presentation body and broadcast a
+    brain.show event to every open UI, returning {ok, shown, dropped, seq}. The
+    same resolve + present core brain_show uses; NOT behind [serve] writes."""
+    gate = _show_gate(request)
+    if gate is not None:
+        return gate
+    try:
+        body = await request.json()
+    except Exception:
+        body = None
+    if not isinstance(body, dict):
+        body = {}
+    nodes = body.get("nodes")
+    if isinstance(nodes, str):
+        nodes = [nodes]
+    elif not isinstance(nodes, list):
+        nodes = None
+    presentation, dropped = _state(request).present(
+        nodes=nodes,
+        focus=body.get("focus"),
+        mode=body.get("mode"),
+        annotation=body.get("annotation"),
+        clear=bool(body.get("clear")),
+    )
+    return JSONResponse({
+        "ok": True,
+        "shown": len(presentation["nodes"]),
+        "dropped": dropped,
+        "seq": presentation["seq"],
+    })
+
+
 async def login(request: Request) -> Response:
     """POST /api/login {password} → 204 + signed session cookie, 401 on mismatch (spec/50)."""
     store = request.app.state.auth.current()
@@ -400,6 +447,7 @@ def api_routes() -> list[Route]:
         Route("/api/assets", assets_upload, methods=["POST"]),
         Route("/api/search", search_endpoint),
         Route("/api/neighbors", neighbors_endpoint),
+        Route("/api/show", show_endpoint, methods=["POST"]),
         Route("/api/login", login, methods=["POST"]),
         Route("/api/logout", logout, methods=["POST"]),
     ]

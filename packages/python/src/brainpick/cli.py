@@ -227,6 +227,67 @@ def _cmd_integrate(args: argparse.Namespace) -> int:
     return run_integrate(args.target, Path(args.root), dry_run=args.dry_run)
 
 
+def post_show(base_url: str, body: dict, token: str | None = None) -> tuple[dict | None, str | None]:
+    """POST a presentation body to a running server's /api/show (spec/95). Returns
+    (response, None) or (None, instruction) — the CLI is a client here, never
+    resolving locally: the live server resolves and broadcasts to open UIs."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    data = json.dumps(body).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(f"{base_url}/api/show", data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 (localhost control-plane)
+            return json.loads(response.read().decode("utf-8")), None
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        try:
+            message = json.loads(detail).get("error", detail)
+        except (ValueError, AttributeError):
+            message = detail
+        return None, f"the server rejected the presentation ({error.code}): {message}"
+    except urllib.error.URLError as error:
+        return None, (f"no brainpick server at {base_url} — start one with 'brainpick serve' "
+                      f"({error.reason})")
+
+
+def _cmd_show(args: argparse.Namespace) -> int:
+    from brainpick.config import load_config
+    from brainpick.query.present import present_show, to_json
+
+    root = Path(args.root).resolve()
+    config = load_config(root)
+    host = args.host or config.serve.host
+    port = args.port or config.serve.port
+    display_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    base_url = f"http://{display_host}:{port}"
+    token = args.token or (config.serve.token or None)
+
+    body: dict = {"nodes": args.nodes}
+    if args.focus:
+        body["focus"] = args.focus
+    if args.mode:
+        body["mode"] = args.mode
+    if args.annotate is not None:
+        body["annotation"] = args.annotate
+    if args.clear:
+        body["clear"] = True
+
+    result, error = post_show(base_url, body, token)
+    if error is not None:
+        if args.json:
+            print(to_json({"error": error, "hint": "start the server with: brainpick serve"}))
+        else:
+            print(error, file=sys.stderr)
+        return 1
+    print(to_json(result) if args.json else present_show(result))
+    return 0
+
+
 def _cmd_mcp(args: argparse.Namespace) -> int:
     # stdio is the protocol channel: nothing may print to stdout here
     from brainpick.config import load_config
@@ -305,6 +366,22 @@ def main(argv: list[str] | None = None) -> int:
     p_overview.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_overview.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
     p_overview.set_defaults(func=_cmd_overview)
+
+    p_show = sub.add_parser("show",
+                            help="present a subgraph live in every open UI (posts to a running server)")
+    p_show.add_argument("nodes", nargs="*", help="doc paths or entity names to spotlight")
+    p_show.add_argument("--focus", default=None,
+                        help="a single id to fly the camera to (defaults to the first node)")
+    p_show.add_argument("--mode", default=None, help="cosmos | brain — switch the UI view")
+    p_show.add_argument("--annotate", default=None, metavar="TEXT",
+                        help="a short caption shown over the presentation")
+    p_show.add_argument("--clear", action="store_true", help="dismiss the current presentation")
+    p_show.add_argument("--host", default=None, help="server host (default: config or 127.0.0.1)")
+    p_show.add_argument("--port", type=int, default=None, help="server port (default: config or 4747)")
+    p_show.add_argument("--token", default=None, help="bearer token for a guarded server")
+    p_show.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_show.add_argument("--json", action="store_true", help="print the raw server response as JSON")
+    p_show.set_defaults(func=_cmd_show)
 
     p_integrate = sub.add_parser("integrate", help="install brainpick into an agent harness (skill, MCP, report)")
     p_integrate.add_argument("target", metavar="<target>",

@@ -33,7 +33,8 @@ async def _scenario(root):
 
             tools = {t.name for t in (await session.list_tools()).tools}
             assert tools == {
-                "brain_overview", "brain_search", "brain_read", "brain_neighbors", "brain_write",
+                "brain_overview", "brain_search", "brain_read", "brain_neighbors",
+                "brain_write", "brain_show",
             }
 
             overview = await _call(session, "brain_overview", {})
@@ -63,6 +64,12 @@ async def _scenario(root):
             rejected = await _call(session, "brain_write", {"doc": "../ulos.md", "content": "# Ulos\n"})
             assert rejected["ok"] is False
             assert rejected["instruction"]
+
+            shown = await _call(session, "brain_show",
+                                {"nodes": ["aurinko.md", "ei-ole"], "annotation": "the star"})
+            assert shown["ok"] is True and shown["shown"] == 1
+            assert shown["dropped"] == ["ei-ole"]
+            assert shown["seq"] == 1  # presentation seq, distinct from the manifest seq
 
             resources = await session.list_resources()
             assert "brain://index" in {str(r.uri) for r in resources.resources}

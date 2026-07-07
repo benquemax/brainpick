@@ -42,6 +42,7 @@ is the reference implementation) and the diffs are reviewed like code.
 | `70-mcp-tools.md` | MCP tool names, schemas, budgets |
 | `80-config.md` | `brainpick.toml` |
 | `90-timeline.md` | `timeline.json` (the Time Machine history dimension) |
+| `95-presentations.md` | `brain_show` — agent-driven UI presentations (live spotlight/focus/annotate) |
 | `schemas/` | JSON Schemas for normative artifacts and messages |
 | `fixtures/` | bundles + golden expected artifacts + delta scenarios |
 | `conformance/cases.yaml` | the language-agnostic case list |

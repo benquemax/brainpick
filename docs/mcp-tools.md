@@ -1,15 +1,15 @@
 ---
 type: Reference
 title: MCP tools
-description: The five MCP tools brainpick exposes — overview, search, read, neighbors, write — designed so a 27B model guesses right on the first try.
-timestamp: 2026-07-02T00:00:00Z
+description: The six MCP tools brainpick exposes — overview, search, read, neighbors, write, show — designed so a 27B model guesses right on the first try.
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # MCP tools
 
 Brainpick serves agents over MCP in three transports: stdio (`brainpick
 mcp`, what the init snippets configure), streamable HTTP at `/mcp`, and
-legacy SSE at `/sse`. Both engines define the same five tools verbatim; the
+legacy SSE at `/sse`. Both engines define the same six tools verbatim; the
 contract lives in the spec, not in either implementation.
 
 The ergonomics are small-model-first: at most one required argument, obvious
@@ -32,6 +32,10 @@ what to call next.
    [knowledge graph tier](knowledge-graph-tier.md), or both.
 5. **`brain_write({doc, content, mode})`** — the one write path, guarded by
    the henxels contract; see [guarded writes](guarded-writes.md).
+6. **`brain_show({nodes?, focus?, mode?, annotation?, clear?})`** — agent-driven
+   [presentations](presentations.md): spotlight a subgraph, fly the camera to
+   it, and caption it live in every open UI. Every argument is optional, and it
+   is ephemeral and advisory — it never writes the brain.
 
 Two resources complement the tools: `brain://index` (the generated index) and
 `brain://doc/{path}`. Progressive disclosure mirrors OKF's own philosophy:

@@ -16,7 +16,7 @@ import { getCloseMatches, SequenceMatcher } from "../core/difflib";
 import { pyStrip } from "../core/pyfmt";
 import { YamlFloat, YamlTimestamp } from "../core/yaml11";
 import { diffGraphs, type GraphDelta } from "../deltas";
-import { graphSearch, loadKg, type KnowledgeGraph } from "../kg";
+import { graphSearch, loadKg, normalizeEntityId, type KnowledgeGraph } from "../kg";
 import { semanticSearch } from "../query/vectors";
 import type { GraphFn, SemanticFn } from "../query/router";
 
@@ -132,6 +132,42 @@ export function resolveDoc<R extends ResolvableRecord>(records: readonly R[], ne
   return ["miss", suggestPaths(records, cleaned)];
 }
 
+/** One presentation token → a graph id, or null when nothing matches (spec/95).
+ * Doc paths resolve via the same forgiving ladder brain_read uses; on a miss, an
+ * entity name resolves to its render-id (its slug) over the T3 export. Docs win
+ * ties — the spec lists doc paths before entity names. */
+export function resolvePresentationId(state: ServeState, token: unknown): string | null {
+  const text = pyStrip(String(token ?? ""));
+  if (text === "") return null;
+  const [outcome, payload] = resolveDoc(state.records, text);
+  if (outcome === "ok") return (payload as DocRecord).path;
+  if (state.kg !== null) {
+    const slug = normalizeEntityId(text);
+    if (slug !== "" && state.kg.entities.has(slug)) return slug;
+    const lowered = text.toLowerCase();
+    for (const eid of [...state.kg.entities.keys()].sort(cmpStr)) {
+      if (pyStrip(String(state.kg.entities.get(eid)!.name)).toLowerCase() === lowered) return eid;
+    }
+  }
+  return null;
+}
+
+/** Resolve presentation node tokens to graph ids (spec/95). Order preserved,
+ * duplicates dropped, unresolved tokens collected (never thrown) so the caller
+ * can report them back to the model. */
+export function resolvePresentationIds(state: ServeState, tokens: readonly unknown[]): [string[], string[]] {
+  const resolved: string[] = [];
+  const dropped: string[] = [];
+  for (const token of tokens) {
+    const text = pyStrip(String(token ?? ""));
+    if (text === "") continue; // blank tokens are noise, not a drop worth reporting
+    const gid = resolvePresentationId(state, text);
+    if (gid === null) dropped.push(text);
+    else if (!resolved.includes(gid)) resolved.push(gid);
+  }
+  return [resolved, dropped];
+}
+
 /** Undirected BFS over the link graph: {id: distance} plus the induced edges. */
 export function bfsNeighborhood(graph: Graph, center: string, depth: number): [Map<string, number>, GraphEdge[]] {
   const adjacency = new Map<string, Set<string>>();
@@ -235,6 +271,11 @@ export class ServeState {
   seq = 0;
   watching: boolean;
   ring: Array<[number, string]> = [];
+  // Presentations (spec/95): a monotonic counter distinct from the manifest seq,
+  // and the LATEST presentation replayed to every new SSE client. Empty until an
+  // agent calls brain_show / POST /api/show.
+  presentationSeq = 0;
+  presentation: Record<string, unknown> | null = null;
   private subscribers = new Set<EventQueue>();
 
   constructor(root: string, config: Config) {
@@ -317,6 +358,54 @@ export class ServeState {
 
   broadcastStatus(status: string, seq: number): void {
     this.fanout(["compile.status", null, dumps({ seq, state: status, tier: "t1" })]);
+  }
+
+  /** Resolve, store, and broadcast a presentation (spec/95). Ephemeral and
+   * advisory: no write, no compile, no delta — its own monotonic seq. An empty
+   * call or clear=true broadcasts the cleared shape. Returns [presentation,
+   * dropped]; the caller shapes {ok, shown, dropped, seq} for its surface.
+   *
+   * The brain.show event carries the PRESENTATION seq (never a manifest seq),
+   * sets no SSE id (so it stays out of the delta ring / Last-Event-ID replay),
+   * and overwrites the held presentation replayed to new clients. */
+  present(
+    nodes?: readonly unknown[] | null,
+    focus?: unknown,
+    mode?: unknown,
+    annotation?: unknown,
+    clear = false,
+  ): [Record<string, unknown>, string[]] {
+    const tokens = (nodes ?? []).map((t) => pyStrip(String(t ?? ""))).filter((t) => t !== "");
+    const focusText = focus === null || focus === undefined ? "" : pyStrip(String(focus));
+    const annotationText = annotation === null || annotation === undefined ? "" : pyStrip(String(annotation));
+    const modeValue = mode === "cosmos" || mode === "brain" ? mode : null; // forgiving enum (spec/95)
+
+    const cleared =
+      Boolean(clear) ||
+      !(tokens.length > 0 || focusText !== "" || annotationText !== "" || modeValue !== null);
+    let resolved: string[];
+    let dropped: string[];
+    let body: Record<string, unknown>;
+    if (cleared) {
+      resolved = [];
+      dropped = [];
+      body = { annotation: null, focus: null, mode: null, nodes: [] };
+    } else {
+      [resolved, dropped] = resolvePresentationIds(this, tokens);
+      let focusId = focusText !== "" ? resolvePresentationId(this, focusText) : null;
+      if (focusId === null) focusId = resolved.length > 0 ? resolved[0]! : null; // default focus (spec/95)
+      body = {
+        annotation: annotationText !== "" ? annotationText : null,
+        focus: focusId,
+        mode: modeValue,
+        nodes: resolved,
+      };
+    }
+    this.presentationSeq += 1;
+    const presentation = { ...body, seq: this.presentationSeq };
+    this.presentation = presentation;
+    this.fanout(["brain.show", null, dumps(presentation)]);
+    return [presentation, dropped];
   }
 
   private emitDelta(delta: GraphDelta): void {

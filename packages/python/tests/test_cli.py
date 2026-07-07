@@ -11,7 +11,7 @@ from brainpick.cli import main
     ["serve", "--help"], ["mcp", "--help"], ["compile", "--help"],
     ["init", "--help"], ["doctor", "--help"],
     ["search", "--help"], ["read", "--help"], ["neighbors", "--help"],
-    ["overview", "--help"], ["integrate", "--help"],
+    ["overview", "--help"], ["show", "--help"], ["integrate", "--help"],
     ["token", "--help"], ["token", "create", "--help"], ["token", "list", "--help"],
     ["token", "revoke", "--help"], ["password", "--help"], ["password", "set", "--help"],
     ["password", "clear", "--help"],
@@ -175,3 +175,30 @@ def test_cli_auth_commands_teach_the_repo_gitignore(tmp_path, capsys):
     assert text == ".brainpick/\n.brainpick-auth.json\n"
     main(["token", "list", "--root", str(bundle)])  # every auth command checks — once is enough
     assert (repo / ".gitignore").read_text(encoding="utf-8") == text
+
+
+# -- brainpick show (spec/95): the CLI posts a presentation to a running server -----
+
+
+def test_cli_show_posts_to_running_server_and_broadcasts(kotiaurinko, capsys):
+    from test_e2e_serve import make_app, next_event, open_live_stream, running_server, wait_for_event
+
+    app = make_app(kotiaurinko)
+    with running_server(app) as base_url:
+        port = int(base_url.rsplit(":", 1)[1])
+        with open_live_stream(base_url) as lines:
+            assert next_event(lines)["event"] == "hello"
+            code = main(["show", "aurinko.md", "--annotate", "hi",
+                         "--port", str(port), "--root", str(kotiaurinko)])
+            assert code == 0
+            show = wait_for_event(lines, "brain.show")
+            assert json.loads(show["data"])["annotation"] == "hi"  # it reached the open UI
+    out = capsys.readouterr().out
+    assert "1 node(s)" in out and "seq 1" in out
+
+
+def test_cli_show_unreachable_server_is_an_instruction_not_a_crash(kotiaurinko, capsys):
+    # nothing serving on this port → a clear instruction and a non-zero code, no traceback
+    code = main(["show", "aurinko.md", "--port", "4"])  # a port nothing listens on
+    assert code == 1
+    assert "brainpick serve" in capsys.readouterr().err

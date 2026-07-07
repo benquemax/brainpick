@@ -692,6 +692,58 @@ export async function writePayload(
   return { ok: false, instruction: payload["instruction"] };
 }
 
+// -- brain_show ----------------------------------------------------------------------
+
+/** The 'what to do next' line for brain_show (spec/95 small-LLM ergonomics). */
+export function showHint(presentation: Record<string, unknown>, dropped: string[]): string {
+  const nodes = presentation["nodes"] as string[];
+  const cleared =
+    nodes.length === 0 &&
+    presentation["focus"] === null &&
+    presentation["mode"] === null &&
+    presentation["annotation"] === null;
+  if (cleared) return "cleared — every open UI dropped its spotlight and caption.";
+  const shown = nodes.length;
+  if (shown === 0 && dropped.length > 0) {
+    return (
+      "nothing resolved — no name matched a doc or entity; " +
+      "check them with brain_search, then brain_show again."
+    );
+  }
+  let base =
+    `showing ${shown} node(s) live in every open UI — ` +
+    "call brain_show again to change it, or with clear:true to dismiss.";
+  if (dropped.length > 0) base += ` (dropped ${dropped.length}: ${dropped.join(", ")})`;
+  return base;
+}
+
+/** brain_show's MCP result (spec/95): resolve + broadcast a presentation, then
+ * report {ok, shown, dropped, seq, hint}. Never writes — not behind [serve]
+ * writes, only the normal auth. Forgiving: unresolved nodes are dropped, listed. */
+export function showPayload(
+  state: ServeState,
+  nodes?: string[] | null,
+  focus?: string | null,
+  mode?: string | null,
+  annotation?: string | null,
+  clear = false,
+): Record<string, unknown> {
+  const [presentation, dropped] = state.present(
+    nodes ?? null,
+    focus ?? null,
+    mode ?? null,
+    annotation ?? null,
+    clear,
+  );
+  return {
+    ok: true,
+    shown: (presentation["nodes"] as string[]).length,
+    dropped,
+    seq: presentation["seq"],
+    hint: showHint(presentation, dropped),
+  };
+}
+
 // -- the McpServer wrapper -------------------------------------------------------------
 
 function textResult(payload: Record<string, unknown>) {
@@ -800,6 +852,31 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
           budgetTokens: budget_tokens ?? null,
           refusal: writeRefusal,
         }),
+      ),
+  );
+
+  server.registerTool(
+    "brain_show",
+    {
+      description:
+        "Spotlight a subgraph live in every open UI: highlight nodes, fly the camera " +
+        "to focus, switch mode (cosmos|brain), and show a caption — how an agent turns " +
+        "'let me explain' into 'let me show you'. Every arg is optional. nodes accept " +
+        "doc paths (like brain_read) and entity names; unknown ones are dropped and " +
+        "listed. focus defaults to the first node. An empty call, or clear=true, " +
+        "dismisses the presentation. This is ephemeral and advisory — it never writes " +
+        "the brain.",
+      inputSchema: {
+        nodes: z.array(z.string()).optional(),
+        focus: z.string().optional(),
+        mode: z.string().optional(),
+        annotation: z.string().optional(),
+        clear: z.boolean().optional(),
+      },
+    },
+    async ({ nodes, focus, mode, annotation, clear }) =>
+      textResult(
+        showPayload(state, nodes ?? null, focus ?? null, mode ?? null, annotation ?? null, clear ?? false),
       ),
   );
 

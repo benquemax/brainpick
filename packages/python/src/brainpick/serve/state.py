@@ -16,7 +16,7 @@ from pathlib import Path
 from brainpick.compile.pipeline import CompileResult, run_compile
 from brainpick.config import Config
 from brainpick.deltas import diff_graphs
-from brainpick.kg import KnowledgeGraph, load_kg
+from brainpick.kg import KnowledgeGraph, load_kg, normalize_entity_id
 
 RING_SIZE = 512  # spec/60 wants >= 256 replayable deltas
 
@@ -99,6 +99,47 @@ def resolve_doc(records: list[dict], needle: str) -> tuple[str, object]:
     return "miss", suggest_paths(records, needle)
 
 
+def resolve_presentation_id(state: "ServeState", token) -> str | None:
+    """One presentation token → a graph id, or None when nothing matches (spec/95).
+
+    Doc paths resolve via the same forgiving ladder brain_read uses; when that
+    misses, an entity name resolves to its render-id (its slug) over the T3 export.
+    Docs win ties — the spec lists doc paths before entity names."""
+    text = str(token or "").strip()
+    if not text:
+        return None
+    outcome, payload = resolve_doc(state.records, text)
+    if outcome == "ok":
+        return payload["path"]
+    if state.kg is not None:
+        slug = normalize_entity_id(text)
+        if slug and slug in state.kg.entities:
+            return slug
+        lowered = text.lower()
+        for eid in sorted(state.kg.entities):  # deterministic across engines
+            if str(state.kg.entities[eid]["name"]).strip().lower() == lowered:
+                return eid
+    return None
+
+
+def resolve_presentation_ids(state: "ServeState", tokens) -> tuple[list[str], list[str]]:
+    """Resolve presentation node tokens to graph ids (spec/95). Order preserved,
+    duplicates dropped, unresolved tokens collected (never raised) so the caller
+    can report them back to the model."""
+    resolved: list[str] = []
+    dropped: list[str] = []
+    for token in tokens:
+        text = str(token or "").strip()
+        if not text:
+            continue  # blank tokens are noise, not a drop worth reporting
+        gid = resolve_presentation_id(state, text)
+        if gid is None:
+            dropped.append(text)
+        elif gid not in resolved:
+            resolved.append(gid)
+    return resolved, dropped
+
+
 def bfs_neighborhood(graph: dict, center: str, depth: int) -> tuple[dict[str, int], list[dict]]:
     """Undirected BFS over the link graph: {id: distance} plus the induced edges."""
     adjacency: dict[str, set[str]] = defaultdict(set)
@@ -140,6 +181,11 @@ class ServeState:
         self.seq = 0
         self.watching = bool(config.serve.watch)
         self.ring: deque[tuple[int, str]] = deque(maxlen=RING_SIZE)
+        # Presentations (spec/95): a monotonic counter distinct from the manifest
+        # seq, and the LATEST presentation replayed to every new SSE client. Empty
+        # until an agent calls brain_show / POST /api/show.
+        self.presentation_seq = 0
+        self.presentation: dict | None = None
         self.loop: asyncio.AbstractEventLoop | None = None
         self._subscribers: set[asyncio.Queue] = set()
 
@@ -202,6 +248,40 @@ class ServeState:
 
     def broadcast_status(self, status: str, seq: int) -> None:
         self._fanout(("compile.status", None, _dumps({"seq": seq, "state": status, "tier": "t1"})))
+
+    def present(self, nodes=None, focus=None, mode=None, annotation=None,
+                clear: bool = False) -> tuple[dict, list[str]]:
+        """Resolve, store, and broadcast a presentation (spec/95). Ephemeral and
+        advisory: no write, no compile, no delta — its own monotonic seq. An empty
+        call or clear=True broadcasts the cleared shape. Returns (presentation,
+        dropped); the caller shapes {ok, shown, dropped, seq} for its surface.
+
+        The brain.show event carries the PRESENTATION seq (never a manifest seq),
+        sets no SSE id (so it stays out of the delta ring / Last-Event-ID replay),
+        and overwrites the held presentation replayed to new clients."""
+        tokens = [str(t).strip() for t in (nodes or []) if str(t).strip()]
+        focus_text = str(focus).strip() if focus is not None else ""
+        annotation_text = str(annotation).strip() if annotation is not None else ""
+        mode_value = mode if mode in ("cosmos", "brain") else None  # forgiving enum (spec/95)
+
+        cleared = bool(clear) or not (tokens or focus_text or annotation_text or mode_value)
+        if cleared:
+            resolved: list[str] = []
+            dropped: list[str] = []
+            body = {"annotation": None, "focus": None, "mode": None, "nodes": []}
+        else:
+            resolved, dropped = resolve_presentation_ids(self, tokens)
+            focus_id = resolve_presentation_id(self, focus_text) if focus_text else None
+            if focus_id is None:  # default focus to the first resolved node (spec/95)
+                focus_id = resolved[0] if resolved else None
+            body = {"annotation": annotation_text or None, "focus": focus_id,
+                    "mode": mode_value, "nodes": resolved}
+
+        self.presentation_seq += 1
+        presentation = {**body, "seq": self.presentation_seq}
+        self.presentation = presentation
+        self._fanout(("brain.show", None, _dumps(presentation)))
+        return presentation, dropped
 
     def _emit_delta(self, delta: dict) -> None:
         data = _dumps(delta)

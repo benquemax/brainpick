@@ -120,6 +120,16 @@ export function presentRead(p: Record<string, unknown>): string {
   return lines.join("\n");
 }
 
+/** The brainpick show result (spec/95): what the live server broadcast. */
+export function presentShow(p: Record<string, unknown>): string {
+  if ("error" in p) return String(p["error"]);
+  const shown = (p["shown"] ?? 0) as number;
+  const lines = [`presented (seq ${String(p["seq"])}): ${shown} node(s) spotlighted in every open UI`];
+  const dropped = (p["dropped"] ?? []) as string[];
+  if (dropped.length > 0) lines.push(`dropped (unresolved): ${dropped.join(", ")}`);
+  return lines.join("\n");
+}
+
 interface NeighborNode {
   path: string;
   title: string;

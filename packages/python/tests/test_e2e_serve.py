@@ -828,3 +828,93 @@ def test_uploaded_asset_is_invisible_to_the_compile(kotiaurinko):
     docs = (kotiaurinko / ".brainpick" / "t1" / "docs.jsonl").read_text(encoding="utf-8")
     assert "assets/" not in docs
     assert "assets/" not in (kotiaurinko / "index.md").read_text(encoding="utf-8")
+
+
+# -- presentations (spec/95): POST /api/show + the brain.show live event ------------
+
+
+def test_post_show_broadcasts_and_returns_the_shape(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        state = app.state.brainpick
+        queue = state.subscribe()
+        resp = client.post("/api/show", json={
+            "nodes": ["aurinko.md", "kuu", "ei-ole"], "annotation": "the star", "mode": "brain",
+        })
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True, "shown": 2, "dropped": ["ei-ole"], "seq": 1}
+        # it went out on the live channel as brain.show — no manifest delta
+        assert [name for name, _, _ in drain(queue)] == ["brain.show"]
+        assert client.get("/api/status").json()["seq"] == 1  # manifest seq untouched
+
+
+def test_post_show_is_not_write_gated(kotiaurinko):
+    app = make_app(kotiaurinko, writes="off")  # writes disabled entirely
+    with TestClient(app) as client:
+        resp = client.post("/api/show", json={"nodes": ["aurinko.md"]})
+        assert resp.status_code == 200  # a presentation is not a write
+        assert resp.json()["shown"] == 1
+
+
+def test_post_show_nonlocal_bind_without_credential_is_401(kotiaurinko):
+    app = make_app(kotiaurinko, host="0.0.0.0")
+    with TestClient(app) as client:
+        assert client.get("/api/health").status_code == 200  # reads stay open
+        resp = client.post("/api/show", json={"nodes": ["aurinko.md"]})
+        assert resp.status_code == 401
+
+
+def test_live_stream_delivers_brain_show(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with running_server(app) as base_url:
+        with open_live_stream(base_url) as lines:
+            assert next_event(lines)["event"] == "hello"
+            resp = httpx.post(f"{base_url}/api/show",
+                              json={"nodes": ["aurinko.md"], "annotation": "hi"})
+            assert resp.json() == {"ok": True, "shown": 1, "dropped": [], "seq": 1}
+            show = wait_for_event(lines, "brain.show")
+            assert "id" not in show  # no SSE id — brain.show stays out of the ring buffer
+            assert json.loads(show["data"]) == {
+                "annotation": "hi", "focus": "aurinko.md", "mode": None,
+                "nodes": ["aurinko.md"], "seq": 1,
+            }
+
+
+def test_brain_show_excluded_from_ring_and_replayed_to_joiners(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with running_server(app) as base_url:
+        state = app.state.brainpick
+        httpx.post(f"{base_url}/api/show", json={"nodes": ["aurinko.md"], "annotation": "hi"})
+        (kotiaurinko / "uusi.md").write_text(NEW_DOC, encoding="utf-8")
+        recompile_and_broadcast(state)  # a real graph delta → seq 2 in the ring
+
+        # a NEW client is replayed the latest presentation once, after the snapshot
+        with open_live_stream(base_url) as lines:
+            assert next_event(lines)["event"] == "hello"
+            replayed = wait_for_event(lines, "brain.show")
+            assert json.loads(replayed["data"])["annotation"] == "hi"
+
+        # a Last-Event-ID reconnect replays graph deltas from the ring, THEN the
+        # latest presentation — brain.show never rode the ring itself
+        with open_live_stream(base_url, headers={"Last-Event-ID": "1"}) as lines:
+            assert next_event(lines)["event"] == "hello"
+            delta = next_event(lines)
+            assert delta["event"] == "graph.delta"
+            assert delta["id"] == "2"
+            pres = next_event(lines)
+            assert pres["event"] == "brain.show"
+            assert "id" not in pres
+            assert json.loads(pres["data"])["annotation"] == "hi"
+
+
+def test_cleared_presentation_replays_as_the_empty_shape(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with running_server(app) as base_url:
+        httpx.post(f"{base_url}/api/show", json={"nodes": ["aurinko.md"]})
+        httpx.post(f"{base_url}/api/show", json={"clear": True})
+        with open_live_stream(base_url) as lines:
+            assert next_event(lines)["event"] == "hello"
+            replayed = wait_for_event(lines, "brain.show")
+            assert json.loads(replayed["data"]) == {
+                "annotation": None, "focus": None, "mode": None, "nodes": [], "seq": 2,
+            }

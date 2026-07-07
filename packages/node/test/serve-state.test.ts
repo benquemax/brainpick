@@ -161,3 +161,74 @@ test("resolveDoc ambiguous stem", () => {
     new Set(["koru/helmi.md", "meri/helmi.md"]),
   );
 });
+
+// -- presentations (spec/95): brain_show resolves + broadcasts an ephemeral view ----
+
+test("present resolves docs, defaults focus, and broadcasts brain.show", async () => {
+  const state = await makeState(copyBundle());
+  const queue = state.subscribe();
+  const [presentation, dropped] = state.present(["aurinko.md", "kuu"], null, null, "the star");
+  expect(dropped).toEqual([]);
+  expect(presentation).toEqual({
+    annotation: "the star",
+    focus: "aurinko.md", // defaults to the first resolved node
+    mode: null,
+    nodes: ["aurinko.md", "kuu.md"], // "kuu" fuzzy-resolves like brain_read
+    seq: 1,
+  });
+  // broadcast as brain.show carrying NO SSE id — so it never lands in the delta
+  // ring / Last-Event-ID replay (spec/60)
+  const events = queue.drain();
+  expect(events.map((e) => e[0])).toEqual(["brain.show"]);
+  const [, eventId, data] = events[0]!;
+  expect(eventId).toBeNull();
+  expect(JSON.parse(data)).toEqual(presentation);
+  expect(state.ring).toEqual([]); // brain.show is excluded from the delta ring
+});
+
+test("present seq is monotonic and separate from the manifest seq", async () => {
+  const state = await makeState(copyBundle());
+  expect(state.seq).toBe(1);
+  const [first] = state.present(["aurinko.md"]);
+  const [second] = state.present(["maa.md"], null, "brain");
+  expect([first["seq"], second["seq"]]).toEqual([1, 2]);
+  expect(second["mode"]).toBe("brain");
+  expect(state.seq).toBe(1); // no compile, no delta — the manifest seq is untouched
+});
+
+test("present drops unresolved node tokens and lists them", async () => {
+  const state = await makeState(copyBundle());
+  const [presentation, dropped] = state.present(["aurinko.md", "olematon-kappale"]);
+  expect(presentation["nodes"]).toEqual(["aurinko.md"]);
+  expect(dropped).toEqual(["olematon-kappale"]);
+  expect(presentation["focus"]).toBe("aurinko.md");
+});
+
+test("present resolves entity names over the T3 export", async () => {
+  const root = copyBundle();
+  const state = await makeState(root);
+  stageT3Export(root);
+  state.reloadArtifacts();
+  const [presentation, dropped] = state.present(["Vuorovesi", "kuu.md"], "maa");
+  expect(dropped).toEqual([]);
+  expect(presentation["nodes"]).toEqual(["vuorovesi", "kuu.md"]); // entity slug + doc path
+  expect(presentation["focus"]).toBe("maa.md"); // explicit focus resolves too
+});
+
+test("present clear and an empty call broadcast the cleared shape", async () => {
+  const state = await makeState(copyBundle());
+  state.present(["aurinko.md"]); // seq 1
+  const [cleared, dropped] = state.present(null, null, null, null, true); // seq 2 — explicit clear
+  expect(dropped).toEqual([]);
+  expect(cleared).toEqual({ annotation: null, focus: null, mode: null, nodes: [], seq: 2 });
+  const [empty] = state.present(); // seq 3 — an otherwise-empty call also clears
+  expect(empty).toEqual({ annotation: null, focus: null, mode: null, nodes: [], seq: 3 });
+  expect(state.presentation).toEqual(empty); // the held presentation is the latest
+});
+
+test("present deduplicates ids and ignores blank tokens", async () => {
+  const state = await makeState(copyBundle());
+  const [presentation, dropped] = state.present(["aurinko.md", "aurinko", "", "  "]);
+  expect(presentation["nodes"]).toEqual(["aurinko.md"]); // "aurinko" stems to the same id
+  expect(dropped).toEqual([]);
+});

@@ -50,6 +50,13 @@ export function liveHandler(state: ServeState) {
       }
     }
 
+    // Replay the latest presentation once (spec/95), after the graph snapshot, so
+    // a UI joining mid-presentation sees it. No SSE id — it is out of the delta
+    // ring, and a cleared presentation replays as the empty shape.
+    if (state.presentation !== null) {
+      res.write(sseFrame("brain.show", null, dumps(state.presentation)));
+    }
+
     void (async () => {
       while (open) {
         const event = await queue.next(PING_INTERVAL_MS);

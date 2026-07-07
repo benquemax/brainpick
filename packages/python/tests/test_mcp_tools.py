@@ -438,3 +438,52 @@ def test_write_henxels_missing_warns(kotiaurinko, monkeypatch, tmp_path):
     assert result["ok"] is True
     assert "warning" in result
     assert (kotiaurinko / "uusi-kivi.md").is_file()
+
+
+# -- brain_show (spec/95): the 6th tool — ephemeral presentations, not write-gated --
+
+
+def test_show_payload_reports_shown_dropped_seq_and_hint(kotiaurinko):
+    from brainpick.mcp_server import show_payload
+
+    state = make_state(kotiaurinko)
+    queue = state.subscribe()
+    result = show_payload(state, nodes=["aurinko.md", "ei-ole"], annotation="hi")
+    assert result["ok"] is True
+    assert result["shown"] == 1
+    assert result["dropped"] == ["ei-ole"]
+    assert result["seq"] == 1
+    # the exact hint — pinned so the Node twin stays byte-identical (cross-engine parity)
+    assert result["hint"] == (
+        "showing 1 node(s) live in every open UI — "
+        "call brain_show again to change it, or with clear:true to dismiss. (dropped 1: ei-ole)"
+    )
+    # it broadcasts (the open UIs light up), and never writes / compiles
+    assert [name for name, _, _ in drain(queue)] == ["brain.show"]
+    assert state.seq == 1
+
+
+def test_show_payload_clear_has_a_dedicated_hint(kotiaurinko):
+    from brainpick.mcp_server import show_payload
+
+    state = make_state(kotiaurinko)
+    result = show_payload(state, clear=True)
+    assert result == {
+        "ok": True, "shown": 0, "dropped": [], "seq": 1,
+        "hint": "cleared — every open UI dropped its spotlight and caption.",
+    }
+
+
+def test_brain_show_registered_as_sixth_tool_even_when_writes_refused(kotiaurinko):
+    import asyncio
+
+    from brainpick.mcp_server import create_mcp_server
+
+    state = make_state(kotiaurinko)
+    # write_refusal is set, yet brain_show is present — a presentation is not a write
+    server = create_mcp_server(state, write_refusal="writes off")
+    tools = asyncio.run(server.list_tools())
+    assert {t.name for t in tools} == {
+        "brain_overview", "brain_search", "brain_read",
+        "brain_neighbors", "brain_write", "brain_show",
+    }

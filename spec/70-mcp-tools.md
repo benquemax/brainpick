@@ -1,6 +1,6 @@
 # MCP tools
 
-Both engines expose the same five tools, verbatim, over stdio
+Both engines expose the same six tools, verbatim, over stdio
 (`brainpick mcp`), streamable HTTP (`/mcp`), and legacy SSE (`/sse`).
 Small-model ergonomics are normative: at most one required argument
 (`brain_write` is the sanctioned exception — `doc` and `content`),
@@ -79,6 +79,21 @@ serialized server-side either way).
 
 Servers expose `brain_write` only when config `[serve] writes = "guarded"`
 (default) and, on non-localhost binds, only with a valid bearer token.
+
+## brain_show({nodes?, focus?, mode?, annotation?, clear?})
+
+Agent-driven presentations — spotlight a subgraph, fly the camera to `focus`,
+switch `mode`, and caption it, pushed LIVE to every open UI (the agent side
+reaching across to the human side). Every argument is optional; `nodes` accept
+doc paths (fuzzy/kebab-resolved like `brain_read`) and entity names, unresolved
+entries are dropped and listed, `focus` defaults to the first resolved node, and
+an empty call or `clear: true` clears the current presentation. → `{"ok": true,
+"shown": <resolved count>, "dropped": [<unresolved>], "seq", "hint"}` where `seq`
+is a monotonic PRESENTATION counter distinct from the manifest seq. Unlike
+`brain_write` it is ephemeral and advisory — it never writes the brain, so it is
+NOT behind `[serve] writes`, only the normal auth. The presentation payload
+shape, the `brain.show` live event, and `POST /api/show` are the contract of
+`95-presentations.md`.
 
 ## Resources
 

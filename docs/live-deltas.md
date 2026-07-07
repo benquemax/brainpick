@@ -2,7 +2,7 @@
 type: Concept
 title: Live deltas
 description: The SSE protocol that streams graph changes to every open UI — the brain updates in real time, never by page refresh.
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # Live deltas
@@ -31,5 +31,6 @@ The consumer that makes this worth it is the
 [holographic brain](holographic-brain.md): joins animate in at their
 neighbor's position, leaves fade, and recent activity renders as firing
 pulses along edges — an agent writing into the brain is literally visible as
-the brain firing. Agent-initiated presentations (an agent highlighting the
-entries it cites) ride the same channel as a planned event type.
+the brain firing. Agent-initiated [presentations](presentations.md) — an agent
+highlighting the entries it cites and captioning them — ride the same channel
+as `brain.show` events.

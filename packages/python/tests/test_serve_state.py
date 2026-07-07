@@ -152,3 +152,74 @@ def test_resolve_doc_ambiguous_stem():
     status, candidates = resolve_doc(records, "helmi")
     assert status == "ambiguous"
     assert {c["path"] for c in candidates} == {"koru/helmi.md", "meri/helmi.md"}
+
+
+# -- presentations (spec/95): brain_show resolves + broadcasts an ephemeral view ----
+
+
+def test_present_resolves_docs_defaults_focus_and_broadcasts(kotiaurinko):
+    state = make_state(kotiaurinko)
+    queue = state.subscribe()
+    presentation, dropped = state.present(nodes=["aurinko.md", "kuu"], annotation="the star")
+    assert dropped == []
+    assert presentation == {
+        "annotation": "the star",
+        "focus": "aurinko.md",              # defaults to the first resolved node
+        "mode": None,
+        "nodes": ["aurinko.md", "kuu.md"],  # "kuu" fuzzy-resolves like brain_read
+        "seq": 1,
+    }
+    # broadcast as brain.show, and carries NO SSE id (so it never lands in the
+    # delta ring / Last-Event-ID replay, spec/60)
+    events = drain(queue)
+    assert [name for name, _, _ in events] == ["brain.show"]
+    name, event_id, data = events[0]
+    assert event_id is None
+    assert json.loads(data) == presentation
+    assert list(state.ring) == []  # brain.show is excluded from the delta ring
+
+
+def test_present_seq_is_monotonic_and_separate_from_manifest_seq(kotiaurinko):
+    state = make_state(kotiaurinko)
+    assert state.seq == 1
+    first, _ = state.present(nodes=["aurinko.md"])
+    second, _ = state.present(nodes=["maa.md"], mode="brain")
+    assert (first["seq"], second["seq"]) == (1, 2)
+    assert second["mode"] == "brain"
+    assert state.seq == 1  # no compile, no delta — the manifest seq is untouched
+
+
+def test_present_drops_unresolved_and_lists_them(kotiaurinko):
+    state = make_state(kotiaurinko)
+    presentation, dropped = state.present(nodes=["aurinko.md", "olematon-kappale"])
+    assert presentation["nodes"] == ["aurinko.md"]
+    assert dropped == ["olematon-kappale"]
+    assert presentation["focus"] == "aurinko.md"
+
+
+def test_present_resolves_entity_names_over_t3(kotiaurinko):
+    state = make_state(kotiaurinko)
+    stage_t3_export(kotiaurinko)
+    state.reload_artifacts()
+    presentation, dropped = state.present(nodes=["Vuorovesi", "kuu.md"], focus="maa")
+    assert dropped == []
+    assert presentation["nodes"] == ["vuorovesi", "kuu.md"]  # entity slug + doc path
+    assert presentation["focus"] == "maa.md"                 # explicit focus resolves too
+
+
+def test_present_clear_and_empty_call_broadcast_the_cleared_shape(kotiaurinko):
+    state = make_state(kotiaurinko)
+    state.present(nodes=["aurinko.md"])            # seq 1
+    cleared, dropped = state.present(clear=True)   # seq 2 — explicit clear
+    assert dropped == []
+    assert cleared == {"annotation": None, "focus": None, "mode": None, "nodes": [], "seq": 2}
+    empty, _ = state.present()                     # seq 3 — an otherwise-empty call also clears
+    assert empty == {"annotation": None, "focus": None, "mode": None, "nodes": [], "seq": 3}
+    assert state.presentation == empty             # the held presentation is the latest
+
+
+def test_present_deduplicates_and_ignores_blank_tokens(kotiaurinko):
+    state = make_state(kotiaurinko)
+    presentation, dropped = state.present(nodes=["aurinko.md", "aurinko", "", "  "])
+    assert presentation["nodes"] == ["aurinko.md"]  # "aurinko" stems to the same id, blanks ignored
+    assert dropped == []

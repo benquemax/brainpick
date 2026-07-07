@@ -57,6 +57,19 @@ function writesGate(state: ServeState, auth: AuthProvider): GateFailure | null {
   return null;
 }
 
+/** spec/95: POST /api/show is gated by the normal auth ONLY — a bearer on a
+ * non-localhost bind — and is independent of [serve] writes (a presentation never
+ * touches the brain). When credentials exist the auth middleware has already
+ * gated; this closes the no-auth-file non-localhost case, matching brain_write's
+ * bind rule without its writes check. */
+function showGate(state: ServeState, auth: AuthProvider): GateFailure | null {
+  const config = state.config;
+  if (!LOCAL_HOSTS.has(config.serve.host) && config.serve.token === "" && !authActive(auth.current())) {
+    return { status: 401, body: { error: AUTH_REQUIRED_ERROR }, headers: { "WWW-Authenticate": "Bearer" } };
+  }
+  return null;
+}
+
 function fileExists(path: string): boolean {
   try {
     return statSync(path).isFile();
@@ -374,6 +387,37 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
       payload = { commits: [], docs: {}, span: null };
     }
     res.set("ETag", etag).json(payload);
+  });
+
+  // POST /api/show (spec/95): resolve the presentation body and broadcast a
+  // brain.show event to every open UI, returning {ok, shown, dropped, seq}. The
+  // same resolve + present core brain_show uses; NOT behind [serve] writes.
+  router.post("/api/show", forgivingJson, (req: Request, res: Response) => {
+    const gate = showGate(state, auth);
+    if (gate !== null) {
+      res.status(gate.status).set(gate.headers ?? {}).json(gate.body);
+      return;
+    }
+    const body: unknown = req.body;
+    const rec =
+      typeof body === "object" && body !== null && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : {};
+    const rawNodes = rec["nodes"];
+    const nodes = Array.isArray(rawNodes) ? rawNodes : typeof rawNodes === "string" ? [rawNodes] : null;
+    const [presentation, dropped] = state.present(
+      nodes,
+      rec["focus"] ?? null,
+      rec["mode"] ?? null,
+      rec["annotation"] ?? null,
+      Boolean(rec["clear"]),
+    );
+    res.json({
+      ok: true,
+      shown: (presentation["nodes"] as string[]).length,
+      dropped,
+      seq: presentation["seq"],
+    });
   });
 
   router.get("/api/live", liveHandler(state));

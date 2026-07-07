@@ -1,5 +1,9 @@
 # Update log
 
+## 2026-07-08
+
+- Added: brain_show — an agent can spotlight a subgraph and caption it live in every open UI (MCP tool + POST /api/show + brain.show event).
+
 ## 2026-07-07
 
 - Polished: labels and search-flight now work inside the hologram, entity panels show their source docs, and the operator's [ui] node cap reaches the client.

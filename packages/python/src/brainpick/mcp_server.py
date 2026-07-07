@@ -506,6 +506,44 @@ def write_payload(state: ServeState, doc: str, content: str, mode: str = "create
     return {"ok": False, "instruction": payload["instruction"]}
 
 
+# -- brain_show ----------------------------------------------------------------------
+
+
+def show_hint(presentation: dict, dropped: list[str]) -> str:
+    """The 'what to do next' line for brain_show (spec/95 small-LLM ergonomics)."""
+    cleared = (not presentation["nodes"] and presentation["focus"] is None
+               and presentation["mode"] is None and presentation["annotation"] is None)
+    if cleared:
+        return "cleared — every open UI dropped its spotlight and caption."
+    shown = len(presentation["nodes"])
+    if shown == 0 and dropped:
+        return ("nothing resolved — no name matched a doc or entity; "
+                "check them with brain_search, then brain_show again.")
+    base = (f"showing {shown} node(s) live in every open UI — "
+            "call brain_show again to change it, or with clear:true to dismiss.")
+    if dropped:
+        base += f" (dropped {len(dropped)}: {', '.join(dropped)})"
+    return base
+
+
+def show_payload(state: ServeState, nodes: list[str] | None = None, focus: str | None = None,
+                 mode: str | None = None, annotation: str | None = None,
+                 clear: bool = False) -> dict:
+    """brain_show's MCP result (spec/95): resolve + broadcast a presentation, then
+    report {ok, shown, dropped, seq, hint}. Never writes — not behind [serve]
+    writes, only the normal auth. Forgiving: unresolved nodes are dropped, listed."""
+    presentation, dropped = state.present(
+        nodes=nodes, focus=focus, mode=mode, annotation=annotation, clear=clear,
+    )
+    return {
+        "ok": True,
+        "shown": len(presentation["nodes"]),
+        "dropped": dropped,
+        "seq": presentation["seq"],
+        "hint": show_hint(presentation, dropped),
+    }
+
+
 # -- the FastMCP wrapper -------------------------------------------------------------
 
 
@@ -567,6 +605,20 @@ def create_mcp_server(state: ServeState, write_refusal: str | None = None):
         contract violation nothing changes and instruction says exactly what to fix."""
         return write_payload(state, doc, content, mode, base_sha=base_sha,
                              budget_tokens=budget_tokens, refusal=write_refusal)
+
+    @server.tool()
+    def brain_show(nodes: list[str] | None = None, focus: str | None = None,
+                   mode: str | None = None, annotation: str | None = None,
+                   clear: bool = False) -> dict:
+        """Spotlight a subgraph live in every open UI: highlight nodes, fly the camera
+        to focus, switch mode (cosmos|brain), and show a caption — how an agent turns
+        'let me explain' into 'let me show you'. Every arg is optional. nodes accept
+        doc paths (like brain_read) and entity names; unknown ones are dropped and
+        listed. focus defaults to the first node. An empty call, or clear=true,
+        dismisses the presentation. This is ephemeral and advisory — it never writes
+        the brain."""
+        return show_payload(state, nodes=nodes, focus=focus, mode=mode,
+                            annotation=annotation, clear=clear)
 
     @server.resource("brain://index")
     def brain_index() -> str:

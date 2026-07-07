@@ -990,3 +990,155 @@ test("an uploaded asset is invisible to the compile", async () => {
   expect(readFileSync(join(root, ".brainpick", "t1", "docs.jsonl"), "utf8")).not.toContain("assets/");
   expect(readFileSync(join(root, "index.md"), "utf8")).not.toContain("assets/");
 });
+
+// -- presentations (spec/95): POST /api/show + the brain.show live event ------------
+
+async function postJson(url: string, body: unknown): Promise<{ status: number; body: any }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text === "" ? null : JSON.parse(text) };
+}
+
+test("POST /api/show broadcasts and returns the shape", async () => {
+  const { base, handles } = await serve(await makeApp(copyBundle()));
+  const queue = handles.state.subscribe();
+  const { status, body } = await postJson(`${base}/api/show`, {
+    nodes: ["aurinko.md", "kuu", "ei-ole"],
+    annotation: "the star",
+    mode: "brain",
+  });
+  expect(status).toBe(200);
+  expect(body).toEqual({ ok: true, shown: 2, dropped: ["ei-ole"], seq: 1 });
+  // it went out on the live channel as brain.show — no manifest delta
+  expect(queue.drain().map(([name]) => name)).toEqual(["brain.show"]);
+  expect((await getJson(`${base}/api/status`)).body.seq).toBe(1); // manifest seq untouched
+});
+
+test("POST /api/show is not write-gated", async () => {
+  const { base } = await serve(await makeApp(copyBundle(), { writes: "off" }));
+  const { status, body } = await postJson(`${base}/api/show`, { nodes: ["aurinko.md"] });
+  expect(status).toBe(200); // a presentation is not a write
+  expect(body.shown).toBe(1);
+});
+
+test("POST /api/show on a non-localhost bind without a credential is 401", async () => {
+  const { base } = await serve(await makeApp(copyBundle(), { host: "0.0.0.0" }));
+  expect((await getJson(`${base}/api/health`)).status).toBe(200); // reads stay open
+  const { status } = await postJson(`${base}/api/show`, { nodes: ["aurinko.md"] });
+  expect(status).toBe(401);
+});
+
+test("live stream delivers brain.show", { timeout: 30_000 }, async () => {
+  const running = await serve(await makeApp(copyBundle()));
+  const { reader, close } = await openLive(running.base);
+  try {
+    expect((await reader.nextEvent())["event"]).toBe("hello");
+    const { body } = await postJson(`${running.base}/api/show`, {
+      nodes: ["aurinko.md"],
+      annotation: "hi",
+    });
+    expect(body).toEqual({ ok: true, shown: 1, dropped: [], seq: 1 });
+    const show = await reader.waitForEvent("brain.show");
+    expect("id" in show).toBe(false); // no SSE id — brain.show stays out of the ring buffer
+    expect(JSON.parse(show["data"]!)).toEqual({
+      annotation: "hi",
+      focus: "aurinko.md",
+      mode: null,
+      nodes: ["aurinko.md"],
+      seq: 1,
+    });
+  } finally {
+    close();
+  }
+});
+
+test("brain.show is excluded from the ring and replayed to joiners", { timeout: 30_000 }, async () => {
+  const root = copyBundle();
+  const running = await serve(await makeApp(root));
+  const state = running.handles.state;
+  await postJson(`${running.base}/api/show`, { nodes: ["aurinko.md"], annotation: "hi" });
+  writeFileSync(join(root, "uusi.md"), NEW_DOC, "utf8");
+  await recompileAndBroadcast(state); // a real graph delta → seq 2 in the ring
+
+  // a NEW client is replayed the latest presentation once, after the snapshot
+  {
+    const { reader, close } = await openLive(running.base);
+    try {
+      expect((await reader.nextEvent())["event"]).toBe("hello");
+      const replayed = await reader.waitForEvent("brain.show");
+      expect(JSON.parse(replayed["data"]!).annotation).toBe("hi");
+    } finally {
+      close();
+    }
+  }
+
+  // a Last-Event-ID reconnect replays graph deltas from the ring, THEN the latest
+  // presentation — brain.show never rode the ring itself
+  {
+    const { reader, close } = await openLive(running.base, { "Last-Event-ID": "1" });
+    try {
+      expect((await reader.nextEvent())["event"]).toBe("hello");
+      const delta = await reader.nextEvent();
+      expect(delta["event"]).toBe("graph.delta");
+      expect(delta["id"]).toBe("2");
+      const pres = await reader.nextEvent();
+      expect(pres["event"]).toBe("brain.show");
+      expect("id" in pres).toBe(false);
+      expect(JSON.parse(pres["data"]!).annotation).toBe("hi");
+    } finally {
+      close();
+    }
+  }
+});
+
+test("a cleared presentation replays as the empty shape", { timeout: 30_000 }, async () => {
+  const running = await serve(await makeApp(copyBundle()));
+  await postJson(`${running.base}/api/show`, { nodes: ["aurinko.md"] });
+  await postJson(`${running.base}/api/show`, { clear: true });
+  const { reader, close } = await openLive(running.base);
+  try {
+    expect((await reader.nextEvent())["event"]).toBe("hello");
+    const replayed = await reader.waitForEvent("brain.show");
+    expect(JSON.parse(replayed["data"]!)).toEqual({
+      annotation: null,
+      focus: null,
+      mode: null,
+      nodes: [],
+      seq: 2,
+    });
+  } finally {
+    close();
+  }
+});
+
+// -- brainpick show (spec/95): the CLI posts a presentation to a running server -----
+
+test("brainpick show posts to a running server and broadcasts", { timeout: 30_000 }, async () => {
+  const { showAction } = await import("../src/cli");
+  const root = copyBundle();
+  const running = await serve(await makeApp(root));
+  const port = Number(new URL(running.base).port);
+  const { reader, close } = await openLive(running.base);
+  try {
+    expect((await reader.nextEvent())["event"]).toBe("hello");
+    const result = await showAction(root, { nodes: ["aurinko.md"], annotate: "hi", port });
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("1 node(s)");
+    expect(result.out).toContain("seq 1");
+    const show = await reader.waitForEvent("brain.show");
+    expect(JSON.parse(show["data"]!).annotation).toBe("hi"); // it reached the open UI
+  } finally {
+    close();
+  }
+});
+
+test("brainpick show against an unreachable server is an instruction, not a crash", async () => {
+  const { showAction } = await import("../src/cli");
+  const result = await showAction(copyBundle(), { nodes: ["aurinko.md"], port: 4 }); // nothing on :4
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("brainpick serve");
+});
