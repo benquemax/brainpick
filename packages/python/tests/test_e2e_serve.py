@@ -5,8 +5,12 @@ real uvicorn server on an ephemeral port instead: the httpx-1.x TestClient trans
 only hands back a response once the ASGI app completes, which an endless event
 stream never does — and a live socket is the honest test of a serve layer anyway.
 """
+import base64
 import contextlib
 import json
+import os
+import re
+import subprocess
 import threading
 import time
 
@@ -16,6 +20,7 @@ from starlette.testclient import TestClient
 
 from brainpick.compile.pipeline import run_compile
 from brainpick.config import load_config
+from brainpick.core.canonical import sha256_hex
 from brainpick.serve.app import build_app
 from brainpick.serve.live import sse_frame
 from brainpick.serve.watcher import recompile_and_broadcast
@@ -562,3 +567,247 @@ def test_watcher_end_to_end(kotiaurinko, monkeypatch):
             payload = json.loads(second["data"])
             assert payload["seq"] == 3
             assert "uusi.md" in payload["cause"]["paths"]
+
+
+# -- guarded REST writes (spec/50): PUT /api/docs is brain_write's HTTP face --------
+# The SAME guarded core backs both; these tests are the REST siblings of the
+# brain_write conflict/rollback tests in test_mcp_tools.py.
+
+KUU_REWRITE = (
+    "---\ntype: Concept\ntags: [kuu]\ntimestamp: 2026-06-15T08:30:00Z\n---\n\n"
+    "# Kuu\n\nThe moon pulls the tides of [Maa](maa.md), rewritten.\n"
+)
+
+# a 1x1 transparent PNG — a real image the asset endpoint accepts
+PNG_1PX = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+)
+
+
+def drain(queue):
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+    return events
+
+
+def test_put_docs_writes_bumps_timestamp_returns_sha_and_fires_delta(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        state = app.state.brainpick
+        queue = state.subscribe()
+        assert "tides" in client.get("/api/docs/kuu.md").json()["text"]
+        new = (
+            "---\ntype: Concept\ntitle: Kuu\ndescription: The moon.\n---\n\n"
+            "# Kuu\n\nThe moon, edited live in the browser [Maa](maa.md).\n"
+        )
+        resp = client.put("/api/docs/kuu.md", json={"content": new, "mode": "replace"})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body == {"ok": True, "path": "kuu.md", "seq": 2, "sha": body["sha"]}
+        assert re.fullmatch(r"[0-9a-f]{64}", body["sha"])
+        # the returned sha is the file's new content hash — the client's next base_sha
+        assert body["sha"] == sha256_hex((kotiaurinko / "kuu.md").read_bytes())
+        after = client.get("/api/docs/kuu.md").json()
+        assert "edited live in the browser" in after["text"]
+        disk = (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+        assert re.search(r"^timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", disk, re.MULTILINE)
+        assert "graph.delta" in [name for name, _, _ in drain(queue)]  # open UIs updated
+
+
+def test_put_docs_henxels_violation_is_422_verbatim_and_rolls_back(kotiaurinko, monkeypatch, tmp_path):
+    (kotiaurinko / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
+    fake = tmp_path / "bin" / "henxels"
+    fake.parent.mkdir()
+    fake.write_text("#!/bin/sh\necho 'one concept per page'\nexit 1\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        before = (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+        resp = client.put("/api/docs/kuu.md", json={"content": "# Kuu\n\nClobbered.\n", "mode": "replace"})
+        assert resp.status_code == 422  # well-formed request, contract rejected it
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["instruction"].strip() == "one concept per page"  # henxels output verbatim
+        assert (kotiaurinko / "kuu.md").read_text(encoding="utf-8") == before  # rolled back
+
+
+def test_put_docs_stale_base_sha_is_409_conflict_without_writing(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        before = (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+        resp = client.put(
+            "/api/docs/kuu.md",
+            json={"content": KUU_REWRITE, "mode": "replace", "base_sha": "0" * 64},
+        )
+        assert resp.status_code == 409
+        body = resp.json()
+        assert body["ok"] is False
+        assert body["conflict"] is True
+        assert body["current_sha"] == sha256_hex(before.encode("utf-8"))
+        assert body["theirs"] == before
+        assert "re-read" in body["instruction"]
+        assert "merged" not in body  # no git base, no model → the manual path
+        assert (kotiaurinko / "kuu.md").read_text(encoding="utf-8") == before  # MUST NOT write
+
+
+def test_put_docs_conflict_offers_three_way_merged_from_git_base(kotiaurinko):
+    def git(*args):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+            cwd=kotiaurinko, check=True, capture_output=True,
+        )
+
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    base_bytes = (kotiaurinko / "kuu.md").read_bytes()
+    base_text = base_bytes.decode("utf-8")
+    theirs = base_text.replace(
+        "The moon pulls the tides of [Maa](maa.md).",
+        "The moon pulls the spring tides of [Maa](maa.md).",
+    )
+    (kotiaurinko / "kuu.md").write_text(theirs, encoding="utf-8")
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        yours = base_text + "\n## Vaiheet\n\nNew moon, then full moon.\n"
+        resp = client.put(
+            "/api/docs/kuu.md",
+            json={"content": yours, "mode": "replace", "base_sha": sha256_hex(base_bytes)},
+        )
+        assert resp.status_code == 409
+        body = resp.json()
+        assert body["conflict"] is True
+        assert body["merged"]["strategy"] == "three-way"  # git HEAD is the verified base
+        assert "spring tides" in body["merged"]["content"]  # their edit survives
+        assert "## Vaiheet" in body["merged"]["content"]    # your edit survives
+        assert "## Vaiheet" not in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")  # proposal only
+
+
+def test_put_docs_create_mode_refuses_clobber(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        resp = client.put("/api/docs/kuu.md", json={"content": "# Kaappaus\n", "mode": "create"})
+        assert resp.status_code == 422
+        assert resp.json()["ok"] is False
+        assert "replace" in resp.json()["instruction"]
+        assert "tides" in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
+
+
+def test_put_docs_bad_path_is_400(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        # a non-.md target (spec/50)
+        non_md = client.put("/api/docs/notes.txt", json={"content": "x"})
+        assert non_md.status_code == 400
+        # a path the guarded resolver rejects (backslash / traversal family) surfaces as 400
+        traversal = client.put("/api/docs/foo\\bar.md", json={"content": "x"})
+        assert traversal.status_code == 400
+        non_kebab = client.put("/api/docs/Kuun Vaiheet.md", json={"content": "x"})
+        assert non_kebab.status_code == 400
+        assert not (kotiaurinko / "Kuun Vaiheet.md").exists()
+
+
+def test_put_docs_writes_off_is_403(kotiaurinko):
+    app = make_app(kotiaurinko, writes="off")
+    with TestClient(app) as client:
+        resp = client.put("/api/docs/uusi.md", json={"content": "# X\n"})
+        assert resp.status_code == 403
+        assert "writes are disabled" in resp.json()["error"]
+        assert not (kotiaurinko / "uusi.md").exists()
+
+
+def test_put_docs_nonlocal_bind_without_token_is_401(kotiaurinko):
+    app = make_app(kotiaurinko, host="0.0.0.0")
+    with TestClient(app) as client:
+        assert client.get("/api/health").status_code == 200  # reads stay open
+        resp = client.put("/api/docs/uusi.md", json={"content": "# X\n"})
+        assert resp.status_code == 401
+        assert not (kotiaurinko / "uusi.md").exists()
+
+
+# -- image assets (spec/50): POST /api/assets ---------------------------------------
+
+
+def test_post_assets_stores_image_and_returns_201(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        resp = client.post("/api/assets", files={"file": ("Diagram One.png", PNG_1PX, "image/png")})
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body == {"path": "assets/diagram-one.png", "sha": sha256_hex(PNG_1PX), "bytes": len(PNG_1PX)}
+        assert (kotiaurinko / "assets" / "diagram-one.png").read_bytes() == PNG_1PX
+
+
+def test_post_assets_dedupes_identical_bytes(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        first = client.post("/api/assets", files={"file": ("logo.png", PNG_1PX, "image/png")}).json()
+        second = client.post("/api/assets", files={"file": ("logo.png", PNG_1PX, "image/png")}).json()
+        assert first["path"] == second["path"] == "assets/logo.png"
+        assert [p.name for p in (kotiaurinko / "assets").iterdir()] == ["logo.png"]
+
+
+def test_post_assets_hash_suffixes_different_bytes_same_name(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        first = client.post("/api/assets", files={"file": ("logo.png", PNG_1PX, "image/png")}).json()
+        other = PNG_1PX + b"\x00extra"
+        second = client.post("/api/assets", files={"file": ("logo.png", other, "image/png")}).json()
+        assert first["path"] == "assets/logo.png"
+        assert second["path"] != first["path"]
+        assert second["path"].startswith("assets/logo-") and second["path"].endswith(".png")
+        assert (kotiaurinko / second["path"]).read_bytes() == other
+
+
+def test_post_assets_rejects_non_image(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        resp = client.post("/api/assets", files={"file": ("notes.txt", b"hello", "text/plain")})
+        assert resp.status_code == 400
+        assert not (kotiaurinko / "assets").exists()
+
+
+def test_post_assets_rejects_oversized(kotiaurinko):
+    app = make_app(kotiaurinko, max_asset_bytes=64)
+    with TestClient(app) as client:
+        big = PNG_1PX + b"\x00" * 400
+        resp = client.post("/api/assets", files={"file": ("big.png", big, "image/png")})
+        assert resp.status_code == 413
+        assert not (kotiaurinko / "assets").exists()
+
+
+def test_post_assets_traversal_name_cannot_escape_assets(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/assets",
+            files={"file": ("x.png", PNG_1PX, "image/png")},
+            data={"name": "../../evil.png"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["path"] == "assets/evil.png"  # directory parts dropped
+        assert not (kotiaurinko.parent / "evil.png").exists()
+        assert (kotiaurinko / "assets" / "evil.png").is_file()
+
+
+def test_post_assets_writes_off_is_403(kotiaurinko):
+    app = make_app(kotiaurinko, writes="off")
+    with TestClient(app) as client:
+        resp = client.post("/api/assets", files={"file": ("x.png", PNG_1PX, "image/png")})
+        assert resp.status_code == 403
+        assert not (kotiaurinko / "assets").exists()
+
+
+def test_uploaded_asset_is_invisible_to_the_compile(kotiaurinko):
+    app = make_app(kotiaurinko)
+    with TestClient(app) as client:
+        client.post("/api/assets", files={"file": ("diagram.png", PNG_1PX, "image/png")})
+    # assets/ holds no .md, so a compile never sees it (graph, docs, index)
+    run_compile(kotiaurinko)
+    graph = json.loads((kotiaurinko / ".brainpick" / "t1" / "graph.json").read_text(encoding="utf-8"))
+    assert not any("assets/" in node["id"] for node in graph["nodes"])
+    docs = (kotiaurinko / ".brainpick" / "t1" / "docs.jsonl").read_text(encoding="utf-8")
+    assert "assets/" not in docs
+    assert "assets/" not in (kotiaurinko / "index.md").read_text(encoding="utf-8")

@@ -37,7 +37,7 @@ henxels:
   # https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
   - henxel: "Every concept doc is kebab-case markdown with OKF frontmatter (type is the one MUST)"
     in: ./docs/*
-    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/brainpick.toml", "docs/runtime-parity.md.codx/*"]
+    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/runtime-parity.md.codx/*"]
     allowed_filetypes: .md
     filename_casing: kebab-case
     required_frontmatter: [type, title, description]

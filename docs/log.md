@@ -1,5 +1,9 @@
 # Update log
 
+## 2026-07-07
+
+- Added: guarded REST writes (PUT /api/docs) + image upload (POST /api/assets) — the engine half of the in-browser editor, reusing brain_write's referee + merge.
+
 ## 2026-07-06
 
 - Added: the Time Machine — scrub through the brain's git history and watch it grow; the flat cosmos and the hologram both travel through time.

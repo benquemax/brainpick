@@ -423,17 +423,27 @@ def conflict_payload(state: ServeState, rel: str, previous: bytes, yours: str, b
     return result
 
 
-def write_payload(state: ServeState, doc: str, content: str, mode: str = "create",
-                  base_sha: str | None = None, budget_tokens: int | None = None,
-                  refusal: str | None = None) -> dict:
-    if refusal:
-        return {"ok": False, "instruction": refusal}
+def guarded_write(state: ServeState, doc: str, content: str, mode: str = "create",
+                  base_sha: str | None = None, budget_tokens: int | None = None) -> tuple[str, dict]:
+    """The one guarded write path (spec/70): resolve → atomic write → henxels
+    referee → rollback-or-recompile → live delta, plus base_sha optimistic
+    concurrency and the merge ladder. Returns (status, payload):
+
+      "ok"        → {"path", "seq", "sha", "warning"?}  (sha = new content sha256)
+      "badpath"   → {"instruction"}                     (traversal / non-kebab / reserved)
+      "conflict"  → the full spec/70 conflict dict (ok/conflict/current_sha/theirs/…/merged?)
+      "violation" → {"instruction"}                     (henxels rejected it; rolled back)
+      "exists"    → {"instruction"}                     (create mode, target present)
+
+    Both brain_write (MCP, via write_payload) and PUT /api/docs (REST) call this —
+    one source of truth for the guarded write, mapped onto each surface's shape.
+    """
     if mode not in ("create", "replace", "append_section"):
         mode = "create"  # forgiving enums (spec/70)
 
     rel, problem = _resolve_write_path(state, doc)
     if problem:
-        return {"ok": False, "instruction": problem}
+        return "badpath", {"instruction": problem}
     target = state.root / rel
     previous = target.read_bytes() if target.is_file() else None
     text = content if content.endswith("\n") else content + "\n"
@@ -442,16 +452,17 @@ def write_payload(state: ServeState, doc: str, content: str, mode: str = "create
     # knowledge is stale — the server MUST NOT write. Omitted = last-write-wins.
     if base_sha:
         if previous is None:
-            return {"ok": False, "conflict": True, "current_sha": None, "theirs": "",
-                    "instruction": "the doc was deleted since you read it — "
-                                   "re-create it with brain_write, without base_sha",
-                    "hint": "brain_search can confirm whether it moved instead."}
+            return "conflict", {
+                "ok": False, "conflict": True, "current_sha": None, "theirs": "",
+                "instruction": "the doc was deleted since you read it — "
+                               "re-create it with brain_write, without base_sha",
+                "hint": "brain_search can confirm whether it moved instead."}
         if sha256_hex(previous) != base_sha:
-            return conflict_payload(state, rel, previous, text, base_sha, budget_tokens)
+            return "conflict", conflict_payload(state, rel, previous, text, base_sha, budget_tokens)
 
     if mode == "create" and previous is not None:
-        return {"ok": False,
-                "instruction": f"'{rel}' already exists — use mode 'replace' or 'append_section'"}
+        return "exists", {
+            "instruction": f"'{rel}' already exists — use mode 'replace' or 'append_section'"}
 
     if mode == "append_section" and previous is not None:
         text = previous.decode("utf-8", errors="replace").rstrip("\n") + "\n\n" + text
@@ -463,18 +474,36 @@ def write_payload(state: ServeState, doc: str, content: str, mode: str = "create
             target.unlink(missing_ok=True)
         else:
             _atomic_write(target, previous)
-        return {"ok": False, "instruction": violation}
+        return "violation", {"instruction": violation}
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     stamped = _bump_timestamp(target.read_text(encoding="utf-8"), now)
-    _atomic_write(target, stamped.encode("utf-8"))
+    stamped_bytes = stamped.encode("utf-8")
+    _atomic_write(target, stamped_bytes)
 
     result = recompile_and_broadcast(state)
-    out = {"ok": True, "path": rel, "seq": result.seq,
-           "hint": f"brain_read '{rel}' to verify — connected UIs already got the delta."}
+    payload = {"path": rel, "seq": result.seq, "sha": sha256_hex(stamped_bytes)}
     if warning:
-        out["warning"] = warning
-    return out
+        payload["warning"] = warning
+    return "ok", payload
+
+
+def write_payload(state: ServeState, doc: str, content: str, mode: str = "create",
+                  base_sha: str | None = None, budget_tokens: int | None = None,
+                  refusal: str | None = None) -> dict:
+    """brain_write's MCP result (spec/70) over the shared guarded_write core."""
+    if refusal:
+        return {"ok": False, "instruction": refusal}
+    status, payload = guarded_write(state, doc, content, mode, base_sha, budget_tokens)
+    if status == "ok":
+        out = {"ok": True, "path": payload["path"], "seq": payload["seq"],
+               "hint": f"brain_read '{payload['path']}' to verify — connected UIs already got the delta."}
+        if "warning" in payload:
+            out["warning"] = payload["warning"]
+        return out
+    if status == "conflict":
+        return payload
+    return {"ok": False, "instruction": payload["instruction"]}
 
 
 # -- the FastMCP wrapper -------------------------------------------------------------

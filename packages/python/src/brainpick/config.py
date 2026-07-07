@@ -42,6 +42,7 @@ class ServeConfig:
     watch: bool = True
     writes: str = "guarded"
     token: str = ""
+    max_asset_bytes: int = 8388608  # 8 MiB — the POST /api/assets upload cap (spec/50)
 
 
 @dataclass

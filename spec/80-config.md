@@ -29,6 +29,7 @@ transports = ["streamable-http"]   # + "sse" for the legacy transport
 watch = true
 writes = "guarded"              # guarded | off
 token = ""                      # required for non-localhost binds
+max_asset_bytes = 8388608       # 8 MiB — POST /api/assets upload cap (spec/50)
 
 [validate]
 henxels = "auto"                # auto | always | never

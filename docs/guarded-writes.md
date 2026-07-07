@@ -2,7 +2,7 @@
 type: Concept
 title: Guarded writes
 description: brain_write lets agents add knowledge through MCP, but nothing touches the brain without passing the henxels contract first.
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-07T10:00:00Z
 ---
 
 # Guarded writes
@@ -31,3 +31,19 @@ Writes are configuration-gated (`guarded` or `off`) and require the bearer
 token whenever the server is bound beyond localhost. The division of labor
 stays clean: brainpick never re-implements validation — henxels is the
 referee, brainpick is the pipeline around it.
+
+The same guarded path has a second face now: the browser editor. `PUT
+/api/docs/{path}` is the HTTP mouth of `brain_write` — the identical resolve →
+atomic write → henxels referee → rollback-or-recompile → live-delta machinery,
+the same `base_sha` optimistic concurrency and merge ladder, mapped onto status
+codes (200 with the saved doc's new content sha, 422 carrying the contract's
+instruction verbatim, 409 carrying the conflict and — when the base resolves —
+its merge proposal). A companion `POST /api/assets` stores an embedded image
+under the bundle's `assets/` folder (sanitized name, deduplicated by content
+hash, invisible to the graph because it carries no `.md`), returning the
+bundle-relative `assets/<name>` path an editor drops into a markdown image
+embed. Both share the write gate — exposed only while writes are `guarded`, and
+behind a token or session once the bind leaves localhost (see
+[Authentication](authentication.md)). One referee, one pipeline, now two mouths:
+an agent's MCP tool and a human's editor write through exactly the same
+suspenders.

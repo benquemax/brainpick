@@ -27,6 +27,7 @@ export interface ServeConfig {
   watch: boolean;
   writes: string;
   token: string;
+  max_asset_bytes: number; // 8 MiB default — the POST /api/assets upload cap (spec/50)
 }
 
 export interface ValidateConfig {
@@ -85,6 +86,7 @@ export function defaultConfig(): Config {
       watch: true,
       writes: "guarded",
       token: "",
+      max_asset_bytes: 8388608,
     },
     validate: { henxels: "auto" },
   };

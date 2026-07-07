@@ -534,22 +534,36 @@ export interface WritePayloadOptions {
   refusal?: string | null;
 }
 
-export async function writePayload(
+export type WriteStatus = "ok" | "badpath" | "conflict" | "violation" | "exists";
+
+/** The one guarded write path (spec/70): resolve → atomic write → henxels referee
+ * → rollback-or-recompile → live delta, plus base_sha optimistic concurrency.
+ * Returns [status, payload]:
+ *
+ *   "ok"        → {path, seq, sha, warning?}  (sha = new content sha256)
+ *   "badpath"   → {instruction}               (traversal / non-kebab / reserved)
+ *   "conflict"  → the spec/70 conflict dict (ok/conflict/current_sha/theirs/…)
+ *   "violation" → {instruction}               (henxels rejected it; rolled back)
+ *   "exists"    → {instruction}               (create mode, target present)
+ *
+ * Both brain_write (MCP, via writePayload) and PUT /api/docs (REST) call this —
+ * one source of truth, mapped onto each surface's shape. (The `merged` proposal
+ * remains Python-first, so the conflict shape here carries detection only.) */
+export async function guardedWrite(
   state: ServeState,
   doc: string,
   content: string,
   mode: unknown = "create",
-  options: WritePayloadOptions = {},
-): Promise<Record<string, unknown>> {
-  const { baseSha = null, budgetTokens = null, refusal = null } = options;
-  if (refusal) return { ok: false, instruction: refusal };
+  baseSha: string | null = null,
+  budgetTokens: number | null = null,
+): Promise<[WriteStatus, Record<string, unknown>]> {
   let writeMode = String(mode ?? "create");
   if (!["create", "replace", "append_section"].includes(writeMode)) {
     writeMode = "create"; // forgiving enums (spec/70)
   }
 
   const [rel, problem] = resolveWritePath(state, doc);
-  if (problem !== null) return { ok: false, instruction: problem };
+  if (problem !== null) return ["badpath", { instruction: problem }];
   const target = join(state.root, rel!);
   let previous: Buffer | null = null;
   try {
@@ -572,12 +586,12 @@ export async function writePayload(
         instruction: "the doc changed since you read it — re-read, reconcile, retry with the new base_sha",
       };
       if (previous !== null) shapeTheirs(result, previous.toString("utf8"), budgetTokens || 2000);
-      return result;
+      return ["conflict", result];
     }
   }
 
   if (writeMode === "create" && previous !== null) {
-    return { ok: false, instruction: `'${rel}' already exists — use mode 'replace' or 'append_section'` };
+    return ["exists", { instruction: `'${rel}' already exists — use mode 'replace' or 'append_section'` }];
   }
 
   let text = content.endsWith("\n") ? content : content + "\n";
@@ -597,22 +611,42 @@ export async function writePayload(
     } else {
       atomicWrite(target, previous);
     }
-    return { ok: false, instruction: violation };
+    return ["violation", { instruction: violation }];
   }
 
   const now = utcNowSeconds();
   const stamped = bumpTimestamp(readFileSync(target, "utf8"), now);
-  atomicWrite(target, Buffer.from(stamped, "utf8"));
+  const stampedBytes = Buffer.from(stamped, "utf8");
+  atomicWrite(target, stampedBytes);
 
   const result = await recompileAndBroadcast(state);
-  const out: Record<string, unknown> = {
-    ok: true,
-    path: rel,
-    seq: result.seq,
-    hint: `brain_read '${rel}' to verify — connected UIs already got the delta.`,
-  };
-  if (warning !== null) out["warning"] = warning;
-  return out;
+  const payload: Record<string, unknown> = { path: rel, seq: result.seq, sha: sha256Hex(stampedBytes) };
+  if (warning !== null) payload["warning"] = warning;
+  return ["ok", payload];
+}
+
+export async function writePayload(
+  state: ServeState,
+  doc: string,
+  content: string,
+  mode: unknown = "create",
+  options: WritePayloadOptions = {},
+): Promise<Record<string, unknown>> {
+  const { baseSha = null, budgetTokens = null, refusal = null } = options;
+  if (refusal) return { ok: false, instruction: refusal };
+  const [status, payload] = await guardedWrite(state, doc, content, mode, baseSha, budgetTokens);
+  if (status === "ok") {
+    const out: Record<string, unknown> = {
+      ok: true,
+      path: payload["path"],
+      seq: payload["seq"],
+      hint: `brain_read '${payload["path"]}' to verify — connected UIs already got the delta.`,
+    };
+    if ("warning" in payload) out["warning"] = payload["warning"];
+    return out;
+  }
+  if (status === "conflict") return payload;
+  return { ok: false, instruction: payload["instruction"] };
 }
 
 // -- the McpServer wrapper -------------------------------------------------------------

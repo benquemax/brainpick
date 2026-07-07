@@ -3,7 +3,8 @@
  * Everything runs against a REAL express server on an ephemeral port — a live
  * socket is the honest test of a serve layer (the twin of test_e2e_serve.py).
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -12,13 +13,26 @@ import { afterEach, expect, test } from "vitest";
 
 import { runCompile } from "../src/compile/pipeline";
 import { loadConfig, type ServeConfig } from "../src/config";
+import { sha256Hex } from "../src/core/canonical";
 import { buildApp, type BuildAppOptions, type ServeHandles } from "../src/serve/app";
 import { sseFrame } from "../src/serve/live";
 import { recompileAndBroadcast } from "../src/serve/watcher";
-import { cleanup, copyBundle, stageT3Export } from "./helpers";
+import { cleanup, copyBundle, tempDir, stageT3Export } from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi\ndescription: New rock.\n---\n\n# Uusi\n\nNear [Kuu](kuu.md).\n";
+
+const KUU_REWRITE =
+  "---\ntype: Concept\ntags: [kuu]\ntimestamp: 2026-06-15T08:30:00Z\n---\n\n" +
+  "# Kuu\n\nThe moon pulls the tides of [Maa](maa.md), rewritten.\n";
+
+// a 1x1 transparent PNG — a real image the asset endpoint accepts
+const PNG_1PX = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+const savedPath = process.env["PATH"];
 
 interface Running {
   base: string;
@@ -29,6 +43,7 @@ interface Running {
 const runningServers: Running[] = [];
 
 afterEach(async () => {
+  process.env["PATH"] = savedPath;
   for (const server of runningServers.splice(0)) await server.stop();
   cleanup();
 });
@@ -685,4 +700,242 @@ test("watcher end to end", { timeout: 60_000 }, async () => {
   } finally {
     close();
   }
+});
+
+// -- guarded REST writes (spec/50): PUT /api/docs is brain_write's HTTP face --------
+// The SAME guarded core backs both; the REST siblings of the brain_write
+// conflict/rollback tests in mcp-tools.test.ts.
+
+async function putJson(
+  url: string,
+  body: unknown,
+): Promise<{ status: number; body: any }> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { status: res.status, body: text === "" ? null : JSON.parse(text) };
+}
+
+async function postAsset(
+  base: string,
+  filename: string,
+  data: Uint8Array,
+  type: string,
+  name?: string,
+): Promise<{ status: number; body: any }> {
+  const form = new FormData();
+  form.append("file", new Blob([Uint8Array.from(data)], { type }), filename);
+  if (name !== undefined) form.append("name", name);
+  const res = await fetch(`${base}/api/assets`, { method: "POST", body: form });
+  const text = await res.text();
+  return { status: res.status, body: text === "" ? null : JSON.parse(text) };
+}
+
+function git(cwd: string, ...args: string[]): void {
+  execFileSync(
+    "git",
+    ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...args],
+    { cwd, stdio: "ignore" },
+  );
+}
+
+test("PUT /api/docs writes, bumps timestamp, returns new sha, fires a delta", async () => {
+  const root = copyBundle();
+  const { base, handles } = await serve(await makeApp(root));
+  const queue = handles.state.subscribe();
+  const before = (await getJson(`${base}/api/docs/kuu.md`)).body.text as string;
+  expect(before).toContain("tides");
+  const next =
+    "---\ntype: Concept\ntitle: Kuu\ndescription: The moon.\n---\n\n" +
+    "# Kuu\n\nThe moon, edited live in the browser [Maa](maa.md).\n";
+  const { status, body } = await putJson(`${base}/api/docs/kuu.md`, { content: next, mode: "replace" });
+  expect(status).toBe(200);
+  expect(body).toEqual({ ok: true, path: "kuu.md", seq: 2, sha: body.sha });
+  expect(body.sha).toMatch(/^[0-9a-f]{64}$/);
+  expect(body.sha).toBe(sha256Hex(readFileSync(join(root, "kuu.md")))); // the client's next base_sha
+  const after = (await getJson(`${base}/api/docs/kuu.md`)).body.text as string;
+  expect(after).toContain("edited live in the browser");
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).toMatch(
+    /^timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/m,
+  );
+  expect(queue.drain().map(([name]) => name)).toContain("graph.delta"); // open UIs updated
+});
+
+test("PUT /api/docs henxels violation is 422 verbatim and rolls back", async () => {
+  const root = copyBundle();
+  writeFileSync(join(root, "henxels.yaml"), "henxels: []\n", "utf8");
+  const bin = join(tempDir(), "bin");
+  mkdirSync(bin, { recursive: true });
+  const fake = join(bin, "henxels");
+  writeFileSync(fake, "#!/bin/sh\necho 'one concept per page'\nexit 1\n", "utf8");
+  chmodSync(fake, 0o755);
+  process.env["PATH"] = `${bin}:${savedPath}`;
+  const { base } = await serve(await makeApp(root));
+  const original = readFileSync(join(root, "kuu.md"), "utf8");
+  const { status, body } = await putJson(`${base}/api/docs/kuu.md`, {
+    content: "# Kuu\n\nClobbered.\n",
+    mode: "replace",
+  });
+  expect(status).toBe(422);
+  expect(body.ok).toBe(false);
+  expect((body.instruction as string).trim()).toBe("one concept per page"); // verbatim
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).toBe(original); // rolled back
+});
+
+test("PUT /api/docs stale base_sha is a 409 conflict without writing", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const original = readFileSync(join(root, "kuu.md"), "utf8");
+  const { status, body } = await putJson(`${base}/api/docs/kuu.md`, {
+    content: KUU_REWRITE,
+    mode: "replace",
+    base_sha: "0".repeat(64),
+  });
+  expect(status).toBe(409);
+  expect(body.ok).toBe(false);
+  expect(body.conflict).toBe(true);
+  expect(body.current_sha).toBe(sha256Hex(Buffer.from(original, "utf8")));
+  expect(body.theirs).toContain("tides");
+  expect(body.instruction).toContain("re-read");
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).toBe(original); // MUST NOT write
+});
+
+test("PUT /api/docs create mode refuses to clobber", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const { status, body } = await putJson(`${base}/api/docs/kuu.md`, {
+    content: "# Kaappaus\n",
+    mode: "create",
+  });
+  expect(status).toBe(422);
+  expect(body.ok).toBe(false);
+  expect(body.instruction).toContain("replace");
+  expect(readFileSync(join(root, "kuu.md"), "utf8")).toContain("tides");
+});
+
+test("PUT /api/docs rejects bad paths with 400", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  expect((await putJson(`${base}/api/docs/notes.txt`, { content: "x" })).status).toBe(400); // non-.md
+  expect((await putJson(`${base}/api/docs/foo%5Cbar.md`, { content: "x" })).status).toBe(400); // backslash
+  const nonKebab = await putJson(`${base}/api/docs/Kuun%20Vaiheet.md`, { content: "x" });
+  expect(nonKebab.status).toBe(400);
+  expect(existsSync(join(root, "Kuun Vaiheet.md"))).toBe(false);
+});
+
+test("PUT /api/docs is 403 when writes are off", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root, { writes: "off" }));
+  const { status, body } = await putJson(`${base}/api/docs/uusi.md`, { content: "# X\n" });
+  expect(status).toBe(403);
+  expect(body.error).toContain("writes are disabled");
+  expect(existsSync(join(root, "uusi.md"))).toBe(false);
+});
+
+test("PUT /api/docs on a non-localhost bind without a token is 401", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root, { host: "0.0.0.0" }));
+  expect((await getJson(`${base}/api/health`)).status).toBe(200); // reads stay open
+  const { status } = await putJson(`${base}/api/docs/uusi.md`, { content: "# X\n" });
+  expect(status).toBe(401);
+  expect(existsSync(join(root, "uusi.md"))).toBe(false);
+});
+
+test("PUT /api/docs conflict body matches brain_write's conflict shape", async () => {
+  // Node's merge ladder is Python-first: the conflict carries no `merged` yet,
+  // exactly as brain_write returns it (mcp-tools.test.ts). REST reuses that shape.
+  const root = copyBundle();
+  git(root, "init", "-q");
+  git(root, "add", "-A");
+  git(root, "commit", "-qm", "base");
+  const { base } = await serve(await makeApp(root));
+  const { body } = await putJson(`${base}/api/docs/kuu.md`, {
+    content: KUU_REWRITE,
+    mode: "replace",
+    base_sha: "0".repeat(64),
+  });
+  expect(body.conflict).toBe(true);
+  expect(body.merged).toBeUndefined(); // detection only, no proposal (Python-first)
+});
+
+// -- image assets (spec/50): POST /api/assets ---------------------------------------
+
+test("POST /api/assets stores an image and returns 201", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const { status, body } = await postAsset(base, "Diagram One.png", PNG_1PX, "image/png");
+  expect(status).toBe(201);
+  expect(body).toEqual({ path: "assets/diagram-one.png", sha: sha256Hex(PNG_1PX), bytes: PNG_1PX.length });
+  expect(readFileSync(join(root, "assets", "diagram-one.png")).equals(PNG_1PX)).toBe(true);
+});
+
+test("POST /api/assets de-dupes identical bytes to the same path", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const first = (await postAsset(base, "logo.png", PNG_1PX, "image/png")).body;
+  const second = (await postAsset(base, "logo.png", PNG_1PX, "image/png")).body;
+  expect(first.path).toBe("assets/logo.png");
+  expect(second.path).toBe("assets/logo.png");
+});
+
+test("POST /api/assets hash-suffixes different bytes under the same name", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const first = (await postAsset(base, "logo.png", PNG_1PX, "image/png")).body;
+  const other = Buffer.concat([PNG_1PX, Buffer.from("extra")]);
+  const second = (await postAsset(base, "logo.png", other, "image/png")).body;
+  expect(first.path).toBe("assets/logo.png");
+  expect(second.path).not.toBe(first.path);
+  expect(second.path.startsWith("assets/logo-")).toBe(true);
+  expect(second.path.endsWith(".png")).toBe(true);
+  expect(readFileSync(join(root, second.path)).equals(other)).toBe(true);
+});
+
+test("POST /api/assets rejects a non-image", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const { status } = await postAsset(base, "notes.txt", Buffer.from("hello"), "text/plain");
+  expect(status).toBe(400);
+  expect(existsSync(join(root, "assets"))).toBe(false);
+});
+
+test("POST /api/assets rejects an oversized upload", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root, { max_asset_bytes: 64 }));
+  const big = Buffer.concat([PNG_1PX, Buffer.alloc(400)]);
+  const { status } = await postAsset(base, "big.png", big, "image/png");
+  expect(status).toBe(413);
+  expect(existsSync(join(root, "assets"))).toBe(false);
+});
+
+test("POST /api/assets traversal name cannot escape assets/", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  const { status, body } = await postAsset(base, "x.png", PNG_1PX, "image/png", "../../evil.png");
+  expect(status).toBe(201);
+  expect(body.path).toBe("assets/evil.png"); // directory parts dropped
+  expect(existsSync(join(root, "..", "evil.png"))).toBe(false);
+  expect(existsSync(join(root, "assets", "evil.png"))).toBe(true);
+});
+
+test("POST /api/assets is 403 when writes are off", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root, { writes: "off" }));
+  const { status } = await postAsset(base, "x.png", PNG_1PX, "image/png");
+  expect(status).toBe(403);
+  expect(existsSync(join(root, "assets"))).toBe(false);
+});
+
+test("an uploaded asset is invisible to the compile", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  await postAsset(base, "diagram.png", PNG_1PX, "image/png");
+  await runCompile(root); // assets/ holds no .md — the graph/index/docs never see it
+  const graph = JSON.parse(readFileSync(join(root, ".brainpick", "t1", "graph.json"), "utf8"));
+  expect(graph.nodes.some((n: { id: string }) => n.id.includes("assets/"))).toBe(false);
+  expect(readFileSync(join(root, ".brainpick", "t1", "docs.jsonl"), "utf8")).not.toContain("assets/");
+  expect(readFileSync(join(root, "index.md"), "utf8")).not.toContain("assets/");
 });

@@ -1,22 +1,138 @@
 /** The REST surface (spec/50): JSON everywhere, instructive errors, ETag'd graph.
  * Ports serve/rest.py onto an express Router. */
 import { readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 import express, { Router, type NextFunction, type Request, type Response } from "express";
 
 import {
+  AUTH_REQUIRED_ERROR,
+  authActive,
   clearSessionCookieHeader,
   sessionCookieHeader,
   verifyPassword,
   type AuthProvider,
 } from "../auth";
 import type { GraphStats } from "../compile/t1";
+import { sha256Hex } from "../core/canonical";
 import { splitFrontmatter } from "../core/frontmatter";
+import { atomicWrite } from "../core/fs";
+import { guardedWrite } from "../mcp";
 import { runSearch } from "../query/router";
 import { SPEC_VERSION, VERSION } from "../version";
 import { bfsNeighborhood, jsonable, suggestPaths, type ServeState } from "./state";
 import { liveHandler } from "./live";
+
+// Writing (spec/50): the browser editor's guarded doc-write + image-upload gate.
+export const WRITES_DISABLED_ERROR = 'writes are disabled — set [serve] writes = "guarded"';
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", ""]);
+const IMAGE_TYPES: Record<string, string> = {
+  // accepted content-type → canonical extension
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+  "image/svg+xml": ".svg",
+};
+const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
+const ASSET_INVALID = /[^a-z0-9._-]+/g;
+
+interface GateFailure {
+  status: number;
+  body: unknown;
+  headers?: Record<string, string>;
+}
+
+/** spec/50: writes only when [serve] writes = "guarded" (else 403), and on a
+ * non-localhost bind only with a credential (else 401). When credentials exist
+ * the auth middleware has already gated; this closes the no-auth-file case. */
+function writesGate(state: ServeState, auth: AuthProvider): GateFailure | null {
+  const config = state.config;
+  if (config.serve.writes !== "guarded") {
+    return { status: 403, body: { error: WRITES_DISABLED_ERROR } };
+  }
+  if (!LOCAL_HOSTS.has(config.serve.host) && config.serve.token === "" && !authActive(auth.current())) {
+    return { status: 401, body: { error: AUTH_REQUIRED_ERROR }, headers: { "WWW-Authenticate": "Bearer" } };
+  }
+  return null;
+}
+
+function fileExists(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Split a buffer on every occurrence of `sep` (Buffer has no native split). */
+function splitBuffer(buf: Buffer, separator: Buffer): Buffer[] {
+  const out: Buffer[] = [];
+  let start = 0;
+  for (;;) {
+    const idx = buf.indexOf(separator, start);
+    if (idx === -1) {
+      out.push(buf.subarray(start));
+      break;
+    }
+    out.push(buf.subarray(start, idx));
+    start = idx + separator.length;
+  }
+  return out;
+}
+
+interface MultipartField {
+  filename: string | null;
+  contentType: string;
+  data: Buffer;
+}
+
+/** Minimal multipart/form-data parse → {field: {filename, contentType, data}}.
+ * Enough for the single `file` (+ optional `name`) part POST /api/assets takes;
+ * the twin of the Python engine's _parse_multipart, kept byte-parallel. */
+function parseMultipart(body: Buffer, contentType: string): Map<string, MultipartField> {
+  const fields = new Map<string, MultipartField>();
+  const m = /boundary="?([^";]+)"?/.exec(contentType);
+  if (m === null) return fields;
+  const delim = Buffer.from("--" + m[1], "latin1");
+  for (const chunk of splitBuffer(body, delim)) {
+    let block = chunk;
+    if (block.length >= 2 && block[0] === 0x0d && block[1] === 0x0a) block = block.subarray(2);
+    if (block.length >= 2 && block[block.length - 2] === 0x0d && block[block.length - 1] === 0x0a) {
+      block = block.subarray(0, block.length - 2);
+    }
+    if (block.length === 0 || block.equals(Buffer.from("--"))) continue; // preamble / closing
+    const headEnd = block.indexOf("\r\n\r\n");
+    if (headEnd === -1) continue;
+    const headers = block.subarray(0, headEnd).toString("latin1");
+    const data = block.subarray(headEnd + 4);
+    const nameM = /name="([^"]*)"/.exec(headers);
+    if (nameM === null) continue;
+    const fileM = /filename="([^"]*)"/.exec(headers);
+    const ctypeM = /content-type:\s*(.+?)\s*(?:\r?\n|$)/i.exec(headers);
+    fields.set(nameM[1]!, {
+      filename: fileM ? fileM[1]! : null,
+      contentType: ctypeM ? ctypeM[1]!.trim() : "",
+      data,
+    });
+  }
+  return fields;
+}
+
+/** Kebab [a-z0-9._-], directory parts dropped (traversal can't escape assets/),
+ * collapsed dots so no hidden ".." survives (spec/50). */
+function sanitizeAssetName(raw: string, defaultExt: string): string {
+  let base = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\\/g, "/");
+  base = base.slice(base.lastIndexOf("/") + 1);
+  base = base.replace(ASSET_INVALID, "-").replace(/-{2,}/g, "-").replace(/\.{2,}/g, ".");
+  base = base.replace(/^[-.]+|[-.]+$/g, "");
+  if (base === "") base = "asset";
+  if (!base.includes(".")) base += defaultExt;
+  return base;
+}
 
 /** Python `int(str)`: trimmed integer literals only — anything else keeps the default. */
 export function intParam(raw: unknown, fallback: number, lo: number, hi: number): number {
@@ -246,6 +362,118 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
   });
 
   router.get("/api/live", liveHandler(state));
+
+  // PUT /api/docs/{path} (spec/50): brain_write's HTTP face over guarded_write.
+  const docJson = express.json({ limit: "2mb" });
+  const forgivingDocJson = (req: Request, res: Response, next: NextFunction): void => {
+    docJson(req, res, (err?: unknown) => {
+      if (err !== undefined && err !== null) req.body = null;
+      next();
+    });
+  };
+  router.put(/^\/api\/docs\/(.*)$/u, forgivingDocJson, async (req: Request, res: Response) => {
+    const gate = writesGate(state, auth);
+    if (gate !== null) {
+      res.status(gate.status).set(gate.headers ?? {}).json(gate.body);
+      return;
+    }
+    const path = (req.params as Record<string, string>)["0"] ?? "";
+    if (!path.endsWith(".md")) {
+      res.status(400).json({ ok: false, instruction: "the editor writes .md docs — target a path ending in .md" });
+      return;
+    }
+    const body: unknown = req.body;
+    const rec = typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+    if (typeof rec["content"] !== "string") {
+      res.status(400).json({ error: 'send JSON: {"content": "…", "base_sha"?: "…", "mode"?: "replace"}' });
+      return;
+    }
+    const baseSha = typeof rec["base_sha"] === "string" ? (rec["base_sha"] as string) : null;
+    const mode = typeof rec["mode"] === "string" ? (rec["mode"] as string) : "replace"; // editor saves a full doc
+    const [status, payload] = await guardedWrite(state, path, rec["content"] as string, mode, baseSha);
+    if (status === "ok") {
+      res.status(200).json({ ok: true, path: payload["path"], seq: payload["seq"], sha: payload["sha"] });
+      return;
+    }
+    if (status === "badpath") {
+      res.status(400).json({ ok: false, instruction: payload["instruction"] });
+      return;
+    }
+    if (status === "conflict") {
+      res.status(409).json(payload);
+      return;
+    }
+    // violation | exists → 422: the request was well-formed, the content/mode was not
+    res.status(422).json({ ok: false, instruction: payload["instruction"] });
+  });
+
+  // POST /api/assets (spec/50): store an uploaded image under <bundle>/assets/.
+  const rawLimit = state.config.serve.max_asset_bytes + 1_048_576; // + slop for the multipart envelope
+  const assetRaw = express.raw({ type: "multipart/form-data", limit: rawLimit });
+  const assetBody = (req: Request, res: Response, next: NextFunction): void => {
+    assetRaw(req, res, (err?: unknown) => {
+      if (err !== undefined && err !== null) {
+        res.status(413).json({ error: `asset exceeds the ${state.config.serve.max_asset_bytes}-byte cap` });
+        return;
+      }
+      next();
+    });
+  };
+  router.post("/api/assets", assetBody, (req: Request, res: Response) => {
+    const gate = writesGate(state, auth);
+    if (gate !== null) {
+      res.status(gate.status).set(gate.headers ?? {}).json(gate.body);
+      return;
+    }
+    const maxBytes = state.config.serve.max_asset_bytes;
+    const rawBody = Buffer.isBuffer(req.body) ? (req.body as Buffer) : Buffer.alloc(0);
+    const fields = parseMultipart(rawBody, String(req.headers["content-type"] ?? ""));
+    const filePart = fields.get("file");
+    if (filePart === undefined) {
+      res.status(400).json({ error: "send multipart/form-data with a 'file' part" });
+      return;
+    }
+    const data = filePart.data;
+    const ctype = (filePart.contentType || "").split(";")[0]!.trim().toLowerCase();
+    const nameField = fields.get("name");
+    const requested = nameField ? nameField.data.toString("utf8").trim() : "";
+    const rawName = requested || filePart.filename || "";
+    const dotIdx = rawName.lastIndexOf(".");
+    const ext = dotIdx === -1 ? "" : rawName.slice(dotIdx).toLowerCase();
+    if (!(ctype in IMAGE_TYPES) && !IMAGE_EXTS.has(ext)) {
+      res.status(400).json({ error: "assets must be png, jpeg, webp, gif, or svg images" });
+      return;
+    }
+    if (data.length > maxBytes) {
+      res.status(413).json({
+        error: `asset is ${data.length} bytes — the cap is ${maxBytes} (raise [serve] max_asset_bytes)`,
+      });
+      return;
+    }
+    const defaultExt = IMAGE_TYPES[ctype] ?? (IMAGE_EXTS.has(ext) ? ext : ".png");
+    let name = sanitizeAssetName(rawName, defaultExt);
+    const assetsDir = join(state.root, "assets");
+    const resolvedDir = resolve(assetsDir);
+    if (resolve(assetsDir, name) !== resolvedDir && !resolve(assetsDir, name).startsWith(resolvedDir + sep)) {
+      res.status(400).json({ error: "asset name escapes assets/" });
+      return;
+    }
+    const sha = sha256Hex(data);
+    let target = join(assetsDir, name);
+    const sameBytes = (p: string): boolean => fileExists(p) && readFileSync(p).equals(data);
+    if (!sameBytes(target)) {
+      if (fileExists(target)) {
+        // a different image already owns this name → hash-suffix it
+        const d = name.lastIndexOf(".");
+        name = d === -1 ? `${name}-${sha.slice(0, 8)}` : `${name.slice(0, d)}-${sha.slice(0, 8)}${name.slice(d)}`;
+        target = join(assetsDir, name);
+      }
+      if (!sameBytes(target)) atomicWrite(target, data);
+    }
+    res.status(201).json({ path: `assets/${name}`, sha, bytes: data.length });
+  });
 
   router.all(/^\/api\/(.*)$/u, (req: Request, res: Response) => {
     const rest = (req.params as Record<string, string>)["0"] ?? "";
