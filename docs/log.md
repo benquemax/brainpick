@@ -2,6 +2,7 @@
 
 ## 2026-07-08
 
+- Added: architecture decision records — the founding decisions, one interlinked ADR per call, closing the reference volume layer.
 - Added: the reference volume layer — CLI, config, spec, MCP and henxels reference pages, richly interlinked (the wiki now stresses the UI at scale).
 - Added: the UI renders agent presentations — brain_show spotlights nodes, flies the camera, and captions them live.
 - Added: brain_show — an agent can spotlight a subgraph and caption it live in every open UI (MCP tool + POST /api/show + brain.show event).
