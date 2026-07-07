@@ -123,19 +123,29 @@ export default async function globalSetup(): Promise<void> {
   cpSync(fixtureBundle, bundleT3, { recursive: true });
   compileAndStageT3(bundleT3);
 
-  const [port, portT2less, portT3] = [await freePort(), await freePort(), await freePort()];
+  // A fourth bundle is the editor's writable target: default config, so serve
+  // exposes writes = "guarded" and PUT /api/docs is live. It has no henxels
+  // contract, so a valid save returns 200; a create over an existing doc is the
+  // reference engine's own 422 ("exists") — the guarded-save flow, end to end.
+  const bundleEdit = path.join(tmpDir, 'kotiaurinko-edit');
+  cpSync(fixtureBundle, bundleEdit, { recursive: true });
+
+  const [port, portT2less, portT3, portEdit] = [await freePort(), await freePort(), await freePort(), await freePort()];
   const primary = spawnServe(bundle, port);
   const t2less = spawnServe(bundleT2less, portT2less);
   const t3 = spawnServe(bundleT3, portT3);
+  const edit = spawnServe(bundleEdit, portEdit);
 
   try {
     await waitForHealth(`${primary.url}/api/health`, HEALTH_TIMEOUT_MS, primary.output);
     await waitForHealth(`${t2less.url}/api/health`, HEALTH_TIMEOUT_MS, t2less.output);
     await waitForHealth(`${t3.url}/api/health`, HEALTH_TIMEOUT_MS, t3.output);
+    await waitForHealth(`${edit.url}/api/health`, HEALTH_TIMEOUT_MS, edit.output);
   } catch (error) {
     killGroup(primary.child);
     killGroup(t2less.child);
     killGroup(t3.child);
+    killGroup(edit.child);
     rmSync(tmpDir, { recursive: true, force: true });
     throw error;
   }
@@ -143,12 +153,16 @@ export default async function globalSetup(): Promise<void> {
   primary.child.unref(); // the runner must not wait on the servers to exit
   t2less.child.unref();
   t3.child.unref();
+  edit.child.unref();
   process.env.BP_E2E_URL = primary.url;
   process.env.BP_E2E_URL_T2LESS = t2less.url;
   process.env.BP_E2E_URL_T3 = t3.url;
+  process.env.BP_E2E_URL_EDIT = edit.url;
   process.env.BP_E2E_BUNDLE = bundle;
+  process.env.BP_E2E_BUNDLE_EDIT = bundleEdit;
   process.env.BP_E2E_TMPDIR = tmpDir;
   process.env.BP_E2E_PID = String(primary.child.pid ?? '');
   process.env.BP_E2E_PID_T2LESS = String(t2less.child.pid ?? '');
   process.env.BP_E2E_PID_T3 = String(t3.child.pid ?? '');
+  process.env.BP_E2E_PID_EDIT = String(edit.child.pid ?? '');
 }

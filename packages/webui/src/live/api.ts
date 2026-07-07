@@ -3,13 +3,52 @@
  * dev server proxies /api to 127.0.0.1:4747, production is served by the
  * engine itself.
  */
-import type { DocResponse, GraphPayload, SearchMode, SearchResponse } from '../graph/types';
+import type { DocResponse, GraphPayload, SearchMode, SearchResponse, TierMap } from '../graph/types';
 import type { EntityGraph, GraphLayer, NeighborsResponse } from '../graph/entities';
 import { EMPTY_TIMELINE, type Timeline } from '../time/timeline';
 
 export interface GraphFetchResult {
   graph: GraphPayload;
   seq: number;
+}
+
+/**
+ * GET /api/status (spec/50). `writes` is the editor's gate: the mock advertises
+ * it; the reference engine does not yet, so its absence is read optimistically
+ * (the save path still hits the server's 403 guard). A `sha` on GET /api/docs is
+ * the same story — a spec/50 follow-up, present in the mock today.
+ */
+export interface StatusResponse {
+  seq: number;
+  tiers: TierMap;
+  docs: number;
+  edges: number;
+  ghosts: number;
+  orphans: number;
+  bundle_root: string;
+  watching: boolean;
+  writes?: string;
+}
+
+export async function fetchStatus(): Promise<StatusResponse | null> {
+  try {
+    const res = await fetch('/api/status', { headers: { accept: 'application/json' } });
+    if (!res.ok) return null;
+    return (await res.json()) as StatusResponse;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is the write path exposed? An advertised `writes` decides it; when the field
+ * is absent (today's reference engine) we optimistically show the editor — a
+ * server that has writes off still answers the actual save with 403, handled inline.
+ */
+export function writesEnabledFromStatus(status: StatusResponse | null): boolean {
+  if (status === null) return false;
+  if (typeof status.writes === 'string') return status.writes !== 'off';
+  return true;
 }
 
 /** ETag on /api/graph is `"<seq>"` (spec/50) — that is the seq baseline. */

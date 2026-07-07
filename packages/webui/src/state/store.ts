@@ -37,6 +37,25 @@ export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline'
 /** The two faces of one brain: the flat analytic cosmos, or the 3D hologram. */
 export type ViewMode = 'cosmos' | 'brain';
 
+/**
+ * The WYSIWYG editor's target. `replace` edits an existing doc (base_sha guards
+ * the save); `create` is a new page at a kebab path. Held in the store so the
+ * DocPanel's Edit button, the navigator's New page action and Escape all agree.
+ */
+export interface EditorTarget {
+  path: string;
+  mode: 'create' | 'replace';
+  /** Seed title for a fresh page (the create prompt's stem, humanised). */
+  title: string;
+}
+
+/** A transient status message (save succeeded, upload failed, …). */
+export interface Toast {
+  text: string;
+  kind: 'ok' | 'warn' | 'error';
+  nonce: number;
+}
+
 export interface FlyRequest {
   id: string;
   nonce: number;
@@ -151,6 +170,13 @@ export interface UIState extends GraphSlice {
   /** Top-level dirs the user revealed by expanding a cluster proxy. */
   expandedDirs: ReadonlySet<string>;
 
+  /** EDITOR: writes are exposed by the server (spec/50 [serve] writes = "guarded"). */
+  writesEnabled: boolean;
+  /** The open WYSIWYG editor's target, or null when it is closed. */
+  editor: EditorTarget | null;
+  /** A transient toast (save/upload feedback); the Toast view auto-dismisses it. */
+  toast: Toast | null;
+
   ingestHello(hello: HelloEvent): void;
   ingestDelta(delta: GraphDelta, now?: number): void;
   ingestSnapshot(graph: GraphPayload, seq: number, now?: number): void;
@@ -234,6 +260,17 @@ export interface UIState extends GraphSlice {
   expandDir(dir: string): void;
   /** Re-collapse a previously expanded dir. */
   collapseDir(dir: string): void;
+
+  /** Adopt the server's write-availability (from GET /api/status at boot). */
+  setWritesEnabled(enabled: boolean): void;
+  /** Open the WYSIWYG editor on a target (Edit a doc, or a new page). */
+  openEditor(target: EditorTarget): void;
+  /** Close the editor without saving. */
+  closeEditor(): void;
+  /** Flash a transient toast; the Toast view clears it. */
+  showToast(text: string, kind?: Toast['kind']): void;
+  /** Clear the current toast (its timer fired, or it was dismissed). */
+  clearToast(nonce: number): void;
 }
 
 export type UIStoreApi = StoreApi<UIState>;
@@ -347,6 +384,10 @@ export function createUIStore(): UIStoreApi {
       gpu: DEFAULT_GPU_TIER,
       nodeBudget: DEFAULT_GPU_TIER.nodeBudget,
       expandedDirs: new Set<string>(),
+
+      writesEnabled: false,
+      editor: null,
+      toast: null,
 
       ingestHello(hello) {
         set({ tiers: hello.tiers, serverSeq: hello.seq });
@@ -699,6 +740,27 @@ export function createUIStore(): UIStoreApi {
         const next = new Set(current);
         next.delete(dir);
         set({ expandedDirs: next });
+      },
+
+      setWritesEnabled(writesEnabled) {
+        if (get().writesEnabled !== writesEnabled) set({ writesEnabled });
+      },
+
+      openEditor(target) {
+        // Opening the editor lifts any transient toast; the sheet owns the screen.
+        set({ editor: target, toast: null });
+      },
+
+      closeEditor() {
+        set({ editor: null });
+      },
+
+      showToast(text, kind = 'ok') {
+        set({ toast: { text, kind, nonce: (get().toast?.nonce ?? 0) + 1 } });
+      },
+
+      clearToast(nonce) {
+        if (get().toast?.nonce === nonce) set({ toast: null });
       },
     };
   });

@@ -45,6 +45,7 @@ function NeighborList({ title, entries }: { title: string; entries: unknown[] })
 export function DocPanel() {
   const selection = useUI((s) => s.selection);
   const node = useUI((s) => (s.selection !== null ? s.nodes.get(s.selection) ?? null : null));
+  const writesEnabled = useUI((s) => s.writesEnabled);
   const [panel, setPanel] = useState<PanelState | null>(null);
 
   useEffect(() => {
@@ -106,6 +107,20 @@ export function DocPanel() {
       <header>
         <div className="doc-title-row">
           <h2>{doc?.title ?? node?.title ?? selection}</h2>
+          {/* Reserved docs (index/log) stay frontmatter-free by contract — not editable here. */}
+          {writesEnabled && node?.reserved !== true && (
+            <button
+              type="button"
+              className="doc-edit"
+              aria-label="edit"
+              title="edit this page in the browser"
+              onClick={() =>
+                uiStore.getState().openEditor({ path: selection, mode: 'replace', title: doc?.title ?? node?.title ?? selection })
+              }
+            >
+              ✎ edit
+            </button>
+          )}
           <button type="button" className="close" aria-label="close" onClick={() => uiStore.getState().select(null)}>
             ×
           </button>

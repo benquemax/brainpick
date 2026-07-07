@@ -128,6 +128,9 @@ export interface DocResponse {
   title: string;
   text: string;
   neighbors: { in: unknown[]; out: unknown[] };
+  /** Content sha256 — the editor's next `base_sha`. Advisory: present on the mock;
+   *  a spec/50 follow-up on the reference engine (see live/api.ts). */
+  sha?: string;
 }
 
 /** Canonical map key for an edge (source+target+kind triple). */

@@ -59,6 +59,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: API_TARGET, changeOrigin: false },
+      // Dev-only: the mock (and a real engine) serves embedded doc images under
+      // /assets, so a doc's `![alt](assets/x.png)` renders in the editor preview.
+      '/assets': { target: API_TARGET, changeOrigin: false },
     },
   },
   test: {

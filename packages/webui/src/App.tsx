@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { CosmosCanvas } from './scene/CosmosCanvas';
 import type { GraphRuntime } from './scene/runtime';
 import type { GraphLayer } from './graph/entities';
@@ -13,6 +13,11 @@ import { NavigatorPanel } from './ui/NavigatorPanel';
 import { SearchOverlay } from './ui/SearchOverlay';
 import { StatusHUD } from './ui/StatusHUD';
 import { TimeMachine } from './ui/TimeMachine';
+import { Toast } from './ui/Toast';
+
+// The WYSIWYG editor is lazy: its ProseMirror + markdown-it weight loads only
+// when a page is actually opened for editing, keeping the main graph bundle lean.
+const Editor = lazy(() => import('./editor/Editor'));
 
 function isTypingTarget(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
@@ -27,9 +32,13 @@ function digitOf(code: string): number | null {
 
 export function App({ runtime }: { runtime: GraphRuntime }) {
   const [labelContainer, setLabelContainer] = useState<HTMLDivElement | null>(null);
+  const editor = useUI((s) => s.editor);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // While the editor sheet is open it owns the keyboard (its own capture-phase
+      // handler does Escape / ⌘S); the cosmos hotkeys stay out of the way.
+      if (uiStore.getState().editor !== null) return;
       if (isTypingTarget(e.target)) return;
       const s = uiStore.getState();
       const digit = digitOf(e.code);
@@ -106,6 +115,12 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <ModeToggle />
       <TimeMachine />
       <CameraCluster />
+      <Toast />
+      {editor !== null && (
+        <Suspense fallback={<div className="editor-sheet panel editor-loading">loading the editor…</div>}>
+          <Editor target={editor} />
+        </Suspense>
+      )}
       <div className="hint-bar">
         <kbd>b</kbd> brain · <kbd>t</kbd> time · <kbd>/</kbd> search · <kbd>n</kbd> tree · <kbd>l</kbd> layer ·{' '}
         <kbd>0</kbd> overview · <kbd>1–3</kbd> views · <kbd>g</kbd> ghosts · click a node to read

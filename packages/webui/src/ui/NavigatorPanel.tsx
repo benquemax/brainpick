@@ -114,6 +114,7 @@ export function NavigatorPanel() {
   const selection = useUI((s) => s.selection);
   const nodes = useUI((s) => s.nodes);
   const seq = useUI((s) => s.seq);
+  const writesEnabled = useUI((s) => s.writesEnabled);
   const tree = treeForGraph(nodes, seq);
 
   // Small bundles read best fully open; big ones start folded.
@@ -248,6 +249,20 @@ export function NavigatorPanel() {
         <header className="nav-head">
           <span className="nav-title">navigator</span>
           <span className="nav-total">{tree.docCount} docs</span>
+          {writesEnabled && (
+            <button
+              type="button"
+              className="nav-new"
+              aria-label="new page"
+              title="write a new page"
+              onClick={() => {
+                if (window.matchMedia(MOBILE_QUERY).matches) uiStore.getState().toggleNavigator();
+                uiStore.getState().openEditor({ path: '', mode: 'create', title: '' });
+              }}
+            >
+              ＋ new
+            </button>
+          )}
           <button
             type="button"
             className="close"

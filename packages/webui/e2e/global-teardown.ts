@@ -38,6 +38,7 @@ export default async function globalTeardown(): Promise<void> {
   await stop(Number(process.env.BP_E2E_PID ?? ''));
   await stop(Number(process.env.BP_E2E_PID_T2LESS ?? ''));
   await stop(Number(process.env.BP_E2E_PID_T3 ?? ''));
+  await stop(Number(process.env.BP_E2E_PID_EDIT ?? ''));
   const tmpDir = process.env.BP_E2E_TMPDIR;
   if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
 }

@@ -100,6 +100,12 @@ function t3URL(): string {
   return url;
 }
 
+function editURL(): string {
+  const url = process.env.BP_E2E_URL_EDIT;
+  if (!url) throw new Error('BP_E2E_URL_EDIT missing — did global-setup run?');
+  return url;
+}
+
 /** The entity render-id marker (state/entities.ts ENTITY_MARK), for pixel-free asserts. */
 const ENTITY_MARK = '\u0000entity:';
 
@@ -843,6 +849,63 @@ test.describe('the Time Machine', () => {
     // still in the brain, no crash — the morph held through time travel
     expect(await page.evaluate(() => window.__bp_store.getState().mode)).toBe('brain');
     expect(await page.evaluate(() => window.__bp_runtime.morph)).toBeGreaterThan(0.9);
+  });
+});
+
+test.describe('the WYSIWYG editor (guarded writes, real engine)', () => {
+  test('edit a doc through the editor and save via PUT — it persists and the graph delta arrives', async ({ page }) => {
+    await page.goto(editURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('10 docs', { timeout: 30_000 });
+
+    // Writes are advertised (spec/50) → the Edit affordance appears on the doc panel.
+    await page.evaluate(() => window.__bp_store.getState().select('maa.md', false));
+    const editBtn = page.locator('.doc-edit');
+    await expect(editBtn).toBeVisible();
+    await editBtn.click();
+
+    // The body loads as formatted WYSIWYG — a heading and a link, no raw markdown.
+    const surface = page.locator('.editor-surface .ProseMirror');
+    await expect(surface).toContainText('The earth keeps one companion');
+    await expect(surface.locator('h1')).toHaveText('Maa');
+    await expect(surface.locator('a', { hasText: 'Planeetat' })).toBeVisible();
+
+    // Append a sentence and save.
+    await surface.click();
+    await page.keyboard.press('Control+End');
+    await surface.pressSequentially(' The tide answers the moon.');
+    await page.locator('.editor-save').click();
+
+    // 200 → the sheet closes and a toast shows.
+    await expect(page.locator('.editor-sheet')).toHaveCount(0);
+    await expect(page.locator('.toast')).toContainText('saved');
+
+    // The live delta arrived — maa.md pulsed in the graph.
+    await page.waitForFunction(() => window.__bp_store.getState().activity.has('maa.md'));
+
+    // And it persisted to disk: a fresh GET carries the appended prose + a bumped timestamp.
+    await expect
+      .poll(async () => (await (await page.request.get(editURL() + '/api/docs/maa.md')).json()).text)
+      .toContain('The tide answers the moon.');
+  });
+
+  test('a guarded rejection (422) surfaces the instruction inline and keeps the editor open', async ({ page }) => {
+    await page.goto(editURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('10 docs', { timeout: 30_000 });
+
+    // A "new page" at a path that already exists is the engine's own guarded 422
+    // (create never clobbers) — the same inline-instruction path as a henxels reject.
+    await page.evaluate(() => window.__bp_store.getState().openEditor({ path: 'aurinko.md', mode: 'create', title: 'Aurinko' }));
+    await expect(page.locator('.editor-sheet')).toBeVisible();
+    const surface = page.locator('.editor-surface .ProseMirror');
+    await surface.click();
+    await surface.pressSequentially('A duplicate of an existing page.');
+    await page.locator('.editor-save').click();
+
+    // The instruction shows inline; the editor stays open so the writer can fix it.
+    const banner = page.locator('.editor-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('already exists');
+    await expect(page.locator('.editor-sheet')).toBeVisible();
   });
 });
 

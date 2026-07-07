@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { fetchGraph } from './live/api';
+import { fetchGraph, fetchStatus, writesEnabledFromStatus } from './live/api';
 import { LiveConnection } from './live/connection';
 import { EntityLayerController } from './live/entities';
 import { TimelineController } from './live/timeline';
@@ -23,6 +23,11 @@ void fetchGraph(false, 0)
   .catch(() => {
     /* server not up yet — the SSE reconnect loop keeps trying */
   });
+
+// Writes-availability (spec/50): GET /api/status tells the client whether the
+// in-browser editor's save path is open, so the Edit / New affordances only show
+// when the server accepts writes.
+void fetchStatus().then((status) => uiStore.getState().setWritesEnabled(writesEnabledFromStatus(status)));
 
 const connection = new LiveConnection({ store: uiStore, fetchGraph });
 connection.start();
