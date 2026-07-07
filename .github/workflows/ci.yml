@@ -28,6 +28,25 @@ jobs:
         working-directory: packages/python
         run: uv run pytest -q
 
+  vectors-local:
+    # The offline fastembed fallback ([vectors-local]) is import-guarded and its
+    # test skips when the extra is absent (so the matrix job above never pays the
+    # heavy onnxruntime + model download). This ubuntu-only leg installs the extra
+    # and runs just that test, so the fallback is actually exercised before a release.
+    name: vectors-local fallback (fastembed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: sync with the offline-embeddings extra
+        working-directory: packages/python
+        run: uv sync --extra dev --extra vectors-local
+      - name: exercise the fastembed embedder (downloads bge-small once)
+        working-directory: packages/python
+        run: uv run pytest -q -k fastembed
+
   node:
     name: node engine (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
