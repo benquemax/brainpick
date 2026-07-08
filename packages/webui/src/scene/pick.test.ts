@@ -23,6 +23,20 @@ describe('pickNearest', () => {
   it('respects the count bound (ignores stale tail entries)', () => {
     expect(pickNearest(positions, 2, radii, 0, 10, 2)).toBe(-1);
   });
+
+  it('a dot the cursor is genuinely inside beats a closer dot it only grazes', () => {
+    // Big dot A (r5) at the origin; tiny dot B (r0.3) whose CENTRE is nearer the cursor.
+    // The cursor (4,0) is inside A but not on B. The old fat-tolerance nearest-centre
+    // rule grabbed B; now being ON a dot wins — precision at density.
+    const pos = new Float32Array([0, 0, 4.5, 0]);
+    const rad = new Float32Array([5, 0.3]);
+    expect(pickNearest(pos, 2, rad, 4, 0, 2)).toBe(0);
+  });
+
+  it('picks nothing on empty space beyond the small floor (no fat grab)', () => {
+    // Far from every dot: the tight fallback floor must not reach out and grab one.
+    expect(pickNearest(positions, 3, radii, 20, 20, 2)).toBe(-1);
+  });
 });
 
 describe('pickNearest3D (brain-mode screen-space pick)', () => {
@@ -56,5 +70,17 @@ describe('pickNearest3D (brain-mode screen-space pick)', () => {
   it('skips dots behind the camera (not visible)', () => {
     const hidden = { 0: { sx: 100, sy: 100, radiusPx: 20, depth: 5, visible: false } } as Record<number, Projected>;
     expect(pickNearest3D(1, (i) => hidden[i] ?? null, 100, 100, 12)).toBe(-1);
+  });
+
+  it('picks the dot the cursor is ON, not a nearer-camera dot it only grazes', () => {
+    // The precision fix: a background dot A the cursor is genuinely inside, and a
+    // foreground dot B (nearer the camera) the cursor is NOT inside but within the min
+    // floor. The old front-most rule stole the pick for B; now contained A wins.
+    const dots: Record<number, Projected> = {
+      0: { sx: 100, sy: 100, radiusPx: 12, depth: 50, visible: true }, // A: cursor inside
+      1: { sx: 115, sy: 100, radiusPx: 3, depth: 5, visible: true }, // B: in front, not under cursor
+    };
+    const project = (i: number): Projected | null => dots[i] ?? null;
+    expect(pickNearest3D(2, project, 103, 100, 16)).toBe(0);
   });
 });

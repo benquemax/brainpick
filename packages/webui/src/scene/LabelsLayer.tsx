@@ -21,6 +21,7 @@ import { rgbToCss } from './colors';
 import { entityRenderId } from '../graph/entities';
 import { isBehindBrainCenter, projectLabelPointMat } from './labelProjection';
 import { labelBudget } from './semanticZoom';
+import { labelAdmits, labelCandidateOrder, LABEL_STICKY_MARGIN } from './labelHysteresis';
 import { morphedWorldOf, type GraphRuntime } from './runtime';
 import { BRAIN } from './tuning';
 
@@ -30,6 +31,9 @@ const OVERLAP_Y = 22;
 export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; container: HTMLDivElement }) {
   const size = useThree((s) => s.size);
   const pool = useRef<HTMLDivElement[]>([]);
+  /** Node indices whose label was PLACED last pass — the hysteresis memory that keeps a
+   * settled label from blinking as overlap winners / the far-side cull jitter. */
+  const shownLabels = useRef<Set<number>>(new Set());
   const frame = useRef(0);
   const v = useRef(new THREE.Vector3());
   // Scratch objects for the perspective (brain) projection path. `viewProj`,
@@ -105,7 +109,11 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
         if (i !== undefined) forced.push(i);
       }
     }
-    const candidates = [...forced, ...runtime.labelOrder];
+    // Hysteresis: settled labels (shown last pass) are placed before newcomers so the
+    // set stops churning, and forced/settled labels survive a little past the budget.
+    const shownPrev = shownLabels.current;
+    const candidates = labelCandidateOrder(forced, runtime.labelOrder, shownPrev);
+    const hardCap = budget + LABEL_STICKY_MARGIN;
 
     // TIME MACHINE: while travelling, a node's label rides with its presence —
     // hide labels for nodes not yet born (or already gone) at the scrub position,
@@ -119,14 +127,19 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
 
     const placed: Array<{ x: number; y: number }> = [];
     const seen = new Set<number>();
+    const shownNow = new Set<number>();
     let used = 0;
 
     for (const i of candidates) {
-      if (used >= budget) break;
+      if (used >= hardCap) break;
       if (seen.has(i)) continue;
       seen.add(i);
       if (traveling && !present(i)) continue;
       const isForced = forced.includes(i);
+      const sticky = shownPrev.has(i);
+      // Budget with hysteresis: a fresh label only within the budget; a forced/settled
+      // one up to a small margin past it, so nothing blinks at the exact boundary.
+      if (!labelAdmits({ used, budget, isForced, isSticky: sticky })) continue;
 
       let px: number;
       let py: number;
@@ -137,8 +150,10 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
         morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, t.world);
         // Far-side cull: a dot deep on the occluded back of the hologram gets no
         // label (but a hovered / selected node is always shown when it is in front
-        // of the camera). Depth-based, so the visible front + centre always labels.
-        if (!isForced && isBehindBrainCenter(t.world, camPos, BRAIN.labelBackMargin)) continue;
+        // of the camera). A settled label survives a little deeper (hysteresis) so a
+        // slow spin does not blink names at the hemisphere boundary.
+        const backMargin = BRAIN.labelBackMargin + (sticky ? BRAIN.labelBackHysteresis : 0);
+        if (!isForced && isBehindBrainCenter(t.world, camPos, backMargin)) continue;
         const p = projectLabelPointMat(t.world, viewProj, size.width, size.height, t.ndc);
         if (!p.onScreen) continue; // behind the camera (ndcZ ≥ 1) or off-viewport
         px = p.sx;
@@ -183,8 +198,11 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
       div.classList.toggle('focus', focus);
       div.classList.toggle('hl', hl);
       div.style.display = '';
+      shownNow.add(i);
       used += 1;
     }
+    // Remember what we placed — next frame keeps these before any newcomer (hysteresis).
+    shownLabels.current = shownNow;
     for (let i = used; i < pool.current.length; i++) {
       const div = pool.current[i];
       if (div) div.style.display = 'none';

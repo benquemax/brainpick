@@ -1,5 +1,14 @@
 """Search routing (spec/30 + spec/50): mode resolution, RRF fusion, honest degradation."""
-from brainpick.query.router import RRF_K, is_relational, resolve_mode, rrf_fuse, run_search
+from brainpick.query.keyword import title_search
+from brainpick.query.router import (
+    RRF_K,
+    TITLE_INJECT_CAP,
+    ensure_titles,
+    is_relational,
+    resolve_mode,
+    rrf_fuse,
+    run_search,
+)
 
 FRESH = {"t1": "fresh", "t2": "fresh", "t3": "off"}
 NO_T2 = {"t1": "fresh", "t2": "off", "t3": "off"}
@@ -186,3 +195,51 @@ def test_limit_caps_the_fused_set():
     body = run_search(RECORDS, FRESH, "aurinko kuu maa", mode="auto", limit=2,
                       semantic_fn=semantic_stub(["kuu.md", "maa.md", "aurinko.md"]))
     assert len(body["hits"]) <= 2
+
+
+# -- title-match guarantee (a word that IS an article title always surfaces) ----------
+
+
+def test_title_search_names_the_page():
+    # An exact title resolves to its page…
+    assert [h["path"] for h in title_search(RECORDS, "aurinko", 8)] == ["aurinko.md"]
+    # …a plural/inflection reaches its stem via the bounded prefix rule…
+    recs = RECORDS + [record("agents.md", "Agent integrations", "how agents connect")]
+    assert "agents.md" in {h["path"] for h in title_search(recs, "agents", 8)}
+    # …but an unrelated word (and an over-long near-prefix) names nothing.
+    assert title_search(RECORDS, "supernova", 8) == []
+    assert title_search([record("a.md", "Authentication", "x")], "auth", 8) == []
+
+
+def test_ensure_titles_injects_only_when_missing_and_is_capped():
+    sem = [hit("kuu.md", source="semantic"), hit("maa.md", source="semantic")]
+    title = [hit("aurinko.md", source="title")]
+    injected = ensure_titles(sem, title, 4)
+    assert [h["path"] for h in injected] == ["aurinko.md", "kuu.md", "maa.md"]
+    assert injected[0]["source"] == "title"  # the named page, at the front
+    # Already present → a byte-for-byte no-op that keeps the retriever's own hit.
+    already = ensure_titles([hit("aurinko.md", source="semantic")] + sem, title, 4)
+    assert [h["path"] for h in already] == ["aurinko.md", "kuu.md", "maa.md"]
+    assert already[0]["source"] == "semantic"
+    # A common word can't flood: injection is capped.
+    many = [hit(f"t{i}.md", source="title") for i in range(6)]
+    assert len(ensure_titles([], many, 10)) == TITLE_INJECT_CAP
+
+
+def test_semantic_surfaces_a_missed_title_match():
+    # spec/50 bar: a word that IS an article title returns that article — even when the
+    # vector neighbourhood misses it (short/technical query), semantic surfaces it.
+    body = run_search(RECORDS, FRESH, "aurinko", mode="semantic",
+                      semantic_fn=semantic_stub(["kuu.md", "maa.md"]))
+    assert body["used_modes"] == ["semantic"]
+    assert body["degraded_from"] is None
+    assert body["hits"][0]["path"] == "aurinko.md"
+    assert body["hits"][0]["source"] == "title"
+
+
+def test_auto_never_drops_a_title_match():
+    # The named page is present under auto even at a tight limit where RRF alone,
+    # favouring docs in multiple rankings, would have buried it.
+    body = run_search(RECORDS, FRESH, "aurinko", mode="auto", limit=1,
+                      semantic_fn=semantic_stub(["kuu.md", "maa.md"]))
+    assert "aurinko.md" in {h["path"] for h in body["hits"]}

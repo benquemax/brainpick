@@ -22,6 +22,11 @@ declare global {
     __bp_runtime: {
       ids: string[];
       liveCount: number;
+      /** Emphasis wiring: incident edge indices / neighbour node indices per node. */
+      incident: number[][];
+      neighbors: number[][];
+      degrees: Float32Array;
+      radii: Float32Array;
       /** TIME MACHINE: animated scrub + travel amount, and the present-node count. */
       scrub: number;
       timeTravelAmt: number;
@@ -208,6 +213,53 @@ test('semantic on a T2-less bundle degrades honestly — the chip says so', asyn
   await page.keyboard.type('aurinko');
   await expect(page.locator('.search-hits li').first()).toBeVisible(); // keyword still answers
   await expect(page.locator('.degraded-chip')).toHaveText('semantic unavailable — keyword answered');
+});
+
+test('a title-word search returns that article in auto AND semantic (the title guarantee)', async ({ page }) => {
+  // The bar (spec/50): typing a word that IS an article's title returns that article in
+  // every mode — the vector neighbourhood alone misses a short title word, but the
+  // engines inject the named page (byte-parallel). "komeetta" is the title of komeetta.md.
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.keyboard.press('/');
+  await expect(page.locator('.search-box input')).toBeFocused();
+  await page.keyboard.type('komeetta');
+  await expect(hitTitled(page, 'Komeetta')).toBeVisible(); // auto (default) surfaces it
+
+  await page.getByRole('radio', { name: 'semantic' }).click(); // hands focus back to the input
+  await expect(hitTitled(page, 'Komeetta')).toBeVisible(); // semantic surfaces it too
+  await expect(page.locator('.degraded-chip')).toHaveCount(0); // T2 answered — nothing degraded
+});
+
+test('hovering a node lights that node and its edges — precise pick + neighbourhood', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+  await page.waitForFunction(() => {
+    const rt = window.__bp_runtime;
+    return rt.liveCount > 0 && rt.positions.length >= rt.liveCount * 2 && rt.activeCamera !== null;
+  });
+
+  // Hover aurinko.md at its projected cosmos position. The ortho camera is centred on
+  // the origin, so screen = centre + world·zoom (the same mapping the return-morph test
+  // relies on). The precise picker must select THAT dot, and its neighbourhood must be
+  // wired so its edges light and neighbours lift.
+  const res = await page.evaluate(() => {
+    const rt = window.__bp_runtime;
+    const st = window.__bp_store;
+    const i = rt.ids.indexOf('aurinko.md');
+    const z = rt.activeCamera!.zoom;
+    const px = Math.round(window.innerWidth / 2 + (rt.positions[i * 2] ?? 0) * z);
+    const py = Math.round(window.innerHeight / 2 - (rt.positions[i * 2 + 1] ?? 0) * z);
+    const canvas = document.querySelector('canvas')!;
+    canvas.dispatchEvent(
+      new PointerEvent('pointermove', { pointerId: 1, pointerType: 'mouse', bubbles: true, clientX: px, clientY: py, buttons: 0 }),
+    );
+    return { hovered: st.getState().hovered, incident: rt.incident[i].length, neighbors: rt.neighbors[i].length };
+  });
+  expect(res.hovered).toBe('aurinko.md'); // the dot genuinely under the cursor, not a neighbour
+  expect(res.incident).toBeGreaterThan(0); // its incident edges exist to light on hover
+  expect(res.neighbors).toBeGreaterThan(0); // its neighbourhood lifts
 });
 
 test('the orphan lens dims the cosmos around the orphans; the ghost toggle flips the layer', async ({ page }) => {

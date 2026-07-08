@@ -3,10 +3,13 @@
 import type { DocRecord, Graph } from "../compile/t1";
 import { cmpStr } from "../core/canonical";
 import { linkWalkSearch } from "../kg";
-import { search as keywordSearch, type SearchHit } from "./keyword";
+import { search as keywordSearch, titleSearch, type SearchHit } from "./keyword";
 
 export const KNOWN_MODES = ["auto", "keyword", "semantic", "graph"] as const;
 export const RRF_K = 60; // spec/30: reciprocal rank fusion constant
+// The strongest few title matches a mode may inject when its own retrieval missed the
+// named page — capped so a common word can't flood the answer with same-topic pages.
+export const TITLE_INJECT_CAP = 3;
 
 // auto may consult the entity graph, but only for relation-shaped queries — the
 // small deterministic heuristic that keeps "what connects to X" honest without
@@ -66,6 +69,18 @@ export function rrfFuse(rankings: Record<string, SearchHit[]>, limit: number): S
   return fused.slice(0, limit);
 }
 
+/** Guarantee the strongest TITLE matches are present: inject any the mode's own
+ * retrieval missed at the FRONT (you typed a page's name — that page should appear),
+ * capped so a common word can't flood the answer. A NO-OP when nothing is missing, so a
+ * result the retriever already found is returned unchanged. Mirrors router.ensure_titles. */
+export function ensureTitles(hits: SearchHit[], titleHits: SearchHit[], limit: number): SearchHit[] {
+  if (titleHits.length === 0) return hits.slice(0, limit);
+  const present = new Set(hits.map((h) => h.path));
+  const missing = titleHits.filter((h) => !present.has(h.path)).slice(0, TITLE_INJECT_CAP);
+  if (missing.length === 0) return hits.slice(0, limit);
+  return [...missing, ...hits].slice(0, limit);
+}
+
 /** The spec/50 response body: {"hits", "used_modes", "degraded_from"}.
  *
  * `semanticFn(query, limit)` runs the vector retriever; callers wire it to
@@ -106,11 +121,16 @@ export async function runSearch(
     }
   }
 
+  // A doc the query NAMES by title is surfaced in every retrieval mode — vectors miss
+  // short/technical title words, and RRF can bury a strong keyword title hit, so this
+  // guarantees the named page never goes missing (only injected when actually absent).
+  const titleHits = titleSearch(records, query, limit);
+
   if (resolved === "semantic") {
     if (semanticHits === null) {
       return body(keywordSearch(records, query, limit), ["keyword"], "semantic");
     }
-    return body(semanticHits, ["semantic"], null);
+    return body(ensureTitles(semanticHits, titleHits, limit), ["semantic"], null);
   }
 
   // auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document).
@@ -122,10 +142,10 @@ export async function runSearch(
 
   const degradedFrom = semanticHits === null ? "semantic" : null;
   if (Object.keys(rankings).length === 1) {
-    return body(keywordHits, ["keyword"], degradedFrom);
+    return body(ensureTitles(keywordHits, titleHits, limit), ["keyword"], degradedFrom);
   }
   const usedModes = ["keyword", "semantic", "graph"].filter((name) => name in rankings);
-  return body(rrfFuse(rankings, limit), usedModes, degradedFrom);
+  return body(ensureTitles(rrfFuse(rankings, limit), titleHits, limit), usedModes, degradedFrom);
 }
 
 function body(hits: SearchHit[], usedModes: string[], degradedFrom: string | null): SearchBody {

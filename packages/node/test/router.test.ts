@@ -3,8 +3,16 @@
 import { expect, test } from "vitest";
 
 import type { DocRecord } from "../src/compile/t1";
-import type { HitSource, SearchHit } from "../src/query/keyword";
-import { isRelational, resolveMode, RRF_K, rrfFuse, runSearch } from "../src/query/router";
+import { titleSearch, type HitSource, type SearchHit } from "../src/query/keyword";
+import {
+  ensureTitles,
+  isRelational,
+  resolveMode,
+  RRF_K,
+  rrfFuse,
+  runSearch,
+  TITLE_INJECT_CAP,
+} from "../src/query/router";
 
 const FRESH = { t1: "fresh", t2: "fresh", t3: "off" };
 const NO_T2 = { t1: "fresh", t2: "off", t3: "off" };
@@ -206,4 +214,40 @@ test("limit caps the fused set", async () => {
     semanticStub(["kuu.md", "maa.md", "aurinko.md"]),
   );
   expect(body.hits.length).toBeLessThanOrEqual(2);
+});
+
+// -- title-match guarantee (a word that IS an article title always surfaces) ----------
+
+test("titleSearch names the page (exact + stem, precise)", () => {
+  expect(titleSearch(RECORDS, "aurinko", 8).map((h) => h.path)).toEqual(["aurinko.md"]);
+  const recs = [...RECORDS, record("agents.md", "Agent integrations", "how agents connect")];
+  expect(titleSearch(recs, "agents", 8).map((h) => h.path)).toContain("agents.md");
+  expect(titleSearch(RECORDS, "supernova", 8)).toEqual([]);
+  expect(titleSearch([record("a.md", "Authentication", "x")], "auth", 8)).toEqual([]);
+});
+
+test("ensureTitles injects only when missing and is capped", () => {
+  const sem = [hit("kuu.md", 0.9, null, "semantic"), hit("maa.md", 0.9, null, "semantic")];
+  const title = [hit("aurinko.md", 2.0, null, "title")];
+  const injected = ensureTitles(sem, title, 4);
+  expect(injected.map((h) => h.path)).toEqual(["aurinko.md", "kuu.md", "maa.md"]);
+  expect(injected[0]!.source).toBe("title"); // the named page, at the front
+  const already = ensureTitles([hit("aurinko.md", 0.9, null, "semantic"), ...sem], title, 4);
+  expect(already.map((h) => h.path)).toEqual(["aurinko.md", "kuu.md", "maa.md"]);
+  expect(already[0]!.source).toBe("semantic"); // no-op keeps the retriever's own hit
+  const many = Array.from({ length: 6 }, (_, i) => hit(`t${i}.md`, 1.0, null, "title"));
+  expect(ensureTitles([], many, 10)).toHaveLength(TITLE_INJECT_CAP);
+});
+
+test("semantic surfaces a missed title match", async () => {
+  const body = await runSearch(RECORDS, FRESH, "aurinko", "semantic", 8, semanticStub(["kuu.md", "maa.md"]));
+  expect(body.used_modes).toEqual(["semantic"]);
+  expect(body.degraded_from).toBeNull();
+  expect(body.hits[0]!.path).toBe("aurinko.md");
+  expect(body.hits[0]!.source).toBe("title");
+});
+
+test("auto never drops a title match", async () => {
+  const body = await runSearch(RECORDS, FRESH, "aurinko", "auto", 1, semanticStub(["kuu.md", "maa.md"]));
+  expect(body.hits.map((h) => h.path)).toContain("aurinko.md");
 });

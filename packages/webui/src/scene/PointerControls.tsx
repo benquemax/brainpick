@@ -20,8 +20,13 @@ import { BRAIN } from './tuning';
 
 const CLICK_SLOP_PX = 6;
 const CLICK_MAX_MS = 500;
-/** Minimum tap radius in brain mode, so small far dots stay tappable. */
+/** Minimum tap radius in brain mode, so small far dots stay tappable. Only a FALLBACK
+ * floor now — a dot the cursor is genuinely inside always wins first (pick.ts). */
 const BRAIN_MIN_PICK_PX = 16;
+/** Cosmos fallback floor in SCREEN pixels (÷ zoom → world), consulted only when the
+ * cursor is inside no dot. Tight (was an effective ~14 world units) so hovering a gap
+ * no longer grabs a wrong neighbour — you must be roughly ON the dot. */
+const COSMOS_MIN_PICK_PX = 8;
 
 export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
   const gl = useThree((s) => s.gl);
@@ -46,7 +51,7 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
       v.set(nx, ny, 0).unproject(camera);
       const zoom = (camera as THREE.OrthographicCamera).zoom || 1;
-      return pickNearest(runtime.positions, runtime.liveCount, runtime.radii, v.x, v.y, 14 / zoom);
+      return pickNearest(runtime.positions, runtime.liveCount, runtime.radii, v.x, v.y, COSMOS_MIN_PICK_PX / zoom);
     };
 
     // --- BRAIN: project each morphed node to the screen; nearest dot wins. ---

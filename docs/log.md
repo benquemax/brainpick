@@ -2,6 +2,7 @@
 
 ## 2026-07-08
 
+- Polished: precise hover picking, connections light up on hover, calmer idle glow, steadier labels, and hubs sized by how connected they are.
 - Added: architecture decision records — the founding decisions, one interlinked ADR per call, closing the reference volume layer.
 - Added: the reference volume layer — CLI, config, spec, MCP and henxels reference pages, richly interlinked (the wiki now stresses the UI at scale).
 - Added: the UI renders agent presentations — brain_show spotlights nodes, flies the camera, and captions them live.

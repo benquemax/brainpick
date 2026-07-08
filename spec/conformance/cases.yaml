@@ -63,6 +63,20 @@ cases:
     # aurinko.md fourth instead).
     expect_paths: [kuu.md, planeetat.md, maa.md, yksinainen.md]
 
+  - id: search-semantic-title-komeetta
+    class: query
+    bundle: kotiaurinko
+    query: "komeetta"
+    mode: semantic
+    embedder: mock
+    limit: 4
+    # Reviewed: "komeetta" IS the title of komeetta.md, yet the mock vector
+    # neighbourhood (maa/aurinko/yksinainen/kuu) MISSES it — a real short-title miss.
+    # The title-match guarantee injects the named page so typing an article's name
+    # always returns it, in semantic too; kuu.md (the vector tail's 4th) drops at the
+    # limit. A pure-vector engine returns the neighbourhood without komeetta and fails.
+    expect_paths: [komeetta.md, maa.md, aurinko.md, yksinainen.md]
+
   - id: search-auto-aurinko-fused
     class: query
     bundle: kotiaurinko

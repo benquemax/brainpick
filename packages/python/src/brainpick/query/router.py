@@ -5,9 +5,13 @@ from __future__ import annotations
 from typing import Callable
 
 from brainpick.query.keyword import search as keyword_search
+from brainpick.query.keyword import title_search
 
 KNOWN_MODES = ("auto", "keyword", "semantic", "graph")
 RRF_K = 60  # spec/30: reciprocal rank fusion constant
+# The strongest few title matches a mode may inject when its own retrieval missed the
+# named page — capped so a common word can't flood the answer with same-topic pages.
+TITLE_INJECT_CAP = 3
 
 # auto may consult the entity graph, but only for relation-shaped queries — the
 # small deterministic heuristic that keeps "what connects to X" honest without
@@ -52,6 +56,20 @@ def rrf_fuse(rankings: dict[str, list[dict]], limit: int) -> list[dict]:
     return fused[:limit]
 
 
+def ensure_titles(hits: list[dict], title_hits: list[dict], limit: int) -> list[dict]:
+    """Guarantee the strongest TITLE matches are present: inject any the mode's own
+    retrieval missed at the FRONT (you typed a page's name — that page should appear),
+    capped so a common word can't flood the answer. A NO-OP when nothing is missing, so
+    a result the retriever already found is returned byte-for-byte unchanged."""
+    if not title_hits:
+        return hits[:limit]
+    present = {h["path"] for h in hits}
+    missing = [h for h in title_hits if h["path"] not in present][:TITLE_INJECT_CAP]
+    if not missing:
+        return hits[:limit]
+    return (missing + hits)[:limit]
+
+
 def run_search(
     records: list[dict],
     tiers: dict,
@@ -92,10 +110,15 @@ def run_search(
         except Exception:
             semantic_hits = None  # degrade below; T2 trouble must never error a search
 
+    # A doc the query NAMES by title is surfaced in every retrieval mode — vectors miss
+    # short/technical title words, and RRF can bury a strong keyword title hit, so this
+    # guarantees the named page never goes missing (only injected when actually absent).
+    title_hits = title_search(records, query, limit)
+
     if resolved == "semantic":
         if semantic_hits is None:
             return _body(keyword_search(records, query, limit=limit), ["keyword"], "semantic")
-        return _body(semantic_hits, ["semantic"], None)
+        return _body(ensure_titles(semantic_hits, title_hits, limit), ["semantic"], None)
 
     # auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document).
     # The entity graph joins only for relation-shaped queries (spec/40).
@@ -108,9 +131,9 @@ def run_search(
 
     degraded_from = "semantic" if semantic_hits is None else None
     if len(rankings) == 1:  # keyword alone — the honest degradation is still "semantic"
-        return _body(keyword_hits, ["keyword"], degraded_from)
+        return _body(ensure_titles(keyword_hits, title_hits, limit), ["keyword"], degraded_from)
     used_modes = [mode for mode in ("keyword", "semantic", "graph") if mode in rankings]
-    return _body(rrf_fuse(rankings, limit), used_modes, degraded_from)
+    return _body(ensure_titles(rrf_fuse(rankings, limit), title_hits, limit), used_modes, degraded_from)
 
 
 def _body(hits: list[dict], used_modes: list[str], degraded_from: str | None) -> dict:

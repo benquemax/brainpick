@@ -19,6 +19,7 @@ import type { Vec3 } from './brainSDF';
 import { isEntityRenderId } from '../graph/entities';
 import { colorForId, entityColorForType } from './colors';
 import { buildGhostAnchors, type GhostAnchor } from './ghosts';
+import { buildAdjacency } from './adjacency';
 import { BRAIN, GHOST_GLOW } from './tuning';
 import { birthIndexOf, deathIndexOf, hasHistory, lastModIndexOf, type Timeline } from '../time/timeline';
 
@@ -87,9 +88,22 @@ export interface DyingNode {
 
 const DEATH_SECONDS = 0.8;
 
-/** Halo radius from degree — the core is ~30% of this (see the shader). */
+/**
+ * Halo radius from degree — the core is ~30% of this (see the shader). PRONOUNCED
+ * by design (2026-07-08): a hub must read as REMARKABLY bigger than a leaf so the
+ * graph conveys its hub structure at a glance. The old `4.6 + 3.1·√min(d,48)` capped
+ * at 19 flattened everything past degree 21 into one size — on the 114-node brain
+ * that made the deg-111 index and a deg-9 leaf near-indistinguishable.
+ *
+ * The curve now: a small leaf base, a super-linear-ish `d^0.62` growth (steeper than
+ * √), the degree clamped at 60 so a pathological super-hub saturates instead of
+ * blowing out, and a higher cap. On the docs brain this lands leaf(deg1) ≈ 5.2,
+ * median(deg9) ≈ 10.5, hub(deg30) ≈ 17.9, big hub(deg54) ≈ 24, super-hub ≈ 25 —
+ * a clear, legible size gradient (~5× leaf→hub).
+ */
 export function radiusForDegree(degree: number): number {
-  return Math.min(19, 4.6 + 3.1 * Math.sqrt(Math.min(degree, 48)));
+  const d = Math.max(0, Math.min(degree, 60));
+  return Math.min(27, 3.4 + 1.85 * Math.pow(d, 0.62));
 }
 
 export class GraphRuntime {
@@ -130,6 +144,14 @@ export class GraphRuntime {
   ghostAnchors: GhostAnchor[] = [];
   /** Node indices sorted by degree descending (label priority). */
   labelOrder: number[] = [];
+  /**
+   * Undirected adjacency over the rendered edges (scene/adjacency), rebuilt with the
+   * graph: `incident[i]` are the edge indices touching node i, `neighbors[i]` its
+   * adjacent node indices. Hover/selection reads these to light a node's connections
+   * and lift its neighbourhood in O(degree) per frame.
+   */
+  neighbors: number[][] = [];
+  incident: number[][] = [];
   dying: DyingNode[] = [];
 
   /** GPU-budget summary for the current render (HUD reads the same via store). */
@@ -470,6 +492,9 @@ export class GraphRuntime {
     this.edgeWeights = Float32Array.from(weights);
     this.edgeKinds = Uint8Array.from(kinds);
     this.edgeCount = links.length;
+    const adjacency = buildAdjacency(this.edgePairs, this.edgeCount, n);
+    this.neighbors = adjacency.neighbors;
+    this.incident = adjacency.incident;
     this.ghostAnchors = buildGhostAnchors(state.ghosts, index, GHOST_GLOW.phantomDistance);
     this.labelOrder = ids
       .map((_, i) => i)

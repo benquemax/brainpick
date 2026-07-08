@@ -66,3 +66,51 @@ def _snippet(text: str, query_terms: list[str]) -> str | None:
         return None
     start = max(0, first - 60)
     return " ".join(text[start : start + SNIPPET_WINDOW].split())
+
+
+def _covers(query_token: str, title_token: str) -> bool:
+    """Does a TITLE token account for a query token? Exact, or a short prefix-stem so a
+    simple inflection reaches its stem ('agents'→'agent', 'connects'→'connect') without
+    stemming machinery — bounded to a ±2 length prefix so it never over-fires (e.g.
+    'auth' does NOT swallow 'authentication')."""
+    if query_token == title_token:
+        return True
+    if len(query_token) >= 4 and len(title_token) >= 4 and abs(len(query_token) - len(title_token)) <= 2:
+        return query_token.startswith(title_token) or title_token.startswith(query_token)
+    return False
+
+
+def title_search(records: list[dict], query: str, limit: int = 8) -> list[dict]:
+    """Docs whose TITLE the query names — a deterministic T1 navigational signal so
+    typing an article's name always finds that article (in every mode). A doc qualifies
+    only when EVERY query token is covered by some title token (exact or short
+    prefix-stem), so 'cli'→'CLI reference' and 'agents'→'Agent integrations' match while
+    an unrelated word does not. Ranked exact-title first, then the tightest (fewest
+    extra title tokens), then path — deterministic across engines."""
+    q_tokens = tokenize(query)
+    if not q_tokens:
+        return []
+    q_unique = list(dict.fromkeys(q_tokens))
+    scored: list[tuple[int, int, dict]] = []
+    for record in records:
+        if record["reserved"]:
+            continue
+        t_tokens = tokenize(record["title"])
+        if not t_tokens:
+            continue
+        if not all(any(_covers(q, t) for t in t_tokens) for q in q_unique):
+            continue
+        exact = 1 if t_tokens == q_tokens else 0
+        scored.append((exact, len(t_tokens), record))
+    scored.sort(key=lambda s: (-s[0], s[1], s[2]["path"]))
+    hits: list[dict] = []
+    for exact, _ntok, record in scored[:limit]:
+        hits.append({
+            "description": record["description"],
+            "path": record["path"],
+            "score": round(1.0 + exact, 6),  # 2.0 for an exact title, 1.0 otherwise
+            "snippet": None,
+            "source": "title",
+            "title": record["title"],
+        })
+    return hits

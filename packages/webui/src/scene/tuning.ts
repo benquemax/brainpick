@@ -15,30 +15,66 @@ export function glslFloat(value: number): string {
 }
 
 export const NODE_GLOW = {
-  /** Brightness of the sprite's hard core (was 1.5). */
-  coreIntensity: 1.35,
+  /** Brightness of the sprite's hard core (was 1.5, then 1.35 — calmer idle field). */
+  coreIntensity: 1.2,
   /** Radial falloff exponent — higher = tighter halo (was 4.5). */
   haloFalloff: 7.0,
-  /** Halo amplitude added on top of the core (was 0.85). */
-  haloStrength: 0.5,
+  /** Halo amplitude added on top of the core (was 0.85, then 0.5). Lowered again so
+   * the UNSELECTED field reads calm — the 2026-07-08 emphasis pass: dim idle, bright
+   * hover. The hovered node and its neighbourhood provide the light now. */
+  haloStrength: 0.32,
   /** Extra brightness while a node pulses with recent activity (was 1.2). */
   pulseBoost: 0.8,
-  /** Extra brightness for highlighted/selected nodes (was 0.9). */
-  highlightBoost: 0.7,
-  /** Scale bump while pulsing / highlighted (were 0.30 / 0.30). */
+  /** Extra brightness at the emphasis peak (iHighlight = 1). Raised (was 0.7) so the
+   * HOVERED / selected node is clearly MORE lit than the calmer idle field. */
+  highlightBoost: 0.95,
+  /** Scale bump while pulsing / highlighted (pulse was 0.30; highlight was 0.30→0.24). */
   pulseScale: 0.22,
-  highlightScale: 0.24,
+  /** Scale bump at the emphasis peak — the hovered/selected node is a touch bigger. */
+  highlightScale: 0.3,
   /** Brightness factor for reserved docs (index/log) — kept muted. */
   reservedFactor: 0.5,
   /** Brightness floor for non-highlighted nodes while dimOthers is on. */
   dimFloor: 0.14,
+  /** HUB BRIGHTNESS (spec: degree conveys relevance). A high-degree hub reads a
+   * touch brighter than a leaf, reinforcing the size cue. Ramps by the node's own
+   * world radius (which radiusForDegree drives) between these two thresholds. */
+  hubBright: 0.22,
+  hubRadiusLo: 12.0,
+  hubRadiusHi: 24.0,
+} as const;
+
+/**
+ * Per-node EMPHASIS levels (0..1) the sprite shader turns into extra glow + scale.
+ * Selection/hover/search win over a neighbour lift; a plain idle node is 0. Kept
+ * here beside the glow amplitudes so one taste pass tunes the whole feel; the pure
+ * derivation (scene/emphasis.ts) is unit-tested against these.
+ */
+export const EMPHASIS = {
+  /** The clicked/open node — the brightest, biggest. */
+  selection: 1.0,
+  /** The hovered node — clearly lit + a touch bigger, so the cursor's target pops. */
+  hovered: 0.9,
+  /** A search/lens hit. */
+  search: 0.7,
+  /** A NEIGHBOUR of the focused node (hover/selection) — a gentle lift so the local
+   * neighbourhood reads instantly without shouting over the focus itself. */
+  neighbor: 0.34,
 } as const;
 
 export const EDGE_GLOW = {
-  /** Base additive opacity of link lines (was 0.3). */
-  opacity: 0.24,
+  /** Base additive opacity of link lines (was 0.3, then 0.24). A calm idle web. */
+  opacity: 0.2,
   /** Opacity factor while dimOthers is on. */
   dimFactor: 0.22,
+  /** HOVER NEIGHBOURHOOD (the important one): the focused node's incident edges jump
+   * far above the idle web so you can instantly SEE what a node connects to. A big
+   * multiplier on the base opacity (0.2 → ~1.0, a bright lit line)… */
+  hoverBoost: 4.5,
+  /** …plus an extra additive pop so the lit connections truly read as lit (and, under
+   * additive blending, bloom a little WIDER — the closest we get to "thicker" on GL
+   * lines, where gl.lineWidth is unreliable). */
+  hoverGlow: 0.5,
 } as const;
 
 /**
@@ -176,6 +212,10 @@ export const BRAIN = {
    * the visible front + central cloud — most of a volumetric brain — always labels.
    */
   labelBackMargin: 0.2,
+  /** Label hysteresis (2026-07-08): a label ALREADY shown survives the far-side cull a
+   * little deeper than this before it drops, so a slowly spinning brain does not blink
+   * its names on/off at the exact hemisphere boundary. */
+  labelBackHysteresis: 0.14,
 } as const;
 
 /**

@@ -10,6 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
+import { focusIndex } from './emphasis';
 import { BRAIN, DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
@@ -18,12 +19,14 @@ const VERTEX = /* glsl */ `
   attribute float aStagger;
   attribute float aEnd;    // 0 at the source vertex, 1 at the target
   attribute float aFire;   // scene-time this edge last fired (−1 = never)
+  attribute float aHighlight; // 1 when this edge is incident to the focused (hover/selected) node
   attribute float aBirthIdx; // TIME MACHINE: commit index the edge forms at (max of endpoints)
   attribute float aDeathIdx; // commit index it breaks at (min of endpoints)
   uniform float uMorph;
   varying vec3 vColor;
   varying float vT;
   varying float vFire;
+  varying float vHi;
   varying float vBirthIdx;
   varying float vDeathIdx;
 
@@ -31,6 +34,7 @@ const VERTEX = /* glsl */ `
     vColor = aColor;
     vT = aEnd;
     vFire = aFire;
+    vHi = aHighlight;
     vBirthIdx = aBirthIdx;
     vDeathIdx = aDeathIdx;
     float span = ${f(BRAIN.staggerSpan)};
@@ -51,13 +55,19 @@ const FRAGMENT = /* glsl */ `
   varying vec3 vColor;
   varying float vT;
   varying float vFire;
+  varying float vHi;
   varying float vBirthIdx;
   varying float vDeathIdx;
 
   void main() {
     float k = uOpacity * mix(1.0, ${f(EDGE_GLOW.dimFactor)}, uDim);
+    // HOVER NEIGHBOURHOOD: the focused node's incident edges jump far above the calm
+    // idle web (a big multiplier), plus an additive pop, so you SEE what it connects to.
+    k *= 1.0 + ${f(EDGE_GLOW.hoverBoost)} * vHi;
     vec3 col = vColor * k;
     float a = k;
+    col += vColor * vHi * ${f(EDGE_GLOW.hoverGlow)};
+    a += vHi * ${f(EDGE_GLOW.hoverGlow)};
     // Firing pulse — brain mode only. A glow travels source→target after the
     // edge's endpoints saw recent activity, fading over its lifetime.
     if (uMorph > 0.01 && vFire >= 0.0) {
@@ -101,6 +111,8 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   const stagger = new Float32Array(vertCount);
   const ends = new Float32Array(vertCount);
   const fire = new Float32Array(vertCount).fill(-1);
+  // Per-vertex hover incidence (0/1), streamed in each frame the focus node changes.
+  const highlight = new Float32Array(vertCount);
   // TIME MACHINE per-edge indices: the edge is born when its LATER endpoint is
   // (max) and dies when its EARLIER-dying endpoint does (min).
   const birthIdx = new Float32Array(vertCount).fill(-1);
@@ -158,6 +170,9 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   geo.setAttribute('aStagger', new THREE.Float32BufferAttribute(stagger, 1));
   geo.setAttribute('aEnd', new THREE.Float32BufferAttribute(ends, 1));
   geo.setAttribute('aFire', new THREE.Float32BufferAttribute(fire, 1));
+  const hiAttr = new THREE.Float32BufferAttribute(highlight, 1);
+  hiAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('aHighlight', hiAttr);
   geo.setAttribute('aBirthIdx', new THREE.Float32BufferAttribute(birthIdx, 1));
   geo.setAttribute('aDeathIdx', new THREE.Float32BufferAttribute(deathIdx, 1));
   return geo;
@@ -185,9 +200,10 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
       }),
     [],
   );
-  const tracked = useRef<{ version: number; geometry: THREE.BufferGeometry | null }>({
+  const tracked = useRef<{ version: number; geometry: THREE.BufferGeometry | null; focus: number }>({
     version: -1,
     geometry: null,
+    focus: -2,
   });
 
   useEffect(() => {
@@ -207,10 +223,32 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
       line.geometry = geo;
       tracked.current.geometry = geo;
       tracked.current.version = runtime.version;
+      tracked.current.focus = -2; // force the hover-incidence buffer to recompute
       old?.dispose();
     }
     const geo = tracked.current.geometry;
     if (!geo) return;
+
+    // Light the FOCUS node's incident edges (hover, or the selection when nothing is
+    // hovered). Only rewritten when the focus changes — a hover is not per-frame work.
+    const st = runtime.store.getState();
+    const hoveredIdx = st.hovered !== null ? runtime.index.get(st.hovered) ?? -1 : -1;
+    const selectionIdx = st.selection !== null ? runtime.index.get(st.selection) ?? -1 : -1;
+    const focus = focusIndex(hoveredIdx, selectionIdx);
+    if (tracked.current.focus !== focus) {
+      tracked.current.focus = focus;
+      const hi = geo.getAttribute('aHighlight') as THREE.BufferAttribute;
+      const hiArr = hi.array as Float32Array;
+      hiArr.fill(0);
+      if (focus >= 0) {
+        const inc = runtime.incident[focus];
+        if (inc) for (const e of inc) {
+          hiArr[e * 2] = 1;
+          hiArr[e * 2 + 1] = 1;
+        }
+      }
+      hi.needsUpdate = true;
+    }
 
     // Stream the latest cosmos endpoints (the brain targets are static per build).
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;

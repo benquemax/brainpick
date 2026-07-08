@@ -10,6 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
+import { focusIndex, nodeHighlightLevel } from './emphasis';
 import { BRAIN, DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
@@ -73,6 +74,9 @@ const VERTEX = /* glsl */ `
       * (1.0 + ${f(NODE_GLOW.pulseScale)} * pulse + ${f(NODE_GLOW.highlightScale)} * highlight);
 
     float bright = 1.0 + ${f(NODE_GLOW.pulseBoost)} * pulse + ${f(NODE_GLOW.highlightBoost)} * highlight;
+    // HUB BRIGHTNESS: a high-degree hub (bigger iRadius) reads a touch brighter, so
+    // degree = relevance is legible in light as well as size (calm leaves, lit hubs).
+    bright *= 1.0 + ${f(NODE_GLOW.hubBright)} * smoothstep(${f(NODE_GLOW.hubRadiusLo)}, ${f(NODE_GLOW.hubRadiusHi)}, iRadius);
     bright *= mix(1.0, ${f(NODE_GLOW.reservedFactor)}, reserved);
     bright *= mix(1.0, ${f(NODE_GLOW.dimFloor)}, uDim * (1.0 - highlight));
 
@@ -303,17 +307,27 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     }
     cosmos.needsUpdate = true;
 
-    // Refresh highlight values only when selection/search state changed.
+    // Refresh highlight values only when selection/search state changed. The hovered
+    // (or, when nothing is hovered, the selected) node is the FOCUS: its neighbours
+    // lift so the local neighbourhood reads instantly on hover (scene/emphasis).
     const s = runtime.store.getState();
     const stamp = tracked.current.stamp;
     if (!stamp || stamp.selection !== s.selection || stamp.hovered !== s.hovered || stamp.highlight !== s.highlight) {
       tracked.current.stamp = { selection: s.selection, hovered: s.hovered, highlight: s.highlight };
       const hl = geo.getAttribute('iHighlight') as THREE.InstancedBufferAttribute;
       const hlArr = hl.array as Float32Array;
+      const hoveredIdx = s.hovered !== null ? runtime.index.get(s.hovered) ?? -1 : -1;
+      const selectionIdx = s.selection !== null ? runtime.index.get(s.selection) ?? -1 : -1;
+      const focus = focusIndex(hoveredIdx, selectionIdx);
+      const neighborSet = focus >= 0 ? new Set(runtime.neighbors[focus] ?? []) : null;
       for (let i = 0; i < runtime.liveCount; i++) {
         const id = runtime.ids[i] as string;
-        hlArr[i] =
-          s.selection === id ? 1 : s.highlight.has(id) ? 0.85 : s.hovered === id ? 0.55 : 0;
+        hlArr[i] = nodeHighlightLevel({
+          isSelection: s.selection === id,
+          isHovered: s.hovered === id,
+          inSearch: s.highlight.has(id),
+          isNeighbor: neighborSet !== null && neighborSet.has(i),
+        });
       }
       hlArr.fill(0, runtime.liveCount);
       hl.needsUpdate = true;
