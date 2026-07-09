@@ -61,8 +61,8 @@ class UiConfig:
 
 @dataclass
 class ModulesConfig:
-    vectors: str = "auto"  # auto | on | off — T2 (spec/30)
-    graph: str = "off"     # auto | on | off — T3 (M3)
+    vectors: str = "auto"        # auto | on | off — T2 (spec/30)
+    graph: str = "algorithmic"   # algorithmic (default) | lightrag | auto | off — T3 (spec/40)
     ui: bool = True
 
 
@@ -205,6 +205,21 @@ def _read_layers(root: Path, defaults: Config) -> dict:
         _warn_unknown(path.name, layer, defaults)
         data = _deep_merge(data, layer)
     return data
+
+
+def resolve_graph_backend(config: Config) -> str:
+    """`[modules] graph` → the backend T3 will use: "algorithmic" | "lightrag" |
+    "off" (spec/80). "auto" resolves to lightrag when [models.extraction] is
+    configured, else algorithmic; the legacy "on" behaves like auto; an unknown
+    value falls back to the algorithmic default (forgiving, like unknown keys)."""
+    mode = str(config.modules.graph or "").strip().lower()
+    if mode == "off":
+        return "off"
+    if mode == "lightrag":
+        return "lightrag"
+    if mode in ("auto", "on"):
+        return "lightrag" if config.models.extraction.kind else "algorithmic"
+    return "algorithmic"
 
 
 def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Config:

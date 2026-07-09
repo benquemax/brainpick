@@ -1,5 +1,9 @@
 # Update log
 
+## 2026-07-10
+
+- Changed: the knowledge graph is now derived algorithmically by default — ghosts and tags become entities, no model needed; LLM extraction stays opt-in.
+
 ## 2026-07-08
 
 - Polished: precise hover picking, connections light up on hover, calmer idle glow, steadier labels, and hubs sized by how connected they are.

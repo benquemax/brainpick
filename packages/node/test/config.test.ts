@@ -96,7 +96,7 @@ test("bundle root indirection", () => {
 test("modules and embedding defaults", () => {
   const { cfg } = load(tempDir());
   expect(cfg.modules.vectors).toBe("auto");
-  expect(cfg.modules.graph).toBe("off");
+  expect(cfg.modules.graph).toBe("algorithmic");
   expect(cfg.modules.ui).toBe(true);
   expect(cfg.models.embedding.kind).toBe("");
   expect(cfg.models.embedding.endpoint).toBe("");

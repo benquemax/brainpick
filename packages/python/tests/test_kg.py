@@ -77,11 +77,17 @@ def test_load_kg_absent_export_is_unavailable(tmp_path):
     assert load_kg(tmp_path / ".brainpick") is None  # no t3/ at all → None, not an error
 
 
-def test_load_kg_empty_entities_is_unavailable(tmp_path):
+def test_load_kg_empty_export_loads_as_an_empty_graph(tmp_path):
+    """An empty export is valid and fresh (spec/40): a fully-written, untagged
+    wiki has zero entities — the consumer serves an empty layer, never a 404."""
     bp = tmp_path / ".brainpick"
     (bp / "t3").mkdir(parents=True)
     (bp / "t3" / "entities.jsonl").write_text("", encoding="utf-8")
-    assert load_kg(bp) is None
+    kg = load_kg(bp)
+    assert kg is not None
+    assert kg.entities == {}
+    assert kg.entity_graph() == {"nodes": [], "edges": []}
+    assert kg.neighbor_entities("a.md", 2) == ([], [])
 
 
 def test_load_kg_tolerates_missing_relations_and_meta(tmp_path):

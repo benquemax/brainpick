@@ -28,11 +28,20 @@ test("load compiles and holds artifacts", async () => {
   expect(state.seq).toBe(1);
   expect(state.graph.stats.docs).toBe(10);
   expect(state.records.some((r) => r.path === "kuu.md")).toBe(true);
-  expect(state.manifest["tiers"]).toEqual({ t1: "fresh", t2: "off", t3: "off" });
+  expect(state.manifest["tiers"]).toEqual({ t1: "fresh", t2: "off", t3: "fresh" });
 });
 
-test("kg absent by default", async () => {
+test("kg derived by default", async () => {
+  const root = copyBundle(); // zero config — the algorithmic backend derived T3
+  const state = await makeState(root);
+  expect(state.kg).not.toBeNull();
+  expect(state.graphFn()).not.toBeNull();
+  expect((state.manifest["tiers"] as Record<string, string>)["t3"]).toBe("fresh");
+});
+
+test("kg absent when graph is off", async () => {
   const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "off"\n', "utf8");
   const state = await makeState(root);
   expect(state.kg).toBeNull(); // no T3 export → unavailable, and graphFn signals it
   expect(state.graphFn()).toBeNull();

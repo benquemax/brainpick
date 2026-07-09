@@ -173,7 +173,7 @@ test('search overlay: "/" opens, auto mode fuses, clicking a hit opens the doc p
   await expect(page.locator('.doc-panel .doc-body')).toContainText('The sun sits at the center');
 });
 
-test('search modes: the switch is visible, keyboard-reachable, graph parked behind T3', async ({ page }) => {
+test('search modes: the switch is visible, keyboard-reachable, graph enabled by the algorithmic T3 default', async ({ page }) => {
   await page.goto(baseURL() + '/');
   await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
 
@@ -183,9 +183,20 @@ test('search modes: the switch is visible, keyboard-reachable, graph parked behi
   await expect(group.getByRole('radio', { name: 'auto' })).toHaveAttribute('aria-checked', 'true');
   await expect(group.getByRole('radio', { name: 'keyword' })).toBeVisible();
   await expect(group.getByRole('radio', { name: 'semantic' })).toBeVisible();
+  // graph = "algorithmic" (the default) derives a T3 export on every compile —
+  // the mode is enabled out of the box, no LLM required.
   const graph = group.getByRole('radio', { name: /graph/ });
+  await expect(graph).toBeEnabled();
+});
+
+test('search modes: graph stays disabled with [modules] graph = "off"', async ({ page }) => {
+  await page.goto(t2lessURL() + '/'); // configured graph = "off" — no T3 export exists
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  await page.locator('.search-fab').click();
+  const graph = page.getByRole('radiogroup', { name: 'search mode' }).getByRole('radio', { name: /graph/ });
   await expect(graph).toBeDisabled();
-  await expect(graph).toContainText('T3 — coming');
+  await expect(graph).toContainText('T3 off');
 });
 
 test('semantic mode answers end-to-end from the real T2 vectors', async ({ page }) => {

@@ -110,9 +110,27 @@ export function posixNormpath(path: string): string {
 }
 
 /** Python `posixpath.basename(p).rsplit(".", 1)[0]`. */
-function fileStem(name: string): string {
+export function fileStem(name: string): string {
   const i = name.lastIndexOf(".");
   return i === -1 ? name : name.slice(0, i);
+}
+
+/** (stems, case-insensitive stems) for wikilink resolution — shared by scan and
+ * the algorithmic T3 derivation, so both resolve identically (spec/40). */
+export function buildStemMaps(paths: readonly string[]): [Map<string, string[]>, Map<string, string[]>] {
+  const stems = new Map<string, string[]>();
+  const stemsCi = new Map<string, string[]>();
+  for (const p of paths) {
+    const stem = fileStem(posixBasename(p));
+    let list = stems.get(stem);
+    if (!list) stems.set(stem, (list = []));
+    list.push(p);
+    const lower = stem.toLowerCase();
+    let ciList = stemsCi.get(lower);
+    if (!ciList) stemsCi.set(lower, (ciList = []));
+    ciList.push(p);
+  }
+  return [stems, stemsCi];
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +204,7 @@ export function fnmatchToRegExp(pattern: string): RegExp {
 
 // ---------------------------------------------------------------------------
 
-function resolve(
+export function resolveLink(
   source: string,
   raw: RawLink,
   fileSet: Set<string>,
@@ -225,19 +243,7 @@ export function scan(
 ): Document[] {
   const paths = collectFiles(root, include, exclude);
   const fileSet = new Set(paths);
-
-  const stems = new Map<string, string[]>();
-  const stemsCi = new Map<string, string[]>();
-  for (const p of paths) {
-    const stem = fileStem(posixBasename(p));
-    let list = stems.get(stem);
-    if (!list) stems.set(stem, (list = []));
-    list.push(p);
-    const lower = stem.toLowerCase();
-    let ciList = stemsCi.get(lower);
-    if (!ciList) stemsCi.set(lower, (ciList = []));
-    ciList.push(p);
-  }
+  const [stems, stemsCi] = buildStemMaps(paths);
 
   const docs: Document[] = [];
   for (const path of paths) {
@@ -249,7 +255,7 @@ export function scan(
     const links: ResolvedLink[] = [];
     const ghosts: Ghost[] = [];
     for (const raw of extractLinks(body)) {
-      const resolved = resolve(path, raw, fileSet, stems, stemsCi);
+      const resolved = resolveLink(path, raw, fileSet, stems, stemsCi);
       if (resolved === path) continue; // self-links are dropped
       if (resolved === null) ghosts.push({ target: raw.target });
       else links.push({ kind: raw.kind, target: resolved, text: raw.text });

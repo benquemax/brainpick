@@ -169,6 +169,22 @@ describe("conformance", () => {
         });
         break;
 
+      case "kg-algorithmic":
+        // The algorithmic T3 backend is byte-golden (spec/40): a default compile
+        // (graph = "algorithmic") derives the export deterministically from ghosts
+        // and tags — natively in THIS engine, no delegation — and must match the
+        // Python-regenerated golden byte for byte.
+        test(c.id, async () => {
+          const root = copyBundle(c.bundle);
+          await runCompile(root);
+          for (const artifact of c.artifacts!) {
+            const actual = readFileSync(join(root, artifact), "utf8");
+            const expected = readFileSync(join(EXPECTED, c.bundle, artifact), "utf8");
+            expect(actual, `${artifact} drifted from golden`).toBe(expected);
+          }
+        });
+        break;
+
       case "kg-query":
         // T3 consumer over the staged export — the normative reader only, never
         // an extractor (spec/40). Asserts the returned document SET.

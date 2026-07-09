@@ -115,7 +115,7 @@ def test_status(kotiaurinko):
     with TestClient(make_app(kotiaurinko)) as client:
         body = client.get("/api/status").json()
         assert body["seq"] == 1
-        assert body["tiers"] == {"t1": "fresh", "t2": "off", "t3": "off"}
+        assert body["tiers"] == {"t1": "fresh", "t2": "off", "t3": "fresh"}  # t3: algorithmic default
         assert body["docs"] == 10
         assert body["ghosts"] == 1
         assert body["orphans"] == 1
@@ -145,6 +145,17 @@ def test_graph_etag_roundtrip(kotiaurinko):
         assert first.json()["stats"]["docs"] == 10
         cached = client.get("/api/graph", headers={"If-None-Match": first.headers["etag"]})
         assert cached.status_code == 304
+        # the algorithmic default derives an entity layer on every compile — it serves
+        entities = client.get("/api/graph?layer=entities")
+        assert entities.status_code == 200
+        assert any(n["type"] == "ghost" for n in entities.json()["nodes"])
+
+
+def test_entity_layer_404_only_when_the_export_is_truly_absent(kotiaurinko):
+    # [modules] graph = "off" compiles no T3 export at all — only THEN does the
+    # entity layer 404 (an empty-but-present export serves empty instead, spec/40)
+    (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "off"\n', encoding="utf-8")
+    with TestClient(make_app(kotiaurinko)) as client:
         entities = client.get("/api/graph?layer=entities")
         assert entities.status_code == 404
         assert "error" in entities.json()
@@ -339,7 +350,8 @@ def test_t3_graph_mode_search(kotiaurinko):
 
 
 def test_graph_mode_degrades_without_t3(kotiaurinko):
-    with TestClient(make_app(kotiaurinko)) as client:  # no export staged
+    (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "off"\n', encoding="utf-8")
+    with TestClient(make_app(kotiaurinko)) as client:  # graph off — no export exists
         body = client.get("/api/search", params={"q": "aurinko", "mode": "graph"}).json()
         assert body["degraded_from"] == "graph"  # honest marker, keyword + T1 link-walk beneath
         assert "aurinko.md" in {h["path"] for h in body["hits"]}

@@ -447,9 +447,11 @@ export class ServeState {
   }
 
   /** The T3 entity-graph retriever (kg.graphSearch) over this bundle's export,
-   * shaped for runSearch's graphFn hook — null when T3 is absent. */
+   * shaped for runSearch's graphFn hook — null when T3 is absent OR empty (zero
+   * entities walk nowhere; the link-walk degrade answers better than a
+   * guaranteed-empty result). */
   graphFn(): GraphFn | null {
-    if (this.kg === null) return null;
+    if (this.kg === null || this.kg.entities.size === 0) return null;
     const kg = this.kg;
     const records = this.records;
     return (query: string, limit: number) => graphSearch(kg, records, query, limit);

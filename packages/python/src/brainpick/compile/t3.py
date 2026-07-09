@@ -1,16 +1,20 @@
-"""T3: the knowledge-graph tier (spec/40) — the EXTRACTOR side.
+"""T3: the knowledge-graph tier (spec/40) — the BACKEND side.
 
-The extractor is private and non-deterministic (an LLM writes it); the neutral
-export is the product. This module drives a `KGBackend` over the current chunks
-and NORMALIZES whatever it produced into the spec/40 layout:
-`t3/{entities.jsonl,relations.jsonl,kg-meta.json}`. Names become ids
-(`kg.normalize_entity_id` + `disambiguate_ids`), dangling relations drop,
-everything sorts canonically. It never raises — a failure leaves `tiers.t3`
-stale with an instruction, exactly like T2 (spec/00 degradation ladder).
+Backends are private; the neutral export is the product. Two kinds run here:
 
-Incremental by chunk (which stands in for doc path): only changed chunks are
-re-extracted; a deleted chunk, a changed extractor fingerprint, or `--full`
-forces a clean rebuild — so the export always matches a from-scratch run.
+- **algorithmic** (the default): the graph is DERIVED from the compiled T1
+  records — ghosts and tags (`kgadapt.algorithmic`). Pure and cheap, so every
+  pass rederives from scratch (no chunk state to trust: a tags-only edit moves
+  no chunk yet must move the graph) and its export is byte-golden.
+- **extractors** (lightrag, mock): an LLM writes the graph. This path drives a
+  `KGBackend` over the current chunks and NORMALIZES the neutral result into
+  the spec/40 layout (names become ids via `kg.normalize_entity_id` +
+  `disambiguate_ids`, dangling relations drop, everything sorts canonically),
+  incrementally by chunk: only changed chunks are re-extracted; a deleted
+  chunk, a changed backend fingerprint, or `--full` forces a clean rebuild.
+
+Either way it never raises — a failure leaves `tiers.t3` stale with an
+instruction, exactly like T2 (spec/00 degradation ladder).
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from brainpick import SPEC_VERSION
+from brainpick.config import resolve_graph_backend
 from brainpick.core.canonical import canonical_json, canonical_jsonl, sha256_hex
 from brainpick.core.fs import write_if_changed
 from brainpick.kg import disambiguate_ids, normalize_entity_id
@@ -47,15 +52,20 @@ def _lightrag_importable() -> bool:
 
 
 def t3_gate(config) -> tuple[bool, str | None]:
-    """(enabled, instruction) per [modules] graph. `mock` is a test hook that
-    never needs LightRAG; a real kind needs the [graph] extra importable. Off
+    """(enabled, instruction) per [modules] graph (spec/80 resolution). The
+    algorithmic default needs nothing; lightrag needs [models.extraction] plus
+    the [graph] extra (`mock` is a test hook that never needs LightRAG). Off
     yields the one enabling instruction (said once, like T2)."""
-    if config.modules.graph == "off":
+    backend = resolve_graph_backend(config)
+    if backend == "off":
         return False, None
+    if backend == "algorithmic":
+        return True, None  # pure derivation — no model, no endpoint, no extra
     if not config.models.extraction.kind:
         return False, (
-            "T3 graph off — no [models.extraction] in brainpick.toml; point it at a chat "
-            "model (e.g. a local qwen) in brainpick.local.toml to extract the entity graph"
+            'T3 graph off — [modules] graph = "lightrag" needs [models.extraction]; point it '
+            "at a chat model (e.g. a local qwen) in brainpick.local.toml, or drop the key to "
+            "derive the graph algorithmically"
         )
     if config.models.extraction.kind == "mock":
         return True, None
@@ -75,9 +85,17 @@ def _extractor_meta(config) -> dict:
     return {"kind": "lightrag", "model": ex.model or ""}
 
 
-def make_kg_backend(bp: Path, config, embedding_record: dict | None, fresh: bool):
-    """The [models.extraction] record → a backend. Injection point: tests
-    monkeypatch this to a counting fake (mirrors `make_embedder` in T2)."""
+def make_kg_backend(
+    bp: Path, config, embedding_record: dict | None, fresh: bool,
+    records: list[dict] | None = None, contributors: set[str] | None = None,
+):
+    """The resolved [modules] graph backend. Injection point: tests monkeypatch
+    this to a counting fake (mirrors `make_embedder` in T2). The algorithmic
+    backend derives from `records`; extractors ignore them and read chunks."""
+    if resolve_graph_backend(config) == "algorithmic":
+        from brainpick.kgadapt.algorithmic import AlgorithmicKGBackend
+
+        return AlgorithmicKGBackend(records or [], contributors)
     if config.models.extraction.kind == "mock":
         return MockKGBackend()
     from brainpick.kgadapt.lightrag_backend import LightRAGBackend
@@ -99,7 +117,9 @@ def run_t3_stage(
     full: bool = False,
     sample: int | None = None,
 ) -> T3Result:
-    """Extract → normalize → write the neutral export under <bp>/t3. Never raises."""
+    """Derive or extract → write the neutral export under <bp>/t3. Never raises."""
+    if resolve_graph_backend(config) == "algorithmic":
+        return _run_algorithmic_stage(bp, records, config, sample=sample)
     valid_docs = {r["path"] for r in records if not r["reserved"]}
     enriched = _enrich_chunks(chunks, records)
     if sample is not None:
@@ -149,6 +169,45 @@ def run_t3_stage(
         summary = {"docs": len({c["doc"] for c in enriched}),
                    "entities": len(entities), "relations": len(relations)}
     return T3Result("fresh", changed=changed_files, summary=summary)
+
+
+def _run_algorithmic_stage(bp: Path, records: list[dict], config, sample: int | None = None) -> T3Result:
+    """The default backend's pass: rederive the whole graph from the records —
+    always. The chunk-state fast path would lie here (chunks hash body text, so a
+    tags-only edit moves no chunk yet must move the graph) and the derivation is
+    cheap enough that a full pass IS the incremental strategy. `write_if_changed`
+    keeps no-op compiles byte-stable; the state file records the backend flip so
+    a later extractor pass knows to rebuild from scratch."""
+    t3 = bp / "t3"
+    contributors: set[str] | None = None
+    if sample is not None:  # --sample: only the first N knowledge docs contribute
+        sampled = [r["path"] for r in sorted(records, key=lambda r: r["path"])
+                   if not r["reserved"]][:sample]
+        contributors = set(sampled)
+    try:
+        backend = make_kg_backend(bp, config, None, fresh=True,
+                                  records=records, contributors=contributors)
+        raw = backend.export()
+        if getattr(backend, "normative_export", False):
+            entities, relations = raw["entities"], raw["relations"]
+        else:  # a monkeypatched fake speaks the neutral shape — normalize it
+            valid_docs = {r["path"] for r in records if not r["reserved"]}
+            entities, relations = normalize_export(raw, valid_docs)
+    except Exception as error:  # derivation never blocks the compile (spec/00)
+        return T3Result("stale", changed=False, warning=(
+            f"T3 derivation failed ({error}) — the entity graph is stale; recompile"
+        ))
+
+    changed = _write_export(t3, entities, relations, {"kind": "algorithmic"})
+    _write_json(t3 / _STATE_FILE, {"chunks": {}, "fingerprint": "algorithmic"})
+    if changed:
+        _maybe_embed_entities(bp, entities, _read_json(bp / "t2" / "embedding.json"))
+
+    summary = None
+    if sample is not None:
+        summary = {"docs": len(contributors or ()), "entities": len(entities),
+                   "relations": len(relations)}
+    return T3Result("fresh", changed=changed, summary=summary)
 
 
 def _enrich_chunks(chunks: list[dict], records: list[dict]) -> list[dict]:

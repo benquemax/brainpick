@@ -67,22 +67,23 @@ def entities_of(root):
 # -- gating --------------------------------------------------------------------------
 
 
-def test_t3_off_without_extraction_config_instructs_once(kotiaurinko):
-    # graph = "auto" but no [models.extraction] → off with a one-time instruction
-    # (the default graph = "off" is silent — a zero-config bundle never nags).
+def test_t3_auto_without_extraction_config_derives_algorithmically(kotiaurinko):
+    # graph = "auto" but no [models.extraction] → the algorithmic backend, silently
+    # (spec/80: auto = lightrag when extraction is configured, else algorithmic).
     (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "auto"\n', encoding="utf-8")
-    first = run_compile(kotiaurinko)
-    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "off"
-    assert any("models.extraction" in w for w in first.warnings)
-    second = run_compile(kotiaurinko)
-    assert not any("models.extraction" in w for w in second.warnings)  # said once
-    assert not (kotiaurinko / ".brainpick" / "t3").exists()
-
-
-def test_t3_default_off_is_silent(kotiaurinko):
-    result = run_compile(kotiaurinko)  # zero config: graph defaults off
-    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "off"
+    result = run_compile(kotiaurinko)
+    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "fresh"
     assert not any("extraction" in w or "graph" in w for w in result.warnings)
+    meta = json.loads(
+        (kotiaurinko / ".brainpick" / "t3" / "kg-meta.json").read_text(encoding="utf-8"))
+    assert meta["extractor"] == {"kind": "algorithmic"}
+
+
+def test_t3_default_is_algorithmic_and_silent(kotiaurinko):
+    result = run_compile(kotiaurinko)  # zero config: graph defaults to algorithmic
+    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "fresh"
+    assert not any("extraction" in w or "graph" in w for w in result.warnings)
+    assert (kotiaurinko / ".brainpick" / "t3" / "entities.jsonl").is_file()
 
 
 def test_t3_off_by_explicit_config_stays_quiet(kotiaurinko):

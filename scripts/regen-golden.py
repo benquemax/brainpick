@@ -115,6 +115,11 @@ def main() -> None:
     for case in CASES:
         if case["class"] == "compile":
             regen_compile(case)
+        elif case["class"] == "kg-algorithmic":
+            # same recipe as compile (default config IS graph = "algorithmic"); the
+            # artifacts live under .brainpick/t3/, so they never collide with the
+            # hand-authored kg-query fixture at expected/<bundle>/t3/.
+            regen_compile(case)
         elif case["class"] == "chunks":
             regen_chunks(case)
         elif case["class"] == "report":

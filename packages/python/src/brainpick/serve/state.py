@@ -340,8 +340,10 @@ class ServeState:
 
     def graph_fn(self):
         """The T3 entity-graph retriever (kg.graph_search) over this bundle's
-        export, shaped for run_search's graph_fn hook — None when T3 is absent."""
-        if self.kg is None:
+        export, shaped for run_search's graph_fn hook — None when T3 is absent
+        OR empty (zero entities walk nowhere; the link-walk degrade answers
+        better than a guaranteed-empty result)."""
+        if self.kg is None or not self.kg.entities:
             return None
         from brainpick.kg import graph_search
 

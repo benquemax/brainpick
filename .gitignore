@@ -4,8 +4,12 @@ _plans/
 _temp/*
 !_temp/.gitkeep
 
-# compiled brain artifacts are disposable (principle 2)
+# compiled brain artifacts are disposable (principle 2)…
 .brainpick/
+# …except the conformance goldens: regenerated ONLY via scripts/regen-golden.py
+# and reviewed like code — they must ship with the repo or conformance cannot run
+!spec/fixtures/expected/**/.brainpick/
+!spec/fixtures/expected/**/.brainpick/**
 
 # python
 __pycache__/

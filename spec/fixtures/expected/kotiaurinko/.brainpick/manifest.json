@@ -1,0 +1,57 @@
+{
+  "bundle_root": ".",
+  "compiled_at": "1970-01-01T00:00:00Z",
+  "files": {
+    "aurinko.md": {
+      "bytes": 282,
+      "sha256": "5a33be368c5dab7c52b45810bff89516ca03692597638770566dd77eeca2cd71"
+    },
+    "index.md": {
+      "bytes": 1321,
+      "sha256": "2b2829d149c8a71a3522eb3b8c4b2bff89e16e8976b31f7be1971a3680836ca8"
+    },
+    "komeetta.md": {
+      "bytes": 311,
+      "sha256": "4de47f1d7e3c64e0dc2731649d53c5f7906b0ad1d527e8892e5a08fc85ad8be0"
+    },
+    "kuu.md": {
+      "bytes": 190,
+      "sha256": "3a106f6cc9fa364876ad6d33bf1d1c1a9e1c01bd44b63ed1f22453c67907dbda"
+    },
+    "log.md": {
+      "bytes": 157,
+      "sha256": "732a3e4af75d3e944d986bc1d21c9bd6b6eb0dbc1bc640d528c90eb1cdfded89"
+    },
+    "maa.md": {
+      "bytes": 247,
+      "sha256": "72e706fdd9ebfff835cd1af2c61ac11074b79654c73d897caa3baa540ad666db"
+    },
+    "planeetat.md": {
+      "bytes": 243,
+      "sha256": "0783f6040eb89f07960952867c0b02a903149b6273d21bf1ac982381047a86d5"
+    },
+    "saaret/atolli.md": {
+      "bytes": 181,
+      "sha256": "3438b46d2f46fd421de411f2ce3c47dc18d79f67308b902f6b1162eba83e643b"
+    },
+    "saaret/laguuni.md": {
+      "bytes": 221,
+      "sha256": "f744932c8465daeee9a0a4dc88390890e57e3328f67fff37f68bafa5091115a3"
+    },
+    "yksinainen.md": {
+      "bytes": 245,
+      "sha256": "eff46e30b518558fd9b8c083e7e478b299504c2668b608b530191105505ca146"
+    }
+  },
+  "index_md": {
+    "content_hash": "2b2829d149c8a71a3522eb3b8c4b2bff89e16e8976b31f7be1971a3680836ca8",
+    "managed": "section"
+  },
+  "seq": 1,
+  "spec_version": "0.1",
+  "tiers": {
+    "t1": "fresh",
+    "t2": "off",
+    "t3": "fresh"
+  }
+}

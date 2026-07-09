@@ -175,6 +175,9 @@ def test_read_sections_and_budget(kotiaurinko):
 
 
 def test_neighbors_depth_and_degrade(kotiaurinko):
+    # graph = "off": no T3 export exists, so layer=entities degrades to links —
+    # the algorithmic default would otherwise serve a real (derived) entity layer.
+    (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "off"\n', encoding="utf-8")
     state = make_state(kotiaurinko)
     one = neighbors_payload(state, "maa.md")
     assert one["center"] == "maa.md"

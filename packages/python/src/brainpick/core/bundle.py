@@ -91,8 +91,20 @@ def _collect_files(root: Path, include: tuple[str, ...], exclude: tuple[str, ...
     return sorted(files)
 
 
-def _resolve(source: str, raw: RawLink, file_set: set[str],
-             stems: dict[str, list[str]], stems_ci: dict[str, list[str]]) -> str | None:
+def build_stem_maps(paths: list[str]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """(stems, case-insensitive stems) for wikilink resolution — shared by scan
+    and the algorithmic T3 derivation, so both resolve identically (spec/40)."""
+    stems: dict[str, list[str]] = {}
+    stems_ci: dict[str, list[str]] = {}
+    for p in paths:
+        stem = posixpath.basename(p).rsplit(".", 1)[0]
+        stems.setdefault(stem, []).append(p)
+        stems_ci.setdefault(stem.lower(), []).append(p)
+    return stems, stems_ci
+
+
+def resolve_link(source: str, raw: RawLink, file_set: set[str],
+                 stems: dict[str, list[str]], stems_ci: dict[str, list[str]]) -> str | None:
     if raw.kind == "wikilink":
         exact = stems.get(raw.target, [])
         if len(exact) == 1:
@@ -124,13 +136,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
     root = Path(root)
     paths = _collect_files(root, include, exclude)
     file_set = set(paths)
-
-    stems: dict[str, list[str]] = {}
-    stems_ci: dict[str, list[str]] = {}
-    for p in paths:
-        stem = posixpath.basename(p).rsplit(".", 1)[0]
-        stems.setdefault(stem, []).append(p)
-        stems_ci.setdefault(stem.lower(), []).append(p)
+    stems, stems_ci = build_stem_maps(paths)
 
     docs: list[Document] = []
     for path in paths:
@@ -140,7 +146,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
         links: list[ResolvedLink] = []
         ghosts: list[Ghost] = []
         for raw in extract_links(body):
-            resolved = _resolve(path, raw, file_set, stems, stems_ci)
+            resolved = resolve_link(path, raw, file_set, stems, stems_ci)
             if resolved == path:
                 continue  # self-links are dropped
             if resolved is None:

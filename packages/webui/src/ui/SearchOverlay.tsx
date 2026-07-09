@@ -6,7 +6,7 @@
  * focuses the active (default: top) hit; clicking a row does the same.
  */
 import { useEffect, useRef } from 'react';
-import type { SearchMode } from '../graph/types';
+import type { SearchMode, TierMap } from '../graph/types';
 import { SEARCH_MODES } from '../graph/types';
 import { fetchSearch } from '../live/api';
 import { useUI, uiStore } from '../state/store';
@@ -27,8 +27,17 @@ const MODE_TITLE: Record<SearchMode, string> = {
   graph: 'graph — entity walk, lands with T3',
 };
 
-/** Modes the UI lets you request today; graph stays visible but disabled. */
-const ENABLED_MODES: readonly SearchMode[] = ['auto', 'keyword', 'semantic'];
+/** Modes always offered; graph additionally needs a T3 export (spec/40) — the
+ * algorithmic backend derives one by default, so most brains enable it out of
+ * the box, same as semantic waits on T2. */
+const ALWAYS_ENABLED_MODES: readonly SearchMode[] = ['auto', 'keyword', 'semantic'];
+
+/** graph joins the enabled set once a T3 export exists (fresh or stale — only
+ * an explicit `[modules] graph = "off"` withholds it, spec/40). Unknown tiers
+ * (still loading) withhold it too — no premature enabling. */
+function enabledModes(tiers: TierMap | null): readonly SearchMode[] {
+  return tiers != null && tiers.t3 !== 'off' ? [...ALWAYS_ENABLED_MODES, 'graph'] : ALWAYS_ENABLED_MODES;
+}
 
 export function SearchOverlay() {
   const open = useUI((s) => s.searchOpen);
@@ -84,19 +93,21 @@ export function SearchOverlay() {
     debounce.current = setTimeout(() => fireSearch(q), DEBOUNCE_MS);
   };
 
+  const enabled = enabledModes(tiers);
+
   const switchMode = (next: SearchMode, refocusInput = false) => {
     // Refocus BEFORE the guard: even a click on the already-active mode
     // should hand the keyboard back to the query.
     if (refocusInput) inputRef.current?.focus();
-    if (!ENABLED_MODES.includes(next) || next === uiStore.getState().searchMode) return;
+    if (!enabled.includes(next) || next === uiStore.getState().searchMode) return;
     uiStore.getState().setSearchMode(next);
     if (debounce.current !== null) clearTimeout(debounce.current);
     fireSearch(uiStore.getState().searchQuery); // a mode switch answers immediately
   };
 
   const stepMode = (dir: 1 | -1) => {
-    const i = ENABLED_MODES.indexOf(mode);
-    const next = ENABLED_MODES[(i + dir + ENABLED_MODES.length) % ENABLED_MODES.length];
+    const i = enabled.indexOf(mode);
+    const next = enabled[(i + dir + enabled.length) % enabled.length];
     if (next) switchMode(next);
   };
 
@@ -155,7 +166,7 @@ export function SearchOverlay() {
         onKeyDown={onModeKeyDown}
       >
         {SEARCH_MODES.map((m) => {
-          const enabled = ENABLED_MODES.includes(m);
+          const isEnabled = enabled.includes(m);
           return (
             <button
               key={m}
@@ -163,16 +174,19 @@ export function SearchOverlay() {
               role="radio"
               aria-checked={m === mode}
               className={`mode-btn ${m === mode ? 'active' : ''}`}
-              disabled={!enabled}
+              disabled={!isEnabled}
               tabIndex={m === mode ? 0 : -1}
               title={MODE_TITLE[m]}
               onClick={() => switchMode(m, true)}
             >
               {MODE_LABEL[m]}
-              {!enabled && <span className="mode-soon">T3 — coming</span>}
+              {m === 'graph' && !isEnabled && <span className="mode-soon">T3 off</span>}
               {/* tier state at the point of choice: informs without nagging */}
-              {m === 'semantic' && enabled && tiers != null && tiers.t2 !== 'fresh' && (
+              {m === 'semantic' && isEnabled && tiers != null && tiers.t2 !== 'fresh' && (
                 <span className="mode-soon">t2 {tiers.t2}</span>
+              )}
+              {m === 'graph' && isEnabled && tiers != null && tiers.t3 !== 'fresh' && (
+                <span className="mode-soon">t3 {tiers.t3}</span>
               )}
             </button>
           );

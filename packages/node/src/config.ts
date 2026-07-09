@@ -41,7 +41,7 @@ export interface UiConfig {
 
 export interface ModulesConfig {
   vectors: string; // auto | on | off — T2 (spec/30)
-  graph: string; // auto | on | off — T3 (M3)
+  graph: string; // algorithmic (default) | lightrag | auto | off — T3 (spec/40)
   ui: boolean;
 }
 
@@ -80,7 +80,7 @@ export function defaultConfig(): Config {
     spec: "0.1",
     bundle: { root: ".", include: ["**/*.md"], exclude: [] },
     index: { mode: "section", file: "index.md" },
-    modules: { vectors: "auto", graph: "off", ui: true },
+    modules: { vectors: "auto", graph: "algorithmic", ui: true },
     models: {
       embedding: { kind: "", endpoint: "", model: "", dim: 0 },
       extraction: { kind: "", endpoint: "", model: "", api_key_env: "" },
@@ -240,6 +240,20 @@ function applyData(config: Config, data: Record<string, unknown>, label: string,
       );
     }
   }
+}
+
+/** `[modules] graph` → the backend T3 will use: "algorithmic" | "lightrag" |
+ * "off" (spec/80). "auto" resolves to lightrag when [models.extraction] is
+ * configured, else algorithmic; the legacy "on" behaves like auto; an unknown
+ * value falls back to the algorithmic default (forgiving, like unknown keys). */
+export function resolveGraphBackend(config: Config): "off" | "algorithmic" | "lightrag" {
+  const mode = String(config.modules.graph ?? "").trim().toLowerCase();
+  if (mode === "off") return "off";
+  if (mode === "lightrag") return "lightrag";
+  if (mode === "auto" || mode === "on") {
+    return config.models.extraction.kind !== "" ? "lightrag" : "algorithmic";
+  }
+  return "algorithmic";
 }
 
 /** Read <root>/brainpick.toml, deep-merge <root>/brainpick.local.toml over it

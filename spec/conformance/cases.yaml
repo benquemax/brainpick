@@ -108,6 +108,19 @@ cases:
     bundle: kotiaurinko
     artifact: agents-report.md
 
+  # class: kg-algorithmic — the T3 algorithmic BACKEND (spec/40). Compile the
+  # bundle with the default config (graph = "algorithmic") and byte-compare the
+  # produced export against goldens: the derivation is exact and normative, so
+  # both engines produce identical bytes NATIVELY (no delegation, zero skips).
+  # kotiaurinko carries one ghost (olematon) and eight tags — a non-empty graph.
+  - id: kg-algorithmic-kotiaurinko
+    class: kg-algorithmic
+    bundle: kotiaurinko
+    artifacts:
+      - .brainpick/t3/entities.jsonl
+      - .brainpick/t3/relations.jsonl
+      - .brainpick/t3/kg-meta.json
+
   # class: kg-query — the T3 CONSUMER (spec/40). The harness compiles the bundle,
   # stages the hand-authored export from fixtures/expected/<bundle>/t3/ into the
   # compiled .brainpick/t3/ (the extractor is never invoked in conformance), then

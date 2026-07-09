@@ -171,8 +171,10 @@ class KnowledgeGraph:
 
 def load_kg(bp_dir: str | Path) -> KnowledgeGraph | None:
     """Read `.brainpick/t3/` into a graph, or None when the export is absent —
-    T3 unavailable is a degradation, never an error (spec/40). Dangling relations
-    (an endpoint missing from entities.jsonl) are skipped, not fatal."""
+    T3 unavailable is a degradation, never an error (spec/40). An EMPTY export
+    is valid and loads as an empty graph (a fully-written, untagged wiki has no
+    sub-page concepts — consumers must tolerate zero entities). Dangling
+    relations (an endpoint missing from entities.jsonl) are skipped, not fatal."""
     t3 = Path(bp_dir) / "t3"
     entities_path = t3 / "entities.jsonl"
     if not entities_path.is_file():
@@ -182,8 +184,6 @@ def load_kg(bp_dir: str | Path) -> KnowledgeGraph | None:
         if line:
             entity = json.loads(line)
             entities[entity["id"]] = entity
-    if not entities:
-        return None  # an empty export is nothing to query — treat as unavailable
 
     relations: list[dict] = []
     relations_path = t3 / "relations.jsonl"

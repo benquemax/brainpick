@@ -125,7 +125,7 @@ test("mock compile writes chunks, embedding record, and vectors", async () => {
   const root = withMockConfig(copyBundle());
   await runCompile(root);
   const bp = join(root, ".brainpick");
-  expect(tiersOf(root)).toEqual({ t1: "fresh", t2: "fresh", t3: "off" });
+  expect(tiersOf(root)).toEqual({ t1: "fresh", t2: "fresh", t3: "fresh" });
 
   const chunks = readFileSync(join(bp, "t2", "chunks.jsonl"), "utf8")
     .split("\n")

@@ -244,8 +244,10 @@ export class KnowledgeGraph {
 }
 
 /** Read `.brainpick/t3/` into a graph, or null when the export is absent — T3
- * unavailable is a degradation, never an error (spec/40). Dangling relations
- * (an endpoint missing from entities.jsonl) are skipped, not fatal. */
+ * unavailable is a degradation, never an error (spec/40). An EMPTY export is
+ * valid and loads as an empty graph (a fully-written, untagged wiki has no
+ * sub-page concepts — consumers must tolerate zero entities). Dangling
+ * relations (an endpoint missing from entities.jsonl) are skipped, not fatal. */
 export function loadKg(bpDir: string): KnowledgeGraph | null {
   const t3 = join(bpDir, "t3");
   let entitiesText: string;
@@ -260,7 +262,6 @@ export function loadKg(bpDir: string): KnowledgeGraph | null {
     const entity = JSON.parse(line) as Entity;
     entities.set(entity.id, entity);
   }
-  if (entities.size === 0) return null; // an empty export is nothing to query
 
   const relations: Relation[] = [];
   try {

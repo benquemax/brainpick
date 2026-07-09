@@ -85,12 +85,16 @@ function spawnServe(bundle: string, port: number): Spawned {
 /**
  * Stage the hand-authored T3 export into a COMPILED bundle and flip its
  * manifest tier to fresh — the out-of-process twin of the conformance harness's
- * stage_t3_export (in each engine's tests). No extractor runs. Because the bundle is
- * already compiled and unchanged, serve's start-up compile carries the fresh t3
- * status forward (run_compile: old t3 fresh + t1 unchanged → fresh) and
- * reload_artifacts loads the staged export — /api/graph?layer=entities is live.
+ * stage_t3_export (in each engine's tests). No extractor runs. graph = "off"
+ * keeps the algorithmic default from touching t3/ at every subsequent compile
+ * (serve's start-up compile included) — the "off" backend never derives or
+ * deletes an export, it only reports the tier honestly (spec/40), so the
+ * staged fixture survives untouched and /api/graph?layer=entities serves it
+ * regardless of what the manifest's tiers.t3 says (the endpoint, not the
+ * tier, is the availability signal — see live/entities.ts).
  */
 function compileAndStageT3(bundle: string): void {
+  writeFileSync(path.join(bundle, 'brainpick.toml'), '[modules]\ngraph = "off"\n', 'utf-8');
   const compile = spawnSync(
     'uv',
     ['run', '--project', pythonProject, 'brainpick', 'compile', '--root', bundle],
@@ -116,6 +120,9 @@ export default async function globalSetup(): Promise<void> {
 
   const bundleT2less = path.join(tmpDir, 'kotiaurinko-t2less');
   cpSync(fixtureBundle, bundleT2less, { recursive: true });
+  // graph = "off": the algorithmic default would otherwise derive T3 here too —
+  // this bundle exercises the T2-less AND T3-less degraded paths together.
+  writeFileSync(path.join(bundleT2less, 'brainpick.toml'), '[modules]\ngraph = "off"\n', 'utf-8');
 
   // A third bundle carries a staged T3 export so /api/graph?layer=entities
   // returns real data — the entity/overlay layer tests run against it.

@@ -1,0 +1,330 @@
+{
+  "edges": [
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Komeetta",
+      "source": "aurinko.md",
+      "target": "komeetta.md"
+    },
+    {
+      "count": 1,
+      "kind": "wikilink",
+      "label": "kuu",
+      "source": "aurinko.md",
+      "target": "kuu.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Planeetat",
+      "source": "aurinko.md",
+      "target": "planeetat.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Aurinko",
+      "source": "index.md",
+      "target": "aurinko.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Komeetta",
+      "source": "index.md",
+      "target": "komeetta.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Kuu",
+      "source": "index.md",
+      "target": "kuu.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Maa",
+      "source": "index.md",
+      "target": "maa.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Planeetat",
+      "source": "index.md",
+      "target": "planeetat.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Atolli",
+      "source": "index.md",
+      "target": "saaret/atolli.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Laguuni",
+      "source": "index.md",
+      "target": "saaret/laguuni.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Yksinäinen",
+      "source": "index.md",
+      "target": "yksinainen.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Aurinko",
+      "source": "komeetta.md",
+      "target": "aurinko.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Maa",
+      "source": "kuu.md",
+      "target": "maa.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kuu",
+      "source": "maa.md",
+      "target": "kuu.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Planeetat",
+      "source": "maa.md",
+      "target": "planeetat.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Aurinko",
+      "source": "planeetat.md",
+      "target": "aurinko.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Maa",
+      "source": "planeetat.md",
+      "target": "maa.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Laguuni",
+      "source": "saaret/atolli.md",
+      "target": "saaret/laguuni.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Atolli",
+      "source": "saaret/laguuni.md",
+      "target": "saaret/atolli.md"
+    },
+    {
+      "count": 1,
+      "kind": "wikilink",
+      "label": "Aurinko itse",
+      "source": "yksinainen.md",
+      "target": "aurinko.md"
+    }
+  ],
+  "ghosts": [
+    {
+      "source": "saaret/laguuni.md",
+      "target": "olematon.md"
+    }
+  ],
+  "islands": [
+    [
+      "saaret/atolli.md",
+      "saaret/laguuni.md"
+    ]
+  ],
+  "nodes": [
+    {
+      "description": "The star everything in this bundle orbits.",
+      "id": "aurinko.md",
+      "in": 4,
+      "orphan": false,
+      "out": 3,
+      "reserved": false,
+      "tags": [
+        "tähti"
+      ],
+      "timestamp": null,
+      "title": "Aurinko",
+      "type": "Concept"
+    },
+    {
+      "description": null,
+      "id": "index.md",
+      "in": 0,
+      "orphan": false,
+      "out": 8,
+      "reserved": true,
+      "tags": [],
+      "timestamp": null,
+      "title": "Kotiaurinko",
+      "type": null
+    },
+    {
+      "description": "A visitor with a tail, seen only every few decades — pöllämystynyt matkalainen.",
+      "id": "komeetta.md",
+      "in": 2,
+      "orphan": false,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "vierailija"
+      ],
+      "timestamp": null,
+      "title": "Komeetta",
+      "type": "Concept"
+    },
+    {
+      "description": null,
+      "id": "kuu.md",
+      "in": 3,
+      "orphan": false,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "kuu"
+      ],
+      "timestamp": "2026-06-15T08:30:00Z",
+      "title": "Kuu",
+      "type": "Concept"
+    },
+    {
+      "description": null,
+      "id": "log.md",
+      "in": 0,
+      "orphan": false,
+      "out": 0,
+      "reserved": true,
+      "tags": [],
+      "timestamp": null,
+      "title": "Update log",
+      "type": null
+    },
+    {
+      "description": "The blue world with a companion and a home.",
+      "id": "maa.md",
+      "in": 3,
+      "orphan": false,
+      "out": 2,
+      "reserved": false,
+      "tags": [
+        "planeetta",
+        "koti"
+      ],
+      "timestamp": "2026-06-10T12:00:00Z",
+      "title": "Maa",
+      "type": "Concept"
+    },
+    {
+      "description": "The catalogue of worlds around the star.",
+      "id": "planeetat.md",
+      "in": 3,
+      "orphan": false,
+      "out": 2,
+      "reserved": false,
+      "tags": [
+        "luettelo"
+      ],
+      "timestamp": "2026-06-01T00:00:00Z",
+      "title": "Planeetat",
+      "type": "Concept"
+    },
+    {
+      "description": "A ring of coral in the island sea.",
+      "id": "saaret/atolli.md",
+      "in": 2,
+      "orphan": false,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "saari"
+      ],
+      "timestamp": null,
+      "title": "Atolli",
+      "type": "Concept"
+    },
+    {
+      "description": "The calm water inside the ring.",
+      "id": "saaret/laguuni.md",
+      "in": 2,
+      "orphan": false,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "saari"
+      ],
+      "timestamp": null,
+      "title": "Laguuni",
+      "type": "Concept"
+    },
+    {
+      "description": "A wanderer no other concept links to.",
+      "id": "yksinainen.md",
+      "in": 1,
+      "orphan": true,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "mysteeri"
+      ],
+      "timestamp": null,
+      "title": "Yksinäinen",
+      "type": "Concept"
+    }
+  ],
+  "stats": {
+    "docs": 10,
+    "edges": 20,
+    "ghosts": 1,
+    "islands": 1,
+    "orphans": 1,
+    "tags": 8
+  },
+  "tags": {
+    "koti": [
+      "maa.md"
+    ],
+    "kuu": [
+      "kuu.md"
+    ],
+    "luettelo": [
+      "planeetat.md"
+    ],
+    "mysteeri": [
+      "yksinainen.md"
+    ],
+    "planeetta": [
+      "maa.md"
+    ],
+    "saari": [
+      "saaret/atolli.md",
+      "saaret/laguuni.md"
+    ],
+    "tähti": [
+      "aurinko.md"
+    ],
+    "vierailija": [
+      "komeetta.md"
+    ]
+  }
+}

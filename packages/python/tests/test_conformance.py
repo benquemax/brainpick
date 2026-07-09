@@ -135,6 +135,19 @@ def test_report_golden(case, tmp_path):
     assert actual == expected, f"{case['artifact']} drifted from golden"
 
 
+@pytest.mark.parametrize("case", _cases("kg-algorithmic"), ids=_case_ids("kg-algorithmic"))
+def test_kg_algorithmic_golden(case, tmp_path):
+    """The algorithmic T3 backend is byte-golden (spec/40): a default compile
+    (graph = "algorithmic") derives the export deterministically from ghosts and
+    tags, so it is held to the same byte standard as T1 — in both engines."""
+    root = _bundle_copy(tmp_path, case["bundle"])
+    run_compile(root)
+    for artifact in case["artifacts"]:
+        actual = (root / artifact).read_text(encoding="utf-8")
+        expected = (EXPECTED / case["bundle"] / artifact).read_text(encoding="utf-8")
+        assert actual == expected, f"{artifact} drifted from golden"
+
+
 @pytest.mark.parametrize("case", _cases("kg-query"), ids=_case_ids("kg-query"))
 def test_kg_query(case, tmp_path):
     """T3 consumer over the staged export — the normative reader only, never an

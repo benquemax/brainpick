@@ -30,7 +30,7 @@ test("fresh compile writes everything", async () => {
   const manifest = JSON.parse(read(join(bp, "manifest.json")));
   expect(manifest.seq).toBe(1);
   expect(manifest.spec_version).toBe("0.1");
-  expect(manifest.tiers).toEqual({ t1: "fresh", t2: "off", t3: "off" });
+  expect(manifest.tiers).toEqual({ t1: "fresh", t2: "off", t3: "fresh" }); // algorithmic T3 is the default
   expect(manifest.generator.impl).toBe("node");
   expect(manifest.files["notes.txt"]).toBeUndefined();
   expect(Object.keys(manifest.files).sort()).toEqual([
@@ -121,15 +121,17 @@ test("tier-status-only transition rewrites the manifest without spending a seq",
   const result = await runCompile(root);
   expect(result.changed).toBe(true);
   expect(result.seq).toBe(1); // no artifact changed — seq not spent
-  expect(JSON.parse(read(manifestPath)).tiers).toEqual({ t1: "fresh", t2: "off", t3: "off" });
+  expect(JSON.parse(read(manifestPath)).tiers).toEqual({ t1: "fresh", t2: "off", t3: "fresh" });
   expect((await runCompile(root)).changed).toBe(false); // and now it settles
 });
 
 test("tiers.t3 reflects the export and resets to off when it vanishes", async () => {
-  // The Node engine never extracts, but a Python sibling may stage a T3 export; the
-  // manifest must honestly track whether one is present (spec/40). A vanished export
-  // resets tiers.t3 to "off" instead of lingering "fresh".
+  // With graph = "lightrag" the Node engine never extracts, but a Python sibling
+  // may stage a T3 export; the manifest must honestly track whether one is
+  // present (spec/40). A vanished export resets tiers.t3 to "off" instead of
+  // lingering "fresh".
   const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "lightrag"\n', "utf8");
   await runCompile(root);
   const bp = join(root, ".brainpick");
   const manifestPath = join(bp, "manifest.json");

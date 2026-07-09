@@ -2,7 +2,7 @@
  * byte-stable on no-ops, delta-emitting on change. */
 import { join, relative, resolve, sep } from "node:path";
 
-import { loadConfig, type Config } from "../config";
+import { loadConfig, resolveGraphBackend, type Config } from "../config";
 import { scan, type Document } from "../core/bundle";
 import { canonicalJson, canonicalJsonl, cmpStr, type JsonValue } from "../core/canonical";
 import { atomicWrite, readTextOrNull } from "../core/fs";
@@ -17,14 +17,16 @@ import {
   buildGraph,
   renderIndexBlock,
   renderReportBlock,
+  type DocRecord,
   type Graph,
   type GraphStats,
 } from "./t1";
 import { runT2Stage, t2Gate } from "./t2";
+import { runT3AlgorithmicStage } from "./t3";
 
 export const INDEX_FILE = "index.md";
 
-export type Tier = "t1" | "t2";
+export type Tier = "t1" | "t2" | "t3";
 
 export interface CompileResult {
   changed: boolean;
@@ -46,12 +48,12 @@ interface ManifestFileEntry {
   sha256: string;
 }
 
-/** Whether a current T3 export is staged under `.brainpick/t3/` — mirrors loadKg's
- * "an empty export is nothing to query" gate (spec/40): the file must exist and
- * carry at least one entity line. */
+/** Whether a current T3 export is staged under `.brainpick/t3/` — presence means
+ * the FILE exists (spec/40 tier status): an empty export is valid and fresh (a
+ * fully-written, untagged wiki genuinely has zero entities), so the byte content
+ * plays no part here. */
 function t3ExportPresent(bp: string): boolean {
-  const text = readTextOrNull(join(bp, "t3", "entities.jsonl"));
-  return text !== null && text.trim() !== "";
+  return readTextOrNull(join(bp, "t3", "entities.jsonl")) !== null;
 }
 
 /** (what index.md should contain, what it contains now). */
@@ -106,8 +108,9 @@ export async function runCompile(
 ): Promise<CompileResult> {
   const bp = join(root, ".brainpick");
   const cfg = config ?? loadConfig(root);
-  const wanted = new Set<Tier>(only ?? ["t1", "t2"]);
+  const wanted = new Set<Tier>(only ?? ["t1", "t2", "t3"]);
   if (wanted.size === 1 && wanted.has("t2")) return compileT2Only(bp, cfg);
+  if (wanted.size === 1 && wanted.has("t3")) return compileT3Only(bp, cfg);
 
   const warnings: string[] = [];
   let docs = scan(root);
@@ -157,18 +160,33 @@ export async function runCompile(
     }
   }
 
-  // T3 (spec/40): the Node engine never extracts, but the manifest must honestly
-  // reflect whether a current T3 export (a Python sibling's product) exists on disk.
-  // A vanished export resets the tier to "off" instead of lingering "fresh"; a prior
-  // non-off status set by the extractor (fresh|stale) is preserved while it is present.
-  const t3Present = t3ExportPresent(bp);
-  const t3Prev = oldTiers["t3"];
-  const t3Status = t3Present ? (t3Prev && t3Prev !== "off" ? t3Prev : "fresh") : "off";
+  // T3 (spec/40): runs last, never blocks T1/T2. The algorithmic default is pure
+  // computation, so this engine compiles it NATIVELY; lightrag extraction stays
+  // Python-only, so under that backend the manifest honestly reflects whether a
+  // current export (a Python sibling's product) exists on disk — a vanished
+  // export resets to "off" instead of lingering "fresh".
+  const t3Backend = resolveGraphBackend(cfg);
+  let t3Status: string;
+  let t3Changed = false;
+  if (t3Backend === "off") {
+    t3Status = "off";
+  } else if (t3Backend === "algorithmic" && !wanted.has("t3")) {
+    t3Status = !t1Changed && oldTiers["t3"] === "fresh" ? "fresh" : "stale"; // --only t1/t2 skipped T3
+  } else if (t3Backend === "algorithmic") {
+    const outcome = runT3AlgorithmicStage(bp, records);
+    t3Status = outcome.status;
+    t3Changed = outcome.changed;
+    if (outcome.warning) warnings.push(outcome.warning);
+  } else {
+    const t3Present = t3ExportPresent(bp);
+    const t3Prev = oldTiers["t3"];
+    t3Status = t3Present ? (t3Prev && t3Prev !== "off" ? t3Prev : "fresh") : "off";
+  }
   const tiers = { t1: "fresh", t2: t2Status, t3: t3Status };
   // The opt-in AGENTS.md brain report rides along on every compile so it stays
   // true even when nothing else changed (e.g. the markers were just installed).
   refreshReport(root, graph, tiers);
-  const artifactsChanged = t1Changed || t2Changed;
+  const artifactsChanged = t1Changed || t2Changed || t3Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {
     return { changed: false, seq: oldManifest!["seq"] as number, stats: graph.stats, delta: null, warnings };
@@ -207,7 +225,7 @@ export async function runCompile(
     for (const p of [...Object.keys(oldFiles), ...Object.keys(files)]) {
       if (oldFiles[p]?.sha256 !== files[p]?.sha256) changedPaths.add(p);
     }
-    delta.cause = { paths: [...changedPaths].sort(cmpStr), tier: t1Changed ? "t1" : "t2" };
+    delta.cause = { paths: [...changedPaths].sort(cmpStr), tier: t1Changed ? "t1" : t2Changed ? "t2" : "t3" };
     delta.seq = seq;
   }
 
@@ -263,6 +281,65 @@ async function compileT2Only(bp: string, config: Config): Promise<CompileResult>
   const manifest = { ...oldManifest };
   manifest["tiers"] = tiers;
   manifest["seq"] = (oldManifest["seq"] as number) + (t2Changed ? 1 : 0);
+  manifest["compiled_at"] = utcNowSeconds();
+  manifest["generator"] = generator();
+  atomicWrite(join(bp, "manifest.json"), canonicalJson(manifest as unknown as JsonValue));
+  return { changed: true, seq: manifest["seq"] as number, stats, delta: null, warnings };
+}
+
+/** `--only t3`: (re)derive the entity graph from the already-compiled docs.
+ *
+ * The algorithmic backend reads t1/docs.jsonl (spec/40), so T1/T2 artifacts and
+ * the file map stay exactly as the last compile left them — the twin of the
+ * Python `_compile_t3_only`. With `graph = "lightrag"` the CLI delegates to a
+ * Python sibling instead of reaching this path; "off" records the tier off. */
+async function compileT3Only(bp: string, config: Config): Promise<CompileResult> {
+  const oldManifestText = readTextOrNull(join(bp, "manifest.json"));
+  const docsText = readTextOrNull(join(bp, "t1", "docs.jsonl"));
+  const graphText = readTextOrNull(join(bp, "t1", "graph.json"));
+  if (oldManifestText === null || docsText === null || graphText === null) {
+    return {
+      changed: false,
+      seq: 0,
+      stats: {} as GraphStats,
+      delta: null,
+      warnings: ["nothing compiled yet — run: brainpick compile"],
+    };
+  }
+  const oldManifest = JSON.parse(oldManifestText) as Record<string, unknown>;
+  const stats = ((JSON.parse(graphText) as Record<string, unknown>)["stats"] ?? {}) as GraphStats;
+  const records = docsText
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as DocRecord);
+
+  const warnings: string[] = [];
+  const backend = resolveGraphBackend(config);
+  let t3Status: string;
+  let t3Changed = false;
+  if (backend === "algorithmic") {
+    const outcome = runT3AlgorithmicStage(bp, records);
+    t3Status = outcome.status;
+    t3Changed = outcome.changed;
+    if (outcome.warning) warnings.push(outcome.warning);
+  } else if (backend === "off") {
+    t3Status = "off";
+  } else {
+    // lightrag is Python-only — this engine only reads: presence-based honesty
+    const oldTiers = (oldManifest["tiers"] ?? {}) as Record<string, string>;
+    const prev = oldTiers["t3"];
+    t3Status = t3ExportPresent(bp) ? (prev && prev !== "off" ? prev : "fresh") : "off";
+  }
+
+  const tiers = { ...((oldManifest["tiers"] ?? {}) as Record<string, string>) };
+  tiers["t3"] = t3Status;
+  if (!t3Changed && deepEqual(tiers, oldManifest["tiers"])) {
+    return { changed: false, seq: oldManifest["seq"] as number, stats, delta: null, warnings };
+  }
+
+  const manifest = { ...oldManifest };
+  manifest["tiers"] = tiers;
+  manifest["seq"] = (oldManifest["seq"] as number) + (t3Changed ? 1 : 0);
   manifest["compiled_at"] = utcNowSeconds();
   manifest["generator"] = generator();
   atomicWrite(join(bp, "manifest.json"), canonicalJson(manifest as unknown as JsonValue));

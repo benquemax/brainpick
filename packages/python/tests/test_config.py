@@ -73,7 +73,7 @@ def test_bundle_root_indirection(tmp_path):
 def test_modules_and_embedding_defaults(tmp_path):
     cfg = load_config(tmp_path)
     assert cfg.modules.vectors == "auto"
-    assert cfg.modules.graph == "off"
+    assert cfg.modules.graph == "algorithmic"
     assert cfg.modules.ui is True
     assert cfg.models.embedding.kind == ""
     assert cfg.models.embedding.endpoint == ""

@@ -1,0 +1,8 @@
+{
+  "entities": 9,
+  "extractor": {
+    "kind": "algorithmic"
+  },
+  "relations": 2,
+  "spec_version": "0.1"
+}

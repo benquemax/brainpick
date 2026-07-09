@@ -70,7 +70,7 @@ file = "index.md"
 
 [modules]                         # T1 always compiles; the deeper tiers are switchable
 vectors = "auto"                  # auto | on | off — T2 semantic search (embedding backend required)
-graph = "off"                     # auto | on | off — T3 entity graph (lands in M3)
+graph = "algorithmic"             # algorithmic (default) | lightrag | auto | off — T3 entity graph
 ui = true
 
 [serve]
@@ -477,24 +477,31 @@ def run_doctor(
         emit("○", f"vectors: configured ({embedding.kind}) but t2 is {t2_state}",
              f"run: brainpick compile --root {root}")
 
-    # T3 graph: extractor extra importable, endpoint configured, tier state (spec/40) —
-    # optional, never ✗. Extraction is Python-only; the Node sibling delegates here.
+    # T3 graph: which backend the config resolves to, its prerequisites, tier state
+    # (spec/40) — optional, never ✗. The algorithmic default derives the graph from
+    # ghosts and tags with no model; lightrag (LLM extraction) is the opt-in.
+    from brainpick.config import resolve_graph_backend
     from brainpick.kgadapt.lightrag_backend import lightrag_available
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        extraction = load_config(root).models.extraction
+        graph_config = load_config(root)
+    extraction = graph_config.models.extraction
+    backend = resolve_graph_backend(graph_config)
     t3_state = tiers.get("t3", "off")
-    if not extraction.kind:
-        emit("○", "graph: no [models.extraction] configured — brainpick extracts the entity"
-                  " graph once a chat model is set in brainpick.local.toml")
-    elif extraction.kind != "mock" and not lightrag_available():
+    if backend == "off":
+        emit("○", 'graph: off by config — set [modules] graph = "algorithmic" to derive it')
+    elif backend == "lightrag" and not extraction.kind:
+        emit("○", 'graph: [modules] graph = "lightrag" but no [models.extraction] —'
+                  " set a chat model in brainpick.local.toml")
+    elif backend == "lightrag" and extraction.kind != "mock" and not lightrag_available():
         emit("○", "graph: LightRAG missing — pip install 'brainpick[graph]'")
     elif t3_state == "fresh":
-        model = f" · {extraction.model}" if extraction.model else ""
-        emit("✓", f"graph: t3 fresh — {extraction.kind}{model}")
+        detail = "derived from ghosts + tags, no model needed" if backend == "algorithmic" \
+            else f"{extraction.kind}" + (f" · {extraction.model}" if extraction.model else "")
+        emit("✓", f"graph: t3 fresh — {detail}")
     else:
-        emit("○", f"graph: configured ({extraction.kind}) but t3 is {t3_state}",
+        emit("○", f"graph: {backend} configured but t3 is {t3_state}",
              f"run: brainpick compile --only t3 --root {root}")
 
     # backend probes

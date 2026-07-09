@@ -80,7 +80,7 @@ def test_t2_off_when_lancedb_missing_names_the_extra(kotiaurinko, monkeypatch):
 def test_mock_compile_writes_chunks_embedding_and_vectors(kotiaurinko, counting):
     run_compile(with_mock_config(kotiaurinko))
     bp = kotiaurinko / ".brainpick"
-    assert manifest_of(kotiaurinko)["tiers"] == {"t1": "fresh", "t2": "fresh", "t3": "off"}
+    assert manifest_of(kotiaurinko)["tiers"] == {"t1": "fresh", "t2": "fresh", "t3": "fresh"}
 
     lines = (bp / "t2" / "chunks.jsonl").read_text(encoding="utf-8").splitlines()
     chunks = [json.loads(line) for line in lines]

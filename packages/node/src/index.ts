@@ -75,6 +75,13 @@ export {
   type Tier,
 } from "./compile/pipeline";
 export {
+  deriveAlgorithmicExport,
+  runT3AlgorithmicStage,
+  type AlgorithmicEntity,
+  type AlgorithmicRelation,
+  type T3Outcome,
+} from "./compile/t3";
+export {
   buildChunks,
   chunkDocument,
   fingerprint,

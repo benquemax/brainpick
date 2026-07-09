@@ -32,14 +32,41 @@ def test_load_compiles_and_holds_artifacts(kotiaurinko):
     assert state.seq == 1
     assert state.graph["stats"]["docs"] == 10
     assert any(r["path"] == "kuu.md" for r in state.records)
-    assert state.manifest["tiers"] == {"t1": "fresh", "t2": "off", "t3": "off"}
+    assert state.manifest["tiers"] == {"t1": "fresh", "t2": "off", "t3": "fresh"}
 
 
-def test_kg_absent_by_default(kotiaurinko):
+def test_kg_derived_by_default(kotiaurinko):
+    state = make_state(kotiaurinko)  # zero config — the algorithmic backend derived T3
+    assert state.kg is not None
+    assert state.graph_fn() is not None
+    assert state.manifest["tiers"]["t3"] == "fresh"
+
+
+def test_kg_absent_when_graph_off(kotiaurinko):
+    (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "off"\n', encoding="utf-8")
     state = make_state(kotiaurinko)
     assert state.kg is None  # no T3 export → unavailable, and graph_fn signals it
     assert state.graph_fn() is None
     assert state.manifest["tiers"]["t3"] == "off"
+
+
+def test_empty_export_serves_but_graph_fn_degrades(kotiaurinko):
+    """A brain with no ghosts and no tags derives an EMPTY export: the kg loads
+    (the entity layer serves empty, spec/40) but graph_fn is None — a zero-entity
+    walk answers nothing, so mode=graph degrades to the link walk instead."""
+    for doc in kotiaurinko.rglob("*.md"):
+        text = doc.read_text(encoding="utf-8")
+        doc.write_text("\n".join(line for line in text.splitlines()
+                                  if not line.startswith("tags:")) + "\n", encoding="utf-8")
+    (kotiaurinko / "saaret" / "laguuni.md").write_text(
+        "---\ntype: Concept\ntitle: Laguuni\n---\n\n# Laguuni\n\nHeld by the [Atolli](atolli.md).\n",
+        encoding="utf-8",
+    )  # drop the olematon ghost too
+    state = make_state(kotiaurinko)
+    assert state.manifest["tiers"]["t3"] == "fresh"  # empty is still fresh (spec/40)
+    assert state.kg is not None and state.kg.entities == {}
+    assert state.kg.entity_graph() == {"nodes": [], "edges": []}
+    assert state.graph_fn() is None
 
 
 def test_kg_loads_from_staged_export(kotiaurinko):

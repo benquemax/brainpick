@@ -15,7 +15,7 @@ def test_fresh_compile_writes_everything(kotiaurinko):
     manifest = json.loads(read(bp / "manifest.json"))
     assert manifest["seq"] == 1
     assert manifest["spec_version"] == "0.1"
-    assert manifest["tiers"] == {"t1": "fresh", "t2": "off", "t3": "off"}
+    assert manifest["tiers"] == {"t1": "fresh", "t2": "off", "t3": "fresh"}  # t3: the algorithmic default
     assert "notes.txt" not in manifest["files"]
     assert set(manifest["files"]) == {
         "aurinko.md", "index.md", "komeetta.md", "kuu.md", "log.md",

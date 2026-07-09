@@ -142,6 +142,10 @@ async def _t3_scenario(root):
 
 
 def test_mcp_t3_entity_queries(kotiaurinko):
+    # graph = "off": the spawned server's startup compile must not rederive T3 and
+    # overwrite the hand-authored fixture export this test stages (the consumer
+    # reads whatever is present — spec/40 kg-query semantics).
+    (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "off"\n', encoding="utf-8")
     run_compile(kotiaurinko)
     stage_t3_export(kotiaurinko)  # the reader loads the staged export; no extractor runs
     asyncio.run(_t3_scenario(kotiaurinko))

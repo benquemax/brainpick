@@ -25,10 +25,11 @@ function intOption(value: string): number {
   return parsed;
 }
 
-/** T3 entity extraction is Python-only (spec/40): the Node engine never runs
- * LightRAG. `compile --only t3` delegates to an installed Python sibling via uvx,
- * or skips with the exact enabling command. Query over the resulting neutral
- * export stays native in both engines. */
+/** T3 LLM extraction is Python-only (spec/40): the Node engine never runs
+ * LightRAG. With `graph = "lightrag"`, `compile --only t3` delegates to an
+ * installed Python sibling via uvx, or skips with the exact enabling command.
+ * The ALGORITHMIC backend (the default) never reaches this path — it compiles
+ * natively. Query over the neutral export stays native in both engines. */
 export interface T3Delegate {
   /** The uvx argv to run, or null to skip (prerequisites missing). */
   argv: string[] | null;
@@ -184,7 +185,8 @@ program
   .addOption(
     new Option(
       "--only <tier>",
-      "compile a single tier (t2 reuses the compiled docs substrate; t3 delegates to the Python sibling)",
+      "compile a single tier (t2/t3 reuse the compiled docs substrate; t3 with graph=lightrag " +
+        "delegates to the Python sibling)",
     ).choices(["t1", "t2", "t3"]),
   )
   .option("--watch", "stay running and recompile on changes")
@@ -198,9 +200,13 @@ program
         return;
       }
       if (opts.only === "t3") {
-        // Extraction is Python-only (spec/40) — hand this one compile step to the sibling.
-        process.exitCode = runT3Delegate(root);
-        return;
+        const { resolveGraphBackend } = await import("./config");
+        if (resolveGraphBackend(loadConfig(root)) === "lightrag") {
+          // LLM extraction is Python-only (spec/40) — hand this compile step to the sibling.
+          process.exitCode = runT3Delegate(root);
+          return;
+        }
+        // the algorithmic default (and "off") compiles natively below
       }
       const only = opts.only ? ([opts.only] as Tier[]) : null;
       const result = await runCompile(root, opts.full ?? false, only);

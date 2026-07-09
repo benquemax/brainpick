@@ -95,9 +95,14 @@ test("absent export is unavailable", () => {
   expect(loadKg(join(root, ".brainpick"))).toBeNull(); // no t3/ → null, not an error
 });
 
-test("empty entities file is unavailable", () => {
+test("empty entities file loads as an empty graph", () => {
+  // an empty export is valid and fresh (spec/40): a fully-written, untagged
+  // wiki has zero entities — consumers serve an empty layer, never a 404.
   const root = makeBundle({ ".brainpick/t3/entities.jsonl": "" });
-  expect(loadKg(join(root, ".brainpick"))).toBeNull();
+  const kg = loadKg(join(root, ".brainpick"));
+  expect(kg).not.toBeNull();
+  expect(kg!.entityGraph()).toEqual({ nodes: [], edges: [] });
+  expect(kg!.neighborEntities("a.md", 2)).toEqual([[], []]);
 });
 
 test("tolerates missing relations and meta", () => {

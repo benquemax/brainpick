@@ -158,6 +158,10 @@ test("mcp semantic search over mock vectors", { timeout: 120_000 }, async () => 
 
 test("mcp t3 entity queries", { timeout: 120_000 }, async () => {
   const root = copyBundle();
+  // graph = "off": the spawned server's startup compile must not rederive T3 and
+  // overwrite the hand-authored fixture export this test stages (the consumer
+  // reads whatever is present — spec/40 kg-query semantics).
+  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "off"\n', "utf8");
   await runCompile(root);
   stageT3Export(root); // the reader loads the staged export; no extractor runs
 

@@ -167,7 +167,7 @@ test("status", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/status`);
   expect(body.seq).toBe(1);
-  expect(body.tiers).toEqual({ t1: "fresh", t2: "off", t3: "off" });
+  expect(body.tiers).toEqual({ t1: "fresh", t2: "off", t3: "fresh" });
   expect(body.docs).toBe(10);
   expect(body.ghosts).toBe(1);
   expect(body.orphans).toBe(1);
@@ -195,6 +195,18 @@ test("graph etag roundtrip", async () => {
   expect(first.body.stats.docs).toBe(10);
   const cached = await fetch(`${base}/api/graph`, { headers: { "If-None-Match": first.headers.get("etag")! } });
   expect(cached.status).toBe(304);
+  // the algorithmic default derives an entity layer on every compile — it serves
+  const entities = await getJson(`${base}/api/graph?layer=entities`);
+  expect(entities.status).toBe(200);
+  expect(entities.body.nodes.some((n: { type: string }) => n.type === "ghost")).toBe(true);
+});
+
+test("entity layer 404s only when the export is truly absent", async () => {
+  // [modules] graph = "off" compiles no T3 export at all — only THEN does the
+  // entity layer 404 (an empty-but-present export serves empty instead, spec/40)
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "off"\n', "utf8");
+  const { base } = await serve(await makeApp(root));
   const entities = await getJson(`${base}/api/graph?layer=entities`);
   expect(entities.status).toBe(404);
   expect(entities.body.error).toBeTruthy();
@@ -396,7 +408,9 @@ test("t3 graph mode search", async () => {
 });
 
 test("graph mode degrades without t3", async () => {
-  const { base } = await serve(await makeApp(copyBundle())); // no export staged
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "off"\n', "utf8"); // no export exists
+  const { base } = await serve(await makeApp(root));
   const body = (await getJson(`${base}/api/search?q=aurinko&mode=graph`)).body;
   expect(body.degraded_from).toBe("graph"); // honest marker, keyword + T1 link-walk beneath
   expect(new Set(body.hits.map((h: { path: string }) => h.path)).has("aurinko.md")).toBe(true);

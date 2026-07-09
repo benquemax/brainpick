@@ -208,7 +208,11 @@ test("read sections and budget", async () => {
 });
 
 test("neighbors depth and degrade", async () => {
-  const state = await makeState(copyBundle());
+  const root = copyBundle();
+  // graph = "off": no T3 export exists, so layer=entities degrades to links —
+  // the algorithmic default would otherwise serve a real (derived) entity layer.
+  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "off"\n', "utf8");
+  const state = await makeState(root);
   const one = neighborsPayload(state, "maa.md");
   expect(one["center"]).toBe("maa.md");
   const onePaths = new Set((one["nodes"] as Array<{ path: string }>).map((n) => n.path));
