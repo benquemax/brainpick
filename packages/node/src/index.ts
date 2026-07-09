@@ -97,6 +97,7 @@ export {
 export {
   CONFIG_FILE,
   defaultConfig,
+  generateBundleId,
   loadConfig,
   LOCAL_CONFIG_FILE,
   type Config,

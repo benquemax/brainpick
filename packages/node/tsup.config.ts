@@ -9,9 +9,11 @@ export default defineConfig({
   clean: true,
   dts: true,
   // tsup auto-externalizes dependencies/peerDependencies but NOT
-  // optionalDependencies — the lancedb native binding must never be bundled
-  // (it is dynamically imported and its absence merely degrades T2).
-  external: ["@lancedb/lancedb", "apache-arrow"],
+  // optionalDependencies — the lancedb and transformers.js native bindings
+  // must never be bundled (both are dynamically imported and their absence
+  // merely degrades T2; bundling would also drag their multi-MB platform
+  // .node binaries straight into dist/cli.js).
+  external: ["@lancedb/lancedb", "apache-arrow", "@huggingface/transformers"],
   // src/cli.ts carries the `#!/usr/bin/env node` shebang; esbuild keeps it
   // on the emitted entry, so dist/cli.js is directly runnable.
 });
