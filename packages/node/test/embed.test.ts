@@ -3,16 +3,19 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 
 import {
   BATCH_SIZE,
+  DEFAULT_LOCAL_MODEL,
   EmbeddingUnavailable,
   fnv1a,
+  LocalEmbedder,
   makeEmbedder,
   MockEmbedder,
   OllamaEmbedder,
   OpenAICompatEmbedder,
+  transformersAvailable,
 } from "../src/embed";
 
 // fnv1a("kuu") = 1815928360 -> bucket 8; fnv1a("maa") = 4003661646 -> bucket 14
@@ -142,11 +145,56 @@ test("makeEmbedder maps kinds", () => {
   expect(makeEmbedder("openai-compatible", "http://x/v1", "m")).toBeInstanceOf(OpenAICompatEmbedder);
   // "openai" (init's paid-API record) is an openai-compatible endpoint with a bearer key
   expect(makeEmbedder("openai", "https://api.openai.com/v1", "m")).toBeInstanceOf(OpenAICompatEmbedder);
+  expect(makeEmbedder("local", "", "some/model")).toBeInstanceOf(LocalEmbedder);
   expect(() => makeEmbedder("teleport", "http://x", "m")).toThrow(EmbeddingUnavailable);
 });
 
-test("makeEmbedder fastembed is a python-only rung — the instruction steers away", () => {
-  // spec/30 detection ladder rung 5 is Python-only; this engine names the way out.
+test("makeEmbedder fastembed steers to local, ollama, or the python sibling", () => {
+  // spec/30 detection ladder rung 5: fastembed stays Python-only, but this engine
+  // now has its OWN in-process floor (kind = "local") — named first in the steer.
   expect(() => makeEmbedder("fastembed", "", "BAAI/bge-small-en-v1.5")).toThrow(EmbeddingUnavailable);
-  expect(() => makeEmbedder("fastembed", "", "m")).toThrow(/ollama|Python/);
+  expect(() => makeEmbedder("fastembed", "", "m")).toThrow(/local|ollama|Python/);
+});
+
+test("makeEmbedder local defaults to nomic-embed-text-v1.5 when no model is given", () => {
+  // construction is cheap and synchronous — no network until embed() is called,
+  // so this proves the default wiring without paying for a model download.
+  expect(() => makeEmbedder("local")).not.toThrow();
+  expect(makeEmbedder("local")).toBeInstanceOf(LocalEmbedder);
+  expect(DEFAULT_LOCAL_MODEL).toBe("nomic-ai/nomic-embed-text-v1.5");
+});
+
+// -- local (transformers.js on onnxruntime-node) — spec/30 rung 5, this engine's peer to fastembed
+
+test("empty input never loads the local pipeline", async () => {
+  // proves the import guard never even fires for the trivial case — no network,
+  // no onnxruntime session, regardless of whether the optional dep resolves.
+  const embedder = new LocalEmbedder("nonexistent/model-that-would-404");
+  expect(await embedder.embed([])).toEqual([]);
+});
+
+const localAvailable = await transformersAvailable();
+
+describe.skipIf(!localAvailable)("local embedder (transformers.js present)", () => {
+  test("transformersAvailable reports true here", () => {
+    expect(localAvailable).toBe(true);
+  });
+
+  // Heavy: downloads real ONNX weights on first run. Kept out of the default
+  // gate (like Python's fastembed leg, spec/30) — opt in with
+  // BRAINPICK_TEST_LOCAL_EMBED=1, e.g. a dedicated CI leg.
+  test.skipIf(!process.env["BRAINPICK_TEST_LOCAL_EMBED"])(
+    "embeds real text with the default model",
+    { timeout: 120_000 },
+    async () => {
+      const embedder = new LocalEmbedder(DEFAULT_LOCAL_MODEL);
+      const [vec] = await embedder.embed(["kuu maa"]);
+      expect(vec!.length).toBeGreaterThan(0);
+      expect(vec!.some((x) => x !== 0)).toBe(true);
+    },
+  );
+});
+
+test("makeEmbedder unknown kind mentions local in the way out", () => {
+  expect(() => makeEmbedder("teleport")).toThrow(/local/);
 });

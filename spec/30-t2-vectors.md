@@ -50,8 +50,8 @@ changed and deletes vectors whose ids disappeared.
  "kind": "ollama", "model": "nomic-embed-text"}
 ```
 
-`kind ∈ ollama | openai-compatible | fastembed | mock`. `fingerprint` =
-first 16 hex chars of sha256 over `kind|endpoint|model|dim`. A fingerprint
+`kind ∈ ollama | openai-compatible | fastembed | local | mock`. `fingerprint`
+= first 16 hex chars of sha256 over `kind|endpoint|model|dim`. A fingerprint
 change invalidates every vector (full re-embed). Query-time embedding MUST
 use this record.
 
@@ -74,8 +74,14 @@ Embedding requests are batched (≤ 64 texts per call).
    (llama.cpp).
 4. `OPENAI_API_KEY` → `text-embedding-3-small` — recorded only with
    explicit consent (a paid API is opt-in).
-5. Python engine only: `fastembed` ONNX (`[vectors-local]` extra) — the
-   fully-offline floor. The Node engine steers to Ollama or the sibling.
+5. In-process local model — no daemon, no key, the fully-offline floor.
+   Python: `fastembed` ONNX (`[vectors-local]` extra, `kind = "fastembed"`).
+   Node: `@huggingface/transformers` (transformers.js) on `onnxruntime-node`
+   (an optionalDependency, `kind = "local"`), default model
+   `nomic-ai/nomic-embed-text-v1.5` (quantized ONNX). Neither engine
+   auto-probes this rung the way rungs 2–4 are probed — it activates only
+   when `[models.embedding] kind` names it explicitly, since the model
+   itself must be downloaded/loaded rather than merely reached over HTTP.
 6. Nothing → `[modules] vectors` stays off with the exact enabling command.
 
 Probes: parallel, ≤ 300 ms, silent misses.

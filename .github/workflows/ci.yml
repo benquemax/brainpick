@@ -68,6 +68,26 @@ jobs:
       - name: build
         run: npm run build -w packages/node
 
+  vectors-local-node:
+    # The in-process local embedder (spec/30 rung 5, kind = "local") is
+    # import-guarded like @lancedb/lancedb, but unlike that optionalDependency
+    # its real-inference test also downloads ONNX weights — too heavy for the
+    # matrix job above on every push. This ubuntu-only leg opts in with
+    # BRAINPICK_TEST_LOCAL_EMBED, the Node peer of the vectors-local job above.
+    name: vectors-local fallback (transformers.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: exercise the local embedder (downloads nomic-embed-text-v1.5 once)
+        run: npm test -w packages/node -- test/embed.test.ts -t "local embedder"
+        env:
+          BRAINPICK_TEST_LOCAL_EMBED: "1"
+
   webui:
     name: web ui
     runs-on: ubuntu-latest

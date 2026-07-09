@@ -1,13 +1,28 @@
-/** Embedding clients (spec/30): one tiny interface, three backends, ≤64 batching.
+/** Embedding clients (spec/30): one tiny interface, four backends, ≤64 batching.
  *
  * The compile stage and query-time embedding share these; whichever backend the
  * t2/embedding.json record names is the one that must answer at query time.
- * fastembed (the Python engine's offline floor) is deliberately absent — this
- * engine steers to Ollama or the sibling engine (spec/30 detection ladder).
+ * `local` (transformers.js on onnxruntime-node) is this engine's peer to the
+ * Python engine's `fastembed` — the in-process, fully-offline floor (rung 5 of
+ * the detection ladder), import-guarded exactly like @lancedb/lancedb: absence
+ * degrades with an instruction, never a module-not-found crash.
  */
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export const BATCH_SIZE = 64; // spec/30: embedding requests are batched (≤ 64 texts per call)
 export const MOCK_DIM = 16;
+/** nomic-ai/nomic-embed-text-v1.5 (Apache-2.0): ships ONNX exports directly, a
+ * natively supported architecture (nomic_bert) in transformers.js — the
+ * `local` kind's default model when `[models.embedding] model` is unset. */
+export const DEFAULT_LOCAL_MODEL = "nomic-ai/nomic-embed-text-v1.5";
+
+/** Where downloaded ONNX weights + tokenizers live — outside node_modules (a
+ * global/npx install wipes that on every reinstall), one documented path for
+ * every platform (docs/embedding-detection.md). */
+export function localModelCacheDir(): string {
+  return join(homedir(), ".cache", "brainpick", "transformers");
+}
 // Same boundaries as keyword search (spec/50): Python [^\W_]+ with re.UNICODE.
 const TOKEN = /[\p{L}\p{N}]+/gu;
 const HTTP_TIMEOUT_MS = 120_000; // the first call may load a model
@@ -136,6 +151,86 @@ export class OpenAICompatEmbedder extends HttpEmbedder {
   }
 }
 
+type TransformersModule = typeof import("@huggingface/transformers");
+
+let transformersModule: TransformersModule | null | undefined;
+
+async function importTransformers(): Promise<TransformersModule | null> {
+  if (transformersModule === undefined) {
+    try {
+      transformersModule = await import("@huggingface/transformers");
+    } catch {
+      transformersModule = null; // absent or its native onnxruntime-node binding failed to load
+    }
+  }
+  return transformersModule;
+}
+
+/** Whether @huggingface/transformers resolves — the `local` kind's import guard. */
+export async function transformersAvailable(): Promise<boolean> {
+  return (await importTransformers()) !== null;
+}
+
+interface FeatureExtractor {
+  (texts: string[], options: { pooling: "mean"; normalize: boolean }): Promise<{ tolist(): number[][] }>;
+}
+
+/** In-process local embeddings via transformers.js on onnxruntime-node (spec/30
+ * rung 5) — the fully-offline floor, this engine's peer to Python's fastembed.
+ * The pipeline (tokenizer + ONNX session) loads lazily on first `embed()` and
+ * is cached for the life of this instance; a missing package or a load
+ * failure surfaces as an instructive `EmbeddingUnavailable`, never a crash. */
+export class LocalEmbedder implements Embedder {
+  private pipelinePromise: Promise<FeatureExtractor> | null = null;
+
+  constructor(private readonly model: string) {}
+
+  private async getPipeline(): Promise<FeatureExtractor> {
+    if (this.pipelinePromise === null) {
+      this.pipelinePromise = this.loadPipeline();
+    }
+    try {
+      return await this.pipelinePromise;
+    } catch (error) {
+      this.pipelinePromise = null; // a failed load never wedges retries
+      throw error;
+    }
+  }
+
+  private async loadPipeline(): Promise<FeatureExtractor> {
+    const mod = await importTransformers();
+    if (mod === null) {
+      throw new EmbeddingUnavailable(
+        "@huggingface/transformers is not installed — npm install @huggingface/transformers " +
+          "to enable the in-process local embedding backend (kind = \"local\")",
+      );
+    }
+    try {
+      return (await mod.pipeline("feature-extraction", this.model, {
+        dtype: "q8", // quantized — a fraction of the fp32 download for near-identical recall
+        cache_dir: localModelCacheDir(),
+      })) as unknown as FeatureExtractor;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new EmbeddingUnavailable(
+        `local model '${this.model}' failed to load (${msg}) — check the model name in ` +
+          "[models.embedding] and that it has been downloaded (first use fetches it)",
+      );
+    }
+  }
+
+  async embed(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) return [];
+    const pipe = await this.getPipeline();
+    const vectors: number[][] = [];
+    for (const batch of batches(texts)) {
+      const output = await pipe(batch, { pooling: "mean", normalize: true });
+      vectors.push(...output.tolist());
+    }
+    return vectors;
+  }
+}
+
 /** The [models.embedding] record → a client. Unknown kinds are instructions. */
 export function makeEmbedder(kind: string, endpoint = "", model = "", apiKey = ""): Embedder {
   if (kind === "mock") return new MockEmbedder();
@@ -143,13 +238,14 @@ export function makeEmbedder(kind: string, endpoint = "", model = "", apiKey = "
   if (kind === "openai-compatible" || kind === "openai") {
     return new OpenAICompatEmbedder(endpoint, model, apiKey);
   }
+  if (kind === "local") return new LocalEmbedder(model || DEFAULT_LOCAL_MODEL);
   if (kind === "fastembed") {
     throw new EmbeddingUnavailable(
-      "fastembed is Python-only — use ollama (ollama pull nomic-embed-text) or " +
-        "compile with the Python engine's [vectors-local] extra",
+      "fastembed is Python-only — use kind = \"local\" (npm install @huggingface/transformers), " +
+        "ollama (ollama pull nomic-embed-text), or compile with the Python engine's [vectors-local] extra",
     );
   }
   throw new EmbeddingUnavailable(
-    `unknown embedding kind '${kind}' — use ollama, openai-compatible, or mock`,
+    `unknown embedding kind '${kind}' — use ollama, openai-compatible, local, or mock`,
   );
 }

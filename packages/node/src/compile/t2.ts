@@ -11,7 +11,7 @@ import type { Config, EmbeddingConfig } from "../config";
 import { canonicalJson, canonicalJsonl, cmpStr, sha256Hex, type JsonValue } from "../core/canonical";
 import { readTextOrNull, writeIfChanged } from "../core/fs";
 import { PY_SPACE_CLASS, pyStrip } from "../core/pyfmt";
-import { makeEmbedder } from "../embed";
+import { DEFAULT_LOCAL_MODEL, makeEmbedder } from "../embed";
 import { lancedbAvailable, VectorStore, type ChunkRow } from "../vectorstore";
 
 export const MAX_CHUNK = 3200; // chars, hard budget per chunk (overlap counts toward it)
@@ -247,7 +247,7 @@ export async function t2Gate(config: Config): Promise<[boolean, string | null]> 
  * endpoint; embedding.json keeps the spec/30 enum. */
 function normalizedBackend(embedding: EmbeddingConfig): [string, string, string] {
   const kind = embedding.kind === "openai" ? "openai-compatible" : embedding.kind;
-  const model = embedding.model || (kind === "mock" ? "mock" : "");
+  const model = embedding.model || (kind === "mock" ? "mock" : kind === "local" ? DEFAULT_LOCAL_MODEL : "");
   return [kind, embedding.endpoint, model];
 }
 

@@ -50,8 +50,9 @@
     "yaml": "^2.8.0",
     "zod": "^3.25.76"
   },
-  "//optionalDependencies": "T2's vector store (spec/30) — absence degrades T2 with an instruction, never breaks T1. apache-arrow is @lancedb/lancedb's peer (schema construction).",
+  "//optionalDependencies": "T2's vector store (spec/30) — absence degrades T2 with an instruction, never breaks T1. apache-arrow is @lancedb/lancedb's peer (schema construction). @huggingface/transformers is the in-process local embedding backend (kind = \"local\") — runs on onnxruntime-node, absence degrades to an instruction same as lancedb.",
   "optionalDependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@lancedb/lancedb": "^0.31.0",
     "apache-arrow": "^18.1.0"
   },
