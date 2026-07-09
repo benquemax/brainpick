@@ -19,7 +19,9 @@ file = "index.md"
 
 [modules]                       # T1 has no switch
 vectors = "auto"                # auto | on | off   (T2 — M2)
-graph = "off"                   # auto | on | off   (T3 — M3)
+graph = "algorithmic"           # algorithmic (default) | lightrag | auto | off
+                                # auto = lightrag when [models.extraction] is
+                                # configured, else algorithmic (spec/40)
 ui = true
 
 [ui]                            # presentation policy shipped to the client (spec/50 /api/status)
