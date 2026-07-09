@@ -53,9 +53,12 @@ A random opaque identifier minted by `brainpick init` (recommended shape:
 identity travels with the bundle wherever it is cloned or served. Consumers
 treat it as an address (multi-brain serving, the desktop app's brain
 registry, future MCP routing like `/mcp/{brainId}`), never as a credential —
-it grants no access on its own. Absent on bundles that predate this key;
-`brainpick init` on an existing bundle without one adds it idempotently
-(re-running `init` never mints a second id). `GET /api/status` ships it as
+it grants no access on its own. Absent on bundles that predate this key.
+`brainpick init` mints one in every config it CREATES; on a bundle whose
+`brainpick.toml` already exists without an id, init OFFERS a paste-able
+fragment instead of editing in place (init never rewrites a config it did
+not create — the same contract as its henxels fragment). Either way,
+re-running `init` never mints a second id. `GET /api/status` ships it as
 `id` (spec/50), `null` when the bundle has none.
 
 ## Layering: shared vs machine-local
