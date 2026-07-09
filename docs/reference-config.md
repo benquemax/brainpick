@@ -2,7 +2,7 @@
 type: Reference
 title: "Configuration reference"
 description: "Every brainpick.toml key with its default, type and allowed values, derived from config.py and the config spec — plus layering, env overrides and the auth file."
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Configuration reference
@@ -22,6 +22,7 @@ Pages are named by their dotted TOML path.
 - [bundle.root](reference/config/bundle-root.md)
 - [bundle.include](reference/config/bundle-include.md)
 - [bundle.exclude](reference/config/bundle-exclude.md)
+- [bundle.id](reference/config/bundle-id.md)
 
 ## index
 

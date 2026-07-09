@@ -15,7 +15,7 @@ import { parse as parseToml } from "smol-toml";
 
 import { AUTH_FILE, authActive, ensureGitignored, loadAuth } from "./auth";
 import { checkFresh, runCompile } from "./compile/pipeline";
-import { CONFIG_FILE, LOCAL_CONFIG_FILE, loadConfig } from "./config";
+import { CONFIG_FILE, generateBundleId, LOCAL_CONFIG_FILE, loadConfig } from "./config";
 import {
   detectBundle,
   detectHenxels,
@@ -58,6 +58,7 @@ spec = "0.1"
 root = "."                        # the bundle lives right here
 include = ["**/*.md"]
 exclude = []                      # .brainpick/, .git/, _temp/, node_modules/ always excluded
+id = "{id}"                       # minted once — an address for this brain, never a credential
 
 [index]
 mode = "section"                  # manage | section | off — how index.md is maintained
@@ -65,7 +66,7 @@ file = "index.md"
 
 [modules]                         # T1 always compiles; the deeper tiers are switchable
 vectors = "auto"                  # auto | on | off — T2 semantic search (embedding backend required)
-graph = "off"                     # auto | on | off — T3 entity graph (lands in M3)
+graph = "algorithmic"             # algorithmic (default) | lightrag | auto | off — T3 entity graph
 ui = true
 
 [serve]
@@ -155,8 +156,17 @@ export function brainpickCommand(): string[] {
   return ["npx", "brainpick"]; // published: npx resolves it from the registry
 }
 
-export function renderConfig(): string {
-  return CONFIG_TEMPLATE;
+/** The shared brainpick.toml — bundle policy only, endpoint-free by design.
+ * `bundleId` is baked in fresh (spec/80 `[bundle] id`) so a newly scaffolded
+ * bundle is identifiable from the first commit. */
+export function renderConfig(bundleId: string): string {
+  return CONFIG_TEMPLATE.replace("{id}", bundleId);
+}
+
+/** A paste-able `[bundle] id` line for an EXISTING config that lacks one —
+ * init never rewrites a config it does not own (see module docstring). */
+export function bundleIdFragment(bundleId: string): string {
+  return `  [bundle]\n  id = "${bundleId}"`;
 }
 
 export function renderLocalConfig(backend: Backend): string {
@@ -206,6 +216,21 @@ export function henxelsFragment(contract: string, bundle: string): string {
 }
 
 /** The repo .gitignore that should learn `.brainpick/` — or null if covered/absent. */
+/** The `[bundle] id` an existing config already carries, or null (absent,
+ * empty, or the file fails to parse — a broken config gets its own doctor
+ * line elsewhere, init just skips the suggestion rather than pile on). */
+function existingBundleId(configPath: string): string | null {
+  let data: unknown;
+  try {
+    data = parseToml(readFileSync(configPath, "utf8"));
+  } catch {
+    return null;
+  }
+  const bundle = (data as Record<string, unknown>)?.["bundle"];
+  const id = bundle !== null && typeof bundle === "object" ? (bundle as Record<string, unknown>)["id"] : undefined;
+  return typeof id === "string" && id !== "" ? id : null;
+}
+
 export function gitignoreSuggestion(bundle: string): string | null {
   const repo = findRepoRoot(bundle);
   if (repo === null) return null;
@@ -362,8 +387,12 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
     voice.raw("dry run — nothing written. init would:");
     if (fileExists(join(root, CONFIG_FILE))) {
       voice.step(`• keep the existing ${CONFIG_FILE} (never rewritten)`);
+      if (existingBundleId(join(root, CONFIG_FILE)) === null) {
+        voice.step("• suggest a [bundle] id fragment to paste in yourself");
+      }
     } else {
       voice.step(`• write ${CONFIG_FILE} at the bundle root`);
+      voice.step("• mint a [bundle] id — a stable address for this brain");
     }
     if (backend !== null) {
       voice.step(
@@ -381,8 +410,14 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
   const configPath = join(root, CONFIG_FILE);
   if (fileExists(configPath)) {
     voice.line("○", `config: ${CONFIG_FILE} exists — left untouched`);
+    if (existingBundleId(configPath) === null) {
+      // the one thing init suggests but never writes into an owned file —
+      // same treatment as the henxels fragment and the gitignore lines below.
+      voice.line("○", "no [bundle] id yet (spec/80) — paste this in yourself:");
+      voice.raw(bundleIdFragment(generateBundleId()));
+    }
   } else {
-    writeFileSync(configPath, renderConfig(), "utf8");
+    writeFileSync(configPath, renderConfig(generateBundleId()), "utf8");
     voice.line("✓", `config: ${CONFIG_FILE} written`);
   }
   if (backend !== null) {

@@ -175,8 +175,17 @@ test("status", async () => {
   expect(body.bundle_root).toBeTruthy();
   expect(body.edges).toBeGreaterThan(0);
   expect(body.writes).toBe(true); // default [serve] writes = "guarded" → editor shows Edit
+  expect(body.id).toBeNull(); // the fixture predates [bundle] id (spec/80)
   // [ui] policy reaches the client so it stops guessing from the GPU (spec/50, spec/80)
   expect(body.ui).toEqual({ max_nodes_mobile: 8000, default_mode: "cosmos" });
+});
+
+test("status ships the configured bundle id", async () => {
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[bundle]\nid = "abc123xyz987def456ghi0a"\n', "utf8");
+  const { base } = await serve(await makeApp(root));
+  const { body } = await getJson(`${base}/api/status`);
+  expect(body.id).toBe("abc123xyz987def456ghi0a");
 });
 
 test("status ships configured ui", async () => {

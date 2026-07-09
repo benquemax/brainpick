@@ -2,6 +2,7 @@
 
 ## 2026-07-10
 
+- Added: `[bundle] id` — a stable brain identity minted by `brainpick init` and shipped via `GET /api/status`, for multi-brain serving and future MCP routing.
 - Changed: the knowledge graph is now derived algorithmically by default — ghosts and tags become entities, no model needed; LLM extraction stays opt-in.
 
 ## 2026-07-08

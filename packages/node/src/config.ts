@@ -1,6 +1,7 @@
 /** brainpick.toml (spec/80): defaults when absent, env overrides, unknown keys warn.
  * Layering: brainpick.local.toml (machine-local endpoints) deep-merges over the
  * shared file — precedence CLI > env > local.toml > toml > defaults. */
+import { randomBytes } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -9,10 +10,25 @@ import { parse as parseToml } from "smol-toml";
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
 const FALSY = new Set(["0", "false", "no", "off"]);
 
+const BUNDLE_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const BUNDLE_ID_LENGTH = 21;
+
+/** A random opaque `[bundle] id` (spec/80): 21-char nanoid-style [a-z0-9],
+ * minted once by `brainpick init` and committed with the bundle — an address,
+ * never a credential. No cross-engine determinism is required (a bundle gets
+ * exactly one id, minted by whichever engine's init ran first). */
+export function generateBundleId(): string {
+  const bytes = randomBytes(BUNDLE_ID_LENGTH);
+  let id = "";
+  for (let i = 0; i < BUNDLE_ID_LENGTH; i++) id += BUNDLE_ID_ALPHABET[bytes[i]! % BUNDLE_ID_ALPHABET.length];
+  return id;
+}
+
 export interface BundleConfig {
   root: string;
   include: string[];
   exclude: string[];
+  id: string; // minted by `brainpick init`; absent ("") on bundles that predate this key
 }
 
 export interface IndexConfig {
@@ -78,7 +94,7 @@ export interface Config {
 export function defaultConfig(): Config {
   return {
     spec: "0.1",
-    bundle: { root: ".", include: ["**/*.md"], exclude: [] },
+    bundle: { root: ".", include: ["**/*.md"], exclude: [], id: "" },
     index: { mode: "section", file: "index.md" },
     modules: { vectors: "auto", graph: "algorithmic", ui: true },
     models: {

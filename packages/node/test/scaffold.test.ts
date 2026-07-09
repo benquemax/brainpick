@@ -75,6 +75,10 @@ test("init full choreography", async () => {
   expect(text).toContain("npx brainpick mcp"); // the once-published note
   expect(text).toContain("Serve the brain:");
   expect(text).toContain("--open");
+
+  // a fresh config gets a minted [bundle] id — an address for this brain (spec/80)
+  expect(configText).toMatch(/id = "[a-z0-9]{21}"/);
+  expect(loadConfig(root).bundle.id).toMatch(/^[a-z0-9]{21}$/);
 });
 
 test("init never clobbers an existing config", async () => {
@@ -85,6 +89,30 @@ test("init never clobbers an existing config", async () => {
   expect(await runInit(root, { env: {}, probes: OLLAMA_FOUND, print: out.print })).toBe(0);
   expect(readFileSync(join(root, "brainpick.toml"), "utf8")).toBe(marker);
   expect(out.text()).toContain("left untouched");
+});
+
+test("init suggests a bundle id for an existing config without one", async () => {
+  const root = copyBundle();
+  const marker = '# hand-tuned\nspec = "0.1"\n';
+  writeFileSync(join(root, "brainpick.toml"), marker, "utf8");
+  const out = capture();
+  expect(await runInit(root, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
+  expect(readFileSync(join(root, "brainpick.toml"), "utf8")).toBe(marker); // still untouched
+  expect(out.text()).toContain("no [bundle] id yet");
+  expect(out.text()).toMatch(/id = "[a-z0-9]{21}"/);
+
+  // idempotent: rerunning offers the suggestion again (nothing was persisted to skip)
+  const again = capture();
+  expect(await runInit(root, { env: {}, probes: NO_BACKENDS, print: again.print })).toBe(0);
+  expect(again.text()).toContain("no [bundle] id yet");
+});
+
+test("init does not suggest a bundle id when one is already configured", async () => {
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[bundle]\nid = "abc123xyz987def456ghi0a"\n', "utf8");
+  const out = capture();
+  expect(await runInit(root, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
+  expect(out.text()).not.toContain("no [bundle] id yet");
 });
 
 test("init dry-run writes nothing", async () => {

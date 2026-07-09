@@ -12,6 +12,7 @@ spec = "0.1"
 root = "."
 include = ["**/*.md"]
 exclude = []                    # .brainpick/, .git/, _temp/, node_modules/ always excluded
+id = ""                         # a random opaque identifier minted by `brainpick init`
 
 [index]
 mode = "section"                # manage | section | off
@@ -43,6 +44,19 @@ henxels = "auto"                # auto | always | never
 
 Unknown keys are warnings, not errors (config written by a newer brainpick
 must not brick an older one).
+
+## `[bundle] id` — brain identity
+
+A random opaque identifier minted by `brainpick init` (recommended shape:
+21-char nanoid-style `[a-z0-9]`) and committed with the bundle in
+`brainpick.toml` — it is SHARED config, not machine-local, because the
+identity travels with the bundle wherever it is cloned or served. Consumers
+treat it as an address (multi-brain serving, the desktop app's brain
+registry, future MCP routing like `/mcp/{brainId}`), never as a credential —
+it grants no access on its own. Absent on bundles that predate this key;
+`brainpick init` on an existing bundle without one adds it idempotently
+(re-running `init` never mints a second id). `GET /api/status` ships it as
+`id` (spec/50), `null` when the bundle has none.
 
 ## Layering: shared vs machine-local
 

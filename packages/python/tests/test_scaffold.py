@@ -1,5 +1,6 @@
 """init/doctor choreography (docs/onboarding.md): detect, propose, compile, glow —
 config written once and never clobbered, every error an instruction, dry-run inert."""
+import re
 import warnings
 from pathlib import Path
 
@@ -48,6 +49,10 @@ def test_init_full_choreography(kotiaurinko, capsys):
     assert "10 docs" in out
     assert "your brain, compiled" in out
 
+    # a fresh config gets a minted [bundle] id — an address for this brain (spec/80)
+    assert re.search(r'id = "[a-z0-9]{21}"', config_text)
+    assert re.fullmatch(r"[a-z0-9]{21}", load_config(kotiaurinko).bundle.id)
+
     import brainpick.scaffold as scaffold_module
 
     project = Path(scaffold_module.__file__).resolve().parents[2]
@@ -71,6 +76,30 @@ def test_init_never_clobbers_an_existing_config(kotiaurinko, capsys):
     # the machine-local layer is independent: the detected backend still lands there
     local = (kotiaurinko / "brainpick.local.toml").read_text(encoding="utf-8")
     assert 'kind = "ollama"' in local
+
+
+def test_init_suggests_a_bundle_id_for_an_existing_config_without_one(kotiaurinko, capsys):
+    marker = '# hand-tuned\nspec = "0.1"\n'
+    (kotiaurinko / "brainpick.toml").write_text(marker, encoding="utf-8")
+    assert run_init(kotiaurinko, env={}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8") == marker  # still untouched
+    assert "no [bundle] id yet" in out
+    assert re.search(r'id = "[a-z0-9]{21}"', out)
+
+    # idempotent: rerunning offers the suggestion again (nothing was persisted to skip)
+    assert run_init(kotiaurinko, env={}, probes=NO_BACKENDS) == 0
+    again = capsys.readouterr().out
+    assert "no [bundle] id yet" in again
+
+
+def test_init_does_not_suggest_a_bundle_id_when_one_is_already_configured(kotiaurinko, capsys):
+    (kotiaurinko / "brainpick.toml").write_text(
+        '[bundle]\nid = "abc123xyz987def456ghi0a"\n', encoding="utf-8",
+    )
+    assert run_init(kotiaurinko, env={}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert "no [bundle] id yet" not in out
 
 
 def test_init_never_clobbers_an_existing_local_config(kotiaurinko, capsys):

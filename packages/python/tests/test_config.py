@@ -1,8 +1,10 @@
 """Config loading (spec/80): defaults, TOML values, layering, env overrides,
 unknown-key warnings."""
+import re
+
 import pytest
 
-from brainpick.config import config_layers, load_config
+from brainpick.config import config_layers, generate_bundle_id, load_config
 
 
 def test_defaults_when_absent(tmp_path):
@@ -11,6 +13,7 @@ def test_defaults_when_absent(tmp_path):
     assert cfg.bundle.root == "."
     assert cfg.bundle.include == ["**/*.md"]
     assert cfg.bundle.exclude == []
+    assert cfg.bundle.id == ""
     assert cfg.index.mode == "section"
     assert cfg.index.file == "index.md"
     assert cfg.serve.host == "127.0.0.1"
@@ -68,6 +71,26 @@ def test_bundle_root_indirection(tmp_path):
     (tmp_path / "brainpick.toml").write_text('[bundle]\nroot = "docs"\n', encoding="utf-8")
     cfg = load_config(tmp_path)
     assert cfg.bundle.root == "docs"
+
+
+def test_bundle_id_parses_from_toml(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        '[bundle]\nid = "abc123xyz987def456ghi0a"\n', encoding="utf-8",
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.bundle.id == "abc123xyz987def456ghi0a"
+
+
+def test_bundle_id_env_override(tmp_path):
+    cfg = load_config(tmp_path, env={"BRAINPICK_BUNDLE_ID": "envid00000000000000000"})
+    assert cfg.bundle.id == "envid00000000000000000"
+
+
+def test_generate_bundle_id_is_21_char_lowercase_alphanumeric():
+    ids = {generate_bundle_id() for _ in range(50)}
+    assert len(ids) == 50  # no collisions in a small sample
+    for bundle_id in ids:
+        assert re.fullmatch(r"[a-z0-9]{21}", bundle_id)
 
 
 def test_modules_and_embedding_defaults(tmp_path):

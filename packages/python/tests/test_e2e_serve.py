@@ -123,8 +123,17 @@ def test_status(kotiaurinko):
         assert body["bundle_root"]
         assert body["writes"] is True  # default [serve] writes = "guarded" → editor shows Edit
         assert body["edges"] > 0
+        assert body["id"] is None  # the fixture predates [bundle] id (spec/80)
         # [ui] policy reaches the client so it stops guessing from the GPU (spec/50, spec/80)
         assert body["ui"] == {"max_nodes_mobile": 8000, "default_mode": "cosmos"}
+
+
+def test_status_ships_the_configured_bundle_id(kotiaurinko):
+    (kotiaurinko / "brainpick.toml").write_text(
+        '[bundle]\nid = "abc123xyz987def456ghi0a"\n', encoding="utf-8",
+    )
+    with TestClient(make_app(kotiaurinko)) as client:
+        assert client.get("/api/status").json()["id"] == "abc123xyz987def456ghi0a"
 
 
 def test_status_ships_configured_ui(kotiaurinko):

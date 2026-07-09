@@ -247,6 +247,7 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
       bundle_root: state.root,
       watching: state.watching,
       writes: state.config.serve.writes === "guarded", // the editor shows Edit only when true
+      id: state.config.bundle.id || null, // [bundle] id (spec/80) — null on bundles that predate it
       ui: {
         // [ui] policy shipped to the client so it stops guessing from the GPU (spec/50, spec/80)
         max_nodes_mobile: state.config.ui.max_nodes_mobile,

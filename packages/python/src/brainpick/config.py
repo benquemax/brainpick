@@ -4,6 +4,7 @@ on top, unknown keys warn."""
 from __future__ import annotations
 
 import os
+import secrets
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,12 +21,24 @@ LOCAL_CONFIG_FILE = "brainpick.local.toml"  # machine-local endpoints — gitign
 _TRUTHY = {"1", "true", "yes", "on"}
 _FALSY = {"0", "false", "no", "off"}
 
+_BUNDLE_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
+_BUNDLE_ID_LENGTH = 21
+
+
+def generate_bundle_id() -> str:
+    """A random opaque `[bundle] id` (spec/80): 21-char nanoid-style [a-z0-9],
+    minted once by `brainpick init` and committed with the bundle — an address,
+    never a credential. No cross-engine determinism is required (a bundle gets
+    exactly one id, minted by whichever engine's init ran first)."""
+    return "".join(secrets.choice(_BUNDLE_ID_ALPHABET) for _ in range(_BUNDLE_ID_LENGTH))
+
 
 @dataclass
 class BundleConfig:
     root: str = "."
     include: list[str] = field(default_factory=lambda: ["**/*.md"])
     exclude: list[str] = field(default_factory=list)
+    id: str = ""  # minted by `brainpick init`; absent ("") on bundles that predate this key
 
 
 @dataclass

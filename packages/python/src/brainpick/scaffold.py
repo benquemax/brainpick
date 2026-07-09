@@ -22,7 +22,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from brainpick.compile.pipeline import check_fresh, run_compile
-from brainpick.config import LOCAL_CONFIG_FILE, config_layers, load_config
+from brainpick.config import LOCAL_CONFIG_FILE, config_layers, generate_bundle_id, load_config
 from brainpick.vectorstore import lancedb_available
 from brainpick.detect import (
     Backend,
@@ -63,6 +63,7 @@ spec = "0.1"
 root = "."                        # the bundle lives right here
 include = ["**/*.md"]
 exclude = []                      # .brainpick/, .git/, _temp/, node_modules/ always excluded
+id = "{bundle_id}"                # minted once — an address for this brain, never a credential
 
 [index]
 mode = "section"                  # manage | section | off — how index.md is maintained
@@ -152,9 +153,17 @@ def brainpick_command() -> list[str]:
     return ["uvx", "brainpick"]  # published: uvx resolves it from the index
 
 
-def render_config() -> str:
-    """The shared brainpick.toml — bundle policy only, endpoint-free by design."""
-    return _CONFIG_TEMPLATE
+def render_config(bundle_id: str) -> str:
+    """The shared brainpick.toml — bundle policy only, endpoint-free by design.
+    `bundle_id` is baked in fresh (spec/80 `[bundle] id`) so a newly scaffolded
+    bundle is identifiable from the first commit."""
+    return _CONFIG_TEMPLATE.format(bundle_id=bundle_id)
+
+
+def bundle_id_fragment(bundle_id: str) -> str:
+    """A paste-able `[bundle] id` line for an EXISTING config that lacks one —
+    init never rewrites a config it does not own (see module docstring)."""
+    return f'  [bundle]\n  id = "{bundle_id}"'
 
 
 def render_local_config(backend: Backend) -> str:
@@ -198,6 +207,18 @@ def henxels_fragment(contract: Path, bundle: Path) -> str:
         "    why: agents navigate the compiled artifacts — stale artifacts lie to them\n"
         f'    run_before_commit: "{command}"'
     )
+
+
+def _existing_bundle_id(config_path: Path) -> str | None:
+    """The `[bundle] id` an existing config already carries, or None (absent,
+    empty, or the file fails to parse — a broken config gets its own doctor
+    line elsewhere, init just skips the suggestion rather than pile on)."""
+    try:
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    bundle_id = data.get("bundle", {}).get("id") if isinstance(data.get("bundle"), dict) else None
+    return bundle_id if isinstance(bundle_id, str) and bundle_id else None
 
 
 def gitignore_suggestion(bundle: Path) -> tuple[Path, list[str]] | None:
@@ -315,8 +336,11 @@ def run_init(
         voice.raw("dry run — nothing written. init would:")
         if (root / "brainpick.toml").exists():
             voice.step("• keep the existing brainpick.toml (never rewritten)")
+            if _existing_bundle_id(root / "brainpick.toml") is None:
+                voice.step("• suggest a [bundle] id fragment to paste in yourself")
         else:
             voice.step("• write brainpick.toml at the bundle root (shared policy, endpoint-free)")
+            voice.step("• mint a [bundle] id — a stable address for this brain")
         if backend is not None:
             if (root / "brainpick.local.toml").exists():
                 voice.step("• keep the existing brainpick.local.toml (never rewritten)")
@@ -331,8 +355,13 @@ def run_init(
     config_path = root / "brainpick.toml"
     if config_path.exists():
         voice.line("○", "config: brainpick.toml exists — left untouched")
+        if _existing_bundle_id(config_path) is None:
+            # the one thing init suggests but never writes into an owned file —
+            # same treatment as the henxels fragment and the gitignore lines below.
+            voice.line("○", "no [bundle] id yet (spec/80) — paste this in yourself:")
+            voice.raw(bundle_id_fragment(generate_bundle_id()))
     else:
-        config_path.write_text(render_config(), encoding="utf-8")
+        config_path.write_text(render_config(generate_bundle_id()), encoding="utf-8")
         voice.line("✓", "config: brainpick.toml written (shared policy — endpoints stay local)")
 
     if backend is not None:

@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
 
-import { loadConfig } from "../src/config";
+import { generateBundleId, loadConfig } from "../src/config";
 import { cleanup, tempDir } from "./helpers";
 
 afterEach(cleanup);
@@ -28,6 +28,7 @@ test("defaults when absent", () => {
   expect(cfg.bundle.root).toBe(".");
   expect(cfg.bundle.include).toEqual(["**/*.md"]);
   expect(cfg.bundle.exclude).toEqual([]);
+  expect(cfg.bundle.id).toBe("");
   expect(cfg.index.mode).toBe("section");
   expect(cfg.index.file).toBe("index.md");
   expect(cfg.serve.host).toBe("127.0.0.1");
@@ -91,6 +92,22 @@ test("invalid toml warns and uses defaults", () => {
 test("bundle root indirection", () => {
   const { cfg } = load(withToml('[bundle]\nroot = "docs"\n'));
   expect(cfg.bundle.root).toBe("docs");
+});
+
+test("bundle id parses from toml", () => {
+  const { cfg } = load(withToml('[bundle]\nid = "abc123xyz987def456ghi0a"\n'));
+  expect(cfg.bundle.id).toBe("abc123xyz987def456ghi0a");
+});
+
+test("bundle id env override", () => {
+  const { cfg } = load(tempDir(), { BRAINPICK_BUNDLE_ID: "envid00000000000000000" });
+  expect(cfg.bundle.id).toBe("envid00000000000000000");
+});
+
+test("generateBundleId is 21-char lowercase alphanumeric", () => {
+  const ids = new Set(Array.from({ length: 50 }, () => generateBundleId()));
+  expect(ids.size).toBe(50); // no collisions in a small sample
+  for (const id of ids) expect(id).toMatch(/^[a-z0-9]{21}$/);
 });
 
 test("modules and embedding defaults", () => {
