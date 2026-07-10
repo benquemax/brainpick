@@ -1,0 +1,129 @@
+name: desktop-release
+
+# Three single-file installers for three testers (Phase 1.5,
+# _plans/2026-07-10-phase1.5-release.md): .AppImage, .dmg (Apple Silicon —
+# the macos-latest runner is arm64), .msi. Triggered by a `desktop-v*` tag —
+# DISJOINT from release.yml's own `v*` (PyPI/npm), never a bare `v*`.
+#
+# The engine + daemon are pure JS (tsup output is platform-agnostic) — built
+# ONCE on ubuntu-latest and shared, rather than three times. Each platform
+# leg only does what's actually platform-specific: stage the native
+# resources (Node runtime + node_modules with its native optional deps) and
+# run the Rust/Tauri build.
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "desktop version to verify, e.g. desktop-v0.1.0 (must equal packages/desktop/app/package.json)"
+        required: true
+
+jobs:
+  build-shared:
+    name: build the engine + daemon (shared across platforms)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: version lockstep
+        run: node scripts/check-desktop-version.mjs "${{ github.event.inputs.version || github.ref_name }}"
+      - run: npm run build -w packages/webui
+      - run: node scripts/sync-ui.mjs
+      - run: npm run build -w packages/node
+      - run: npm run build -w packages/desktop
+      # One tarball with paths preserved relative to the repo root, so the
+      # consuming job's extract is a single unambiguous `tar xzf` at repo
+      # root — no dependence on upload-artifact's own path-flattening
+      # behavior for a multi-path upload, which this workflow can't
+      # exercise for real before Tom's first tag push.
+      - name: package the shared build output
+        run: tar czf engine-dist.tar.gz packages/node/dist packages/node/static packages/desktop/dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-dist
+          path: engine-dist.tar.gz
+
+  desktop:
+    name: ${{ matrix.platform }} (${{ matrix.target }})
+    needs: build-shared
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write # tauri-action creates/updates the draft release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-latest
+            target: linux-x64
+          - platform: macos-latest
+            target: darwin-arm64
+          - platform: windows-latest
+            target: win-x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: linux bundler dependencies (webkit2gtk, appindicator, patchelf, fuse2 for AppImage)
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-dist
+      - name: unpack the shared build output (paths were preserved relative to repo root)
+        shell: bash
+        run: tar xzf engine-dist.tar.gz
+      - working-directory: packages/desktop/app
+        run: npm ci
+      - name: version lockstep
+        run: node scripts/check-desktop-version.mjs "${{ github.event.inputs.version || github.ref_name }}"
+      - name: build + release (beforeBuildCommand stages resources.mjs for this platform)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # linuxdeploy's bundled `strip` can fail on RELR-relocation
+          # sections a newer toolchain emits (hit locally proving this
+          # chunk — a linuxdeploy/modern-glibc incompatibility, not
+          # anything of ours); harmless on macOS/Windows where it's unused.
+          NO_STRIP: "1"
+        with:
+          projectPath: packages/desktop/app
+          tagName: ${{ github.event.inputs.version || github.ref_name }}
+          releaseName: "Brainpick ${{ github.event.inputs.version || github.ref_name }}"
+          releaseDraft: true
+          releaseBody: |
+            Unsigned builds — this is expected for early testers, not a mistake:
+
+            - **Linux (.AppImage)**: `chmod +x Brainpick_*.AppImage`, then run it.
+              If your desktop's AppImage integration errors on launch, run with
+              `APPIMAGE_EXTRACT_AND_RUN=1 ./Brainpick_*.AppImage` instead.
+            - **macOS (.dmg, Apple Silicon only — Intel Mac? tell us, we'll add
+              the target)**: first launch needs right-click → Open once (Gatekeeper
+              blocks unsigned apps from a plain double-click).
+            - **Windows (.msi)**: SmartScreen will warn on first run — click
+              "More info" → "Run anyway".
+
+            Also attached: a standalone `brainpickd-<platform>.tar.gz` per
+            platform (the daemon + bundled Node runtime, no Tauri shell) for
+            headless/NAS use.
+      - name: standalone daemon artifact (headless/NAS)
+        shell: bash
+        run: |
+          tar czf brainpickd-${{ matrix.target }}.tar.gz \
+            -C packages/desktop/app/src-tauri/resources node daemon
+      - name: upload the standalone daemon artifact to the same release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.inputs.version || github.ref_name }}" \
+            "brainpickd-${{ matrix.target }}.tar.gz" --clobber

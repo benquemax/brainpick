@@ -2,7 +2,7 @@
 type: Concept
 title: The desktop app
 description: A Tauri v2 window over the daemon's control API — first-run bootstrap, an add-brain wizard, and a tray icon; no business logic lives in the app, only in brainpickd.
-timestamp: 2026-07-10T16:15:00Z
+timestamp: 2026-07-10T16:45:00Z
 ---
 
 # The desktop app
@@ -89,3 +89,26 @@ whole pipeline):
   three-OS CI matrix (Phase 1.5-B) stages each target on its own runner;
   cross-staging from one OS to build another's resources isn't possible
   for the native pieces, only for the explicitly-downloaded Node binary.
+
+## Installing
+
+Three unsigned single-file installers, built by `.github/workflows/
+desktop-release.yml` on a `desktop-v*` tag push and attached (as a DRAFT —
+reviewed before publishing) to a GitHub Release. Unsigned means the OS
+throws up a first-run speed bump; none of these are a sign anything is
+wrong:
+
+- **Linux — `.AppImage`**: `chmod +x Brainpick_*.AppImage`, then run it. If
+  AppImage integration on your desktop errors on launch (a narrow FUSE
+  quirk, not common), `APPIMAGE_EXTRACT_AND_RUN=1 ./Brainpick_*.AppImage`
+  is the standard AppImage fallback — bypasses the FUSE mount entirely.
+- **macOS — `.dmg`**: Apple Silicon only for now (the `macos-latest`
+  runner is arm64) — Intel Mac testers, ask and an x86_64 target gets
+  added. First launch needs right-click → Open once; Gatekeeper blocks a
+  plain double-click on anything unsigned.
+- **Windows — `.msi`**: SmartScreen warns on first run — "More info" →
+  "Run anyway".
+
+Each release also carries a standalone `brainpickd-<platform>.tar.gz` per
+platform — [the daemon](daemon.md) plus its bundled Node runtime with no
+Tauri shell at all, for a headless machine or a NAS.
