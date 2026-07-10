@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: concept
 title: Knowledge graph tier
 description: T3 derives an entity/relation layer algorithmically by default (ghosts and tags, no model needed) — LightRAG's LLM extraction is an opt-in second backend behind the same adapter.
-timestamp: 2026-07-10T00:00:00Z
+tags: [tier, graph]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Knowledge graph tier
@@ -47,3 +49,8 @@ away: extraction runs last so deterministic freshness never waits on it,
 concurrency is conservative, incremental inserts reuse the compile change
 set, and a `--sample` dry-run previews extraction quality on a handful of
 documents before committing to a full pass.
+
+Every page's own `type` and `about` frontmatter — [the two-axis
+ontology](ontology.md) — is a third source T3 will eventually draw on
+alongside links and tags: a page's declared ontological subject is exactly
+the kind of structured signal this tier already specializes in surfacing.

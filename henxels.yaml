@@ -40,10 +40,36 @@ henxels:
     except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/runtime-parity.md.codx/*"]
     allowed_filetypes: .md
     filename_casing: kebab-case
-    required_frontmatter: [type, title, description]
+    required_frontmatter: [type, about, title, description]
     frontmatter_values:
-      type: [Concept, Reference, Decision, Playbook]
-    why: "One concept per page; the description feeds the generated index and the graph UI."
+      type: [article, decision, playbook, reference, log]
+    why: >
+      type is a page's document FORM (the map), not its subject — a
+      different axis from `about` (see below). Closed set, `article` is the
+      default: article — a page exposing its subject | decision — an
+      ADR-style record (context, decision, alternatives, consequences) |
+      playbook — a how-to a reader follows | reference — a lookup page
+      (table, matrix, enumerable surface) | log — an update-log-shaped page
+      (the bundle's reserved index.md/log.md stay frontmatter-free under
+      OKF and never actually carry this value). Full reasoning:
+      docs/ontology.md. Day-to-day guide: docs/wiki-conventions.md.
+
+  - henxel: "Every doc's subject is classified by ontological category (about)"
+    in: ./docs/*
+    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/runtime-parity.md.codx/*"]
+    frontmatter_values:
+      about: [person, organization, place, thing, event, process, concept]
+    why: >
+      about is a page's ontological SUBJECT (the territory) — orthogonal to
+      `type`, its document form. Walk in order, first yes wins: happens as
+      a WHOLE ("it took place")? -> event. Unfolding ("how is it going")? ->
+      process (telic with a target_end — a project; atelic without one).
+      Acts? -> person (an individual) or organization (a collective).
+      Spatial? -> place (a where) or thing (a what). Else -> concept. A
+      role is not a type (OntoClean rigidity test: could it stop being X
+      without ceasing to exist? then it's a tag or a link, not `about` — a
+      "customer" or "CEO" is never an about value). Full reasoning:
+      docs/ontology.md.
 
   - henxel: "timestamp is a real ISO 8601 datetime and is bumped when a doc changes"
     in: ./docs/*
@@ -55,6 +81,12 @@ henxels:
     in: ./docs/*
     rooted_links_resolve: ./docs
     links_resolve: true
+    level: warn
+    why: >
+      A link that lands nowhere is either a mistake or a promise. Typo or
+      wrong path -> fix or remove it now. A page this wiki genuinely wants
+      -> it's a ghost: create it when you can. Never leave a link you
+      didn't mean.
 
   - henxel: "A concept is a node in the knowledge graph, not an orphan"
     in: ./docs/*

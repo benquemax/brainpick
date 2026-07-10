@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Architecture decision records"
 description: "The founding and major decisions behind brainpick — one Architecture Decision Record per call, each with its context, alternatives and consequences, richly cross-linked."
-timestamp: 2026-07-08T00:00:00Z
+tags: [governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Architecture decision records
@@ -13,7 +15,7 @@ principles and milestone history — never invented after the fact. Where the
 concept docs explain *how* a mechanism works and the [Reference](reference.md)
 volume pins down *exactly what*, these pages record *why brainpick chose it*,
 what it weighed against, and what the choice costs. Each page carries
-`type: Decision` — the [wiki conventions](wiki-conventions.md)' ADR-style record.
+`type: decision` — the [wiki conventions](wiki-conventions.md)' ADR-style record.
 
 ## Scope and philosophy
 
@@ -21,6 +23,10 @@ what it weighed against, and what the choice costs. Each page carries
 - [ADR: small models are first-class citizens](reference/adr/small-models-first-class.md)
 - [ADR: perfect UX and AX are fruits of great DX](reference/adr/dx-first.md)
 - [ADR: the files are the brain and compiled state is disposable](reference/adr/files-are-the-brain.md)
+
+## Content model
+
+- [ADR: the two-axis ontology](reference/adr/two-axis-ontology.md)
 
 ## Architecture and runtime
 
