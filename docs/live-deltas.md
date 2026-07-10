@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: process
 title: Live deltas
 description: The SSE protocol that streams graph changes to every open UI — the brain updates in real time, never by page refresh.
-timestamp: 2026-07-08T00:00:00Z
+tags: [tier, ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Live deltas

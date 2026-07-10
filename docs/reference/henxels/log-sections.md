@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: update logs are date-sectioned"
 description: "The custom henxel that a log.md is organized into date headings, newest first."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: update logs are date-sectioned

@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: process
 title: Presentations
 description: brain_show lets an agent spotlight a subgraph, fly the camera and caption it — pushed live to every open UI, so the agent side can reach across to the human side and say "let me show you".
-timestamp: 2026-07-08T00:00:00Z
+tags: [agents, ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Presentations

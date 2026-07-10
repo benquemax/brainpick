@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: concept
 title: Guarded writes
 description: brain_write lets agents add knowledge through MCP, but nothing touches the brain without passing the henxels contract first.
-timestamp: 2026-07-07T10:00:00Z
+tags: [writes, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Guarded writes

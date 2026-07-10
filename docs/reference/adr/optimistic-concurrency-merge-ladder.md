@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: optimistic concurrency and the merge ladder"
 description: "Why concurrent writes resolve through a base_sha check and a three-way then LLM merge ladder whose proposals are never auto-applied, rather than last-write-wins or locks."
-timestamp: 2026-07-08T00:00:00Z
+tags: [writes]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: optimistic concurrency and the merge ladder

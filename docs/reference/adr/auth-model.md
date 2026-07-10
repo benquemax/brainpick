@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: tokens for agents, a password for humans, open by default"
 description: "Why a brain is open by default and adds two credentials only when it leaves the laptop — bearer tokens for agents, a session password for humans — with scrypt hashes that outlive the compiled artifacts."
-timestamp: 2026-07-08T00:00:00Z
+tags: [auth, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: tokens for agents, a password for humans, open by default

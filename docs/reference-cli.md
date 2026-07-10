@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "CLI reference"
 description: "Every brainpick subcommand and its flags, derived from the argparse CLI — compile and serve, the read mirrors, writes, presentations, onboarding and auth."
-timestamp: 2026-07-08T00:00:00Z
+tags: [cli, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # CLI reference

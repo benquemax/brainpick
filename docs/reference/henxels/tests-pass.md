@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: the Python engine's tests pass"
 description: "The pre-commit henxel that runs the Python engine's pytest suite, because tests define the feature set."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: the Python engine's tests pass

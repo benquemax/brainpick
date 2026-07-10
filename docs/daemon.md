@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: thing
 title: The daemon
 description: brainpickd — the service that owns every brain's git sync, supervision, deploy keys, LAN reachability and users behind one small control API; every face (desktop app, browser, CLI) is a thin client of it.
-timestamp: 2026-07-10T10:45:00Z
+tags: [desktop, engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # The daemon

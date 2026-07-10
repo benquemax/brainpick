@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: perfect UX and AX are fruits of great DX"
 description: "Why brainpick invests first in developer experience — the artifact spec, TDD, conformance, the henxels contract and codumented docs — as the mechanism that keeps the agent and human surfaces perfect."
-timestamp: 2026-07-08T00:00:00Z
+tags: [governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: perfect UX and AX are fruits of great DX

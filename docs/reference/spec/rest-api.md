@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: REST API"
 description: "The HTTP surface both servers implement — health, status, graph, docs, search, neighbors, live, timeline, show, guarded writes and asset upload."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: REST API

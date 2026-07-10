@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: presentations"
 description: "Agent-driven views — the normative brain_show payload (nodes, focus, mode, annotation, seq), its ephemeral advisory nature, the live event and UI behaviour."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: presentations

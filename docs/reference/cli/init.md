@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brainpick init"
 description: "Detect the bundle and backends, write config, and compile T1 — the one command from zero to a living brain."
-timestamp: 2026-07-08T00:00:00Z
+tags: [cli, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brainpick init

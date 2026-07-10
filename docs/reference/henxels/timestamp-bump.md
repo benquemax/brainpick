@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: timestamp is bumped on change"
 description: "The henxel requiring a real ISO 8601 datetime timestamp that is bumped whenever a doc changes."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: timestamp is bumped on change

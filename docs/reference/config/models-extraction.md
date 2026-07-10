@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "models.extraction"
 description: "The chat model that powers T3 extraction and doubles as the brain_write merge resolver — kind, endpoint, model and api_key_env."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # models.extraction

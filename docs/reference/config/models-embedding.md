@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "models.embedding"
 description: "The T2 embedding backend — kind, endpoint, model and dim — a machine-local table that belongs in brainpick.local.toml."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # models.embedding

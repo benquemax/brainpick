@@ -2,10 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export const content = `---
-type: Reference
+type: reference
+about: concept
 title: Runtime parity
 description: What the pip and npm packages each do natively — the capability matrix that keeps "one spec, two engines" honest, and how the claims are proven.
-timestamp: 2026-07-07T00:00:00Z
+tags: [engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Runtime parity

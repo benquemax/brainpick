@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "bundle.root"
 description: "Where the OKF bundle lives relative to the config file — default \".\" — so the config can sit at a repo root pointing at a subdirectory bundle."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # bundle.root

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: manifest"
 description: "The root of trust — manifest.json — plus canonical serialization, the monotonic seq counter, tier status and the freshness check."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: manifest

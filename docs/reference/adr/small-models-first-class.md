@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: small models are first-class citizens"
 description: "Why every tool, schema and budget targets a local 27B-class model first, treating frontier models as a speed bonus rather than the design center."
-timestamp: 2026-07-08T00:00:00Z
+tags: [agents, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: small models are first-class citizens

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: a concept is a node, not an orphan"
 description: "The henxel requiring every concept doc to link out at least once — a concept is a node in the knowledge graph, never an island."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: a concept is a node, not an orphan

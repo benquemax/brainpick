@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec reference"
 description: "The normative spec documents both engines honor — manifest, the three tiers, REST, live deltas, MCP, config, timeline and presentations — each summarized here."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec reference

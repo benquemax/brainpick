@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brainpick serve"
 description: "Serve REST, live deltas, the web UI and MCP from one process — with --host, --port, --no-watch and --open."
-timestamp: 2026-07-08T00:00:00Z
+tags: [cli, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brainpick serve

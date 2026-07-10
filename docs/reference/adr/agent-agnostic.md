@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: agent-agnostic, AGENTS.md is the one agent doc"
 description: "Why brainpick plays no favorites among harnesses — MCP, CLI and plain files serve any agent — and keeps one agent-facing document, AGENTS.md, with CLAUDE.md as a thin wrapper."
-timestamp: 2026-07-08T00:00:00Z
+tags: [agents, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: agent-agnostic, AGENTS.md is the one agent doc

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brainpick read"
 description: "Read one doc from the brain by path, stem or approximate title — the brain_read tool as a CLI verb."
-timestamp: 2026-07-08T00:00:00Z
+tags: [cli, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brainpick read

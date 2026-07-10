@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: concept
 title: Artifact spec
 description: Everything under .brainpick/ is a documented, runtime-neutral format — the contract that lets the pip and npm engines read the same compiled brain.
-timestamp: 2026-07-02T00:00:00Z
+tags: [tier, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Artifact spec

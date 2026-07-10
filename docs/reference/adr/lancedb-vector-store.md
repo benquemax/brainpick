@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: LanceDB as the vector store"
 description: "Why brainpick stores T2 vectors in LanceDB over sqlite-vec — one on-disk format both runtimes read — while BM25 keyword search deliberately stays out of it."
-timestamp: 2026-07-08T00:00:00Z
+tags: [tier, engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: LanceDB as the vector store

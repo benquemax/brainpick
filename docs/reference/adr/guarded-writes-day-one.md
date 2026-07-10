@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: guarded writes from day one"
 description: "Why brainpick lets remote agents write to the brain from the first release, with henxels refereeing every write, rather than shipping a read-only MCP surface."
-timestamp: 2026-07-08T00:00:00Z
+tags: [writes, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: guarded writes from day one

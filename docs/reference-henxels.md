@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxels contract reference"
 description: "Each rule and behaviour in henxels.yaml — the structural contract that governs this repo — with what it checks and how to satisfy or consciously override it."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxels contract reference
@@ -25,6 +27,7 @@ run.
 ## OKF-wiki henxels
 
 - [Henxel: concept docs carry OKF frontmatter](reference/henxels/concept-frontmatter.md)
+- [Henxel: a doc's subject is classified (about)](reference/henxels/about-classification.md)
 - [Henxel: timestamp is bumped on change](reference/henxels/timestamp-bump.md)
 - [Henxel: every link lands](reference/henxels/links-land.md)
 - [Henxel: a concept is a node, not an orphan](reference/henxels/no-orphans.md)

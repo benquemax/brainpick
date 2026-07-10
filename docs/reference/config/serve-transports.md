@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "serve.transports"
 description: "Which MCP transports the server mounts — default [\"streamable-http\"], with \"sse\" for the legacy transport."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # serve.transports

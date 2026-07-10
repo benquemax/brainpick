@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: thing
 title: "ADR: the holographic brain and cosmos UI"
 description: "Why the human face is a procedural holographic brain that morphs to a flat GPU cosmos, touch-first and installable, rendering the exact graph agents query rather than decorative data."
-timestamp: 2026-07-08T00:00:00Z
+tags: [ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: the holographic brain and cosmos UI

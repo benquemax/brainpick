@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brainpick integrate"
 description: "Install brainpick into an agent harness — the skill, an MCP snippet and the brain report — additively, with --dry-run."
-timestamp: 2026-07-08T00:00:00Z
+tags: [cli, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brainpick integrate

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: T1 artifacts"
 description: "The deterministic heart — document scanning, link extraction, graph.json (nodes, edges, ghosts, islands, orphans, tags), docs.jsonl, and the generated index."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: T1 artifacts

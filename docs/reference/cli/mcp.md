@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brainpick mcp"
 description: "Speak MCP over stdio for agent hosts — the transport the init snippets configure."
-timestamp: 2026-07-08T00:00:00Z
+tags: [cli, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brainpick mcp

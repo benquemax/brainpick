@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Configuration reference"
 description: "Every brainpick.toml key with its default, type and allowed values, derived from config.py and the config spec — plus layering, env overrides and the auth file."
-timestamp: 2026-07-10T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Configuration reference

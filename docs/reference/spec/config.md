@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: configuration"
 description: "The configuration contract — one TOML file, shared vs machine-local layering, precedence, the auth storage design and the model sections."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: configuration

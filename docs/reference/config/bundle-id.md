@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "bundle.id"
 description: "A random opaque identifier minted by brainpick init and committed with the bundle — an address for this brain, never a credential — default \"\" (absent)."
-timestamp: 2026-07-10T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # bundle.id

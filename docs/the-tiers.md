@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: concept
 title: The tiers
 description: Brainpick's four-tier retrieval ladder, where every tier is optional except the files and each degrades gracefully to the one below.
-timestamp: 2026-07-10T00:00:00Z
+tags: [tier]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # The tiers

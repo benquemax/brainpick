@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brain_read"
 description: "Read one doc with forgiving resolution (path, stem, fuzzy title), returning frontmatter, outline, content and neighbors, shaped to a token budget."
-timestamp: 2026-07-08T00:00:00Z
+tags: [mcp, agents]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brain_read

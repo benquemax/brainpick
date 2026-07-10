@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: dogfood henxels and codumentation from day one"
 description: "Why brainpick governs its own repo with henxels and validates its own docs with codumentation from the first commit, and keeps its wiki as the live dogfood corpus."
-timestamp: 2026-07-08T00:00:00Z
+tags: [governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: dogfood henxels and codumentation from day one

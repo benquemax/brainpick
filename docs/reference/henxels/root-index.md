@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: the bundle root has an index"
 description: "The henxel that docs/ has an index.md and every top-level concept is referenced in it — maintained by hand until brainpick generates it."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: the bundle root has an index

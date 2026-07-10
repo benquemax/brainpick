@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: thing
 title: Holographic brain
 description: The signature visualization — the knowledge graph arranged into an anatomical brain you spin and pinch, morphing to a flat GPU cosmos for analysis.
-timestamp: 2026-07-02T00:00:00Z
+tags: [ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Holographic brain

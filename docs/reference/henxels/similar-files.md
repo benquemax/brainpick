@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Behaviour: the near-copy warning"
 description: "The warn_about_similar_files behaviour — a nudge when a new file looks like a near-copy of a committed one, above a similarity threshold."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Behaviour: the near-copy warning

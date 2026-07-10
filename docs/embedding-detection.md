@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: Embedding detection
 description: The ladder brainpick climbs to find an embedding backend — explicit config, Ollama, OpenAI-compatible endpoints, an in-process local ONNX model in either engine, or an honest off.
-timestamp: 2026-07-10T00:00:00Z
+tags: [tier, engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Embedding detection

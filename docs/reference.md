@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Reference"
 description: "The source-derivable reference for brainpick — every CLI command, config key, spec contract, MCP tool and henxels rule, one page each, richly cross-linked, plus the decision volume."
-timestamp: 2026-07-08T12:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Reference

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: timeline"
 description: "The history dimension — timeline.json distilled from one git log, advisory in content but normative in layout, with normative reconstruction semantics."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: timeline

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brain_show"
 description: "Spotlight a subgraph live in every open UI — every argument optional, ephemeral and advisory, gated by auth only, not by writes."
-timestamp: 2026-07-08T00:00:00Z
+tags: [mcp, agents]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brain_show

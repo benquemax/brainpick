@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: live deltas"
 description: "The SSE protocol — hello, graph.delta, graph.snapshot, compile.status and brain.show — reconstructible from the stream alone, with a replay ring buffer."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: live deltas

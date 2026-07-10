@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: MCP tools"
 description: "The normative contract for the six tools — small-model ergonomics, budget_tokens, the guarded brain_write flow with optimistic concurrency, and resources."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: MCP tools

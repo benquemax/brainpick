@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: ship the full stack in one v0.1 release"
 description: "Why brainpick builds T1 through T3, MCP, CLI and the live UI as one v0.1 release before any publish, rather than shipping a thin slice first."
-timestamp: 2026-07-08T00:00:00Z
+tags: [governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: ship the full stack in one v0.1 release

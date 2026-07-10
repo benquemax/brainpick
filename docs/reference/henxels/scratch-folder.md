@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: the scratch folder survives"
 description: "The henxel requiring _temp/ and its .gitkeep to exist, so scratch and pipeline intermediates never litter the repo root."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: the scratch folder survives

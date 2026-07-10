@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: one spec, two native engines"
 description: "Why brainpick ships native Python and Node engines that never require each other, kept honest by a shared conformance harness instead of a single implementation with a thin client."
-timestamp: 2026-07-08T00:00:00Z
+tags: [engine, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: one spec, two native engines

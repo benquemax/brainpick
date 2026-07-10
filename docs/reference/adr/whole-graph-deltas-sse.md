@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: process
 title: "ADR: whole-graph deltas over SSE"
 description: "Why the brain updates live by diffing whole-graph snapshots over Server-Sent Events, so correctness never depends on incremental edit-log bookkeeping and any compile source yields exact deltas."
-timestamp: 2026-07-08T00:00:00Z
+tags: [tier, ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: whole-graph deltas over SSE

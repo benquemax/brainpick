@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "The auth file"
 description: "Where credentials live — .brainpick-auth.json at the bundle root, salted scrypt hashes only, gitignored, surviving rm -rf .brainpick/."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # The auth file

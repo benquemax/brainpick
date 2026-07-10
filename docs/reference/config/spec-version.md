@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "spec (config version)"
 description: "The top-level spec key that names the config/spec version a bundle targets — default 0.1."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # spec (config version)

@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: thing
 title: The desktop app
 description: A Tauri v2 window over the daemon's control API — first-run bootstrap, an add-brain wizard, and a tray icon; no business logic lives in the app, only in brainpickd.
-timestamp: 2026-07-10T16:45:00Z
+tags: [desktop, ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # The desktop app

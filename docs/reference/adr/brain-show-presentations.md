@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: process
 title: "ADR: brain_show, agent-driven presentations"
 description: "Why an agent can spotlight and caption a subgraph live in every UI through an ephemeral, advisory brain_show that rides the delta channel and is not gated behind writes."
-timestamp: 2026-07-08T00:00:00Z
+tags: [agents, ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: brain_show, agent-driven presentations

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "brain_overview"
 description: "The orientation tool — bundle name, counts, tier availability and the index tree — the progressive-disclosure root, with no required arguments."
-timestamp: 2026-07-08T00:00:00Z
+tags: [mcp, agents]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # brain_overview

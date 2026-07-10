@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: the files are the brain and compiled state is disposable"
 description: "Why markdown plus frontmatter is the only source of truth and everything under .brainpick is disposable — the guarantee that deleting it loses nothing."
-timestamp: 2026-07-08T00:00:00Z
+tags: [engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: the files are the brain and compiled state is disposable

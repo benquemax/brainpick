@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: layered configuration, shared over local over env"
 description: "Why configuration splits into a shared brainpick.toml and a gitignored brainpick.local.toml, layered under environment and flags, so personal endpoints never collide with shared policy."
-timestamp: 2026-07-08T00:00:00Z
+tags: [engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: layered configuration, shared over local over env

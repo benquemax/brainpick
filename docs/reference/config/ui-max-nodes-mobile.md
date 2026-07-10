@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "ui.max_nodes_mobile"
 description: "The node cap the web UI applies on mobile or weak GPUs — default 8000 — shipped to the client so it stops guessing from the GPU tier."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ui.max_nodes_mobile

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "MCP tool reference"
 description: "The six MCP tools brainpick exposes — overview, search, read, neighbors, write, show — one page each, with their arguments, returns and small-model ergonomics."
-timestamp: 2026-07-08T00:00:00Z
+tags: [mcp, agents]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # MCP tool reference

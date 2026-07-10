@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: process
 title: "ADR: TDD and the pre-push regression armor"
 description: "Why TDD is mandatory, every verification test joins the permanent suite, and the pre-push gate runs both engines plus e2e — tests define the feature set that must always work."
-timestamp: 2026-07-08T00:00:00Z
+tags: [governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: TDD and the pre-push regression armor

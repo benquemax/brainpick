@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: process
 title: Onboarding
 description: One command from zero to a living brain — init detects the bundle and the models, compiles instantly, and hands every agent its config snippet.
-timestamp: 2026-07-02T00:00:00Z
+tags: [engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Onboarding

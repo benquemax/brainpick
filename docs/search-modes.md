@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: concept
 title: Search modes
 description: One search tool, four strategies — keyword, semantic, graph, and auto-fusion — with honest reporting when a tier is unavailable.
-timestamp: 2026-07-02T00:00:00Z
+tags: [tier, graph]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Search modes

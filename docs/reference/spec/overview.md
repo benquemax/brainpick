@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: overview"
 description: "The spec's map of the whole system — the three tiers, what each needs, T1's mandatory determinism, and the disposability guarantee."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: overview

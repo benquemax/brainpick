@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: thing
 title: "ADR: the WYSIWYG editor on ProseMirror"
 description: "Why the in-browser editor is built on ProseMirror with a byte-faithful markdown round-trip and lazy-loaded off the main bundle, writing through the same guarded path as brain_write."
-timestamp: 2026-07-08T00:00:00Z
+tags: [ui, writes]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: the WYSIWYG editor on ProseMirror

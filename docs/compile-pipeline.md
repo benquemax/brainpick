@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: process
 title: Compile pipeline
 description: How brainpick compiles a bundle — staged, hash-incremental, cron-able and watchable, with a fast freshness check for commit gates.
-timestamp: 2026-07-06T14:30:00Z
+tags: [tier, engine]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Compile pipeline

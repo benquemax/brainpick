@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "bundle.include"
 description: "The glob list of files scanned as bundle documents — default [\"**/*.md\"]."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # bundle.include

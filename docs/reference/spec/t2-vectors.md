@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Spec: T2 vectors"
 description: "Semantic recall — the normative char-based chunker, chunks.jsonl, the embedding record, the LanceDB layout, the detection ladder and RRF fusion."
-timestamp: 2026-07-08T00:00:00Z
+tags: [spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Spec: T2 vectors

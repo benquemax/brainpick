@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Henxel: documented claims stay true"
 description: "The pre-push henxel that runs codumentation validate, so documented claims are executable specifications rather than drift."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Henxel: documented claims stay true

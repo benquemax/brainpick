@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: concept
 title: "ADR: LightRAG behind the KGBackend adapter"
 description: "Why T3 entity extraction runs through a narrow KGBackend adapter and a neutral JSONL export, so LightRAG is fenced behind an extra and never leaks into consumers."
-timestamp: 2026-07-08T00:00:00Z
+tags: [graph]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: LightRAG behind the KGBackend adapter

@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: "Behaviour: deletes are blocked until blessed"
 description: "The confirm_before_deleting behaviour — losing files or many lines must be deliberate, blocked until henxels bless delete."
-timestamp: 2026-07-08T00:00:00Z
+tags: [henxels, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Behaviour: deletes are blocked until blessed

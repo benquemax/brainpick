@@ -1,8 +1,10 @@
 ---
-type: Decision
+type: decision
+about: thing
 title: "ADR: the Time Machine distills git history"
 description: "Why time travel reads a single advisory timeline.json distilled from one git log, reconstructing any moment by filtering, rather than recompiling the brain at every commit."
-timestamp: 2026-07-08T00:00:00Z
+tags: [ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # ADR: the Time Machine distills git history

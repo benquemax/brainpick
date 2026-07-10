@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: Authentication
 description: Tokens for agents, a password for humans, and open-by-choice as a first-class setup — how a brain locks its door without ever committing a secret.
-timestamp: 2026-07-10T00:00:00Z
+tags: [auth, governance]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Authentication

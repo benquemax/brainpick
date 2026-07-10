@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: thing
 title: "modules.graph"
 description: "The T3 entity-graph switch — off (default), auto or on."
-timestamp: 2026-07-08T00:00:00Z
+tags: [config, spec]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # modules.graph

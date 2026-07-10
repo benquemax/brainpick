@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: MCP tools
 description: The six MCP tools brainpick exposes — overview, search, read, neighbors, write, show — designed so a 27B model guesses right on the first try.
-timestamp: 2026-07-08T00:00:00Z
+tags: [agents, mcp]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # MCP tools

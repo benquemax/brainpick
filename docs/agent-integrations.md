@@ -1,8 +1,10 @@
 ---
-type: Reference
+type: reference
+about: concept
 title: Agent integrations
 description: How brainpick meets agents where they live — a shipped Agent Skill, one-command integrations for each harness, four CLI query mirrors, and an AGENTS.md brain report that teaches graph-before-grep.
-timestamp: 2026-07-04T07:30:00Z
+tags: [agents]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Agent integrations

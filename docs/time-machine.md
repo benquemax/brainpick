@@ -1,8 +1,10 @@
 ---
-type: Concept
+type: article
+about: thing
 title: Time machine
 description: The history dimension — brainpick distills the bundle's git history into a timeline artifact so you can scrub through the brain's past and watch it grow.
-timestamp: 2026-07-06T14:30:00Z
+tags: [ui]
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Time machine
