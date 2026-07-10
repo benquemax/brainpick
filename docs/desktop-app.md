@@ -2,7 +2,7 @@
 type: Concept
 title: The desktop app
 description: A Tauri v2 window over the daemon's control API — first-run bootstrap, an add-brain wizard, and a tray icon; no business logic lives in the app, only in brainpickd.
-timestamp: 2026-07-10T10:45:00Z
+timestamp: 2026-07-10T13:45:00Z
 ---
 
 # The desktop app
@@ -39,10 +39,14 @@ the API itself.
 ## Brain list and tray
 
 The main window lists every registered brain with its live process status;
-"MCP snippet" lazily fetches `GET /daemon/brains/:id/status` and shows the
-ready `claude mcp add` command (bearer token included for a LAN-bound
-brain) with a copy button. The tray icon polls the same endpoint every 10s
-and reflects overall status in its tooltip — open or quit, nothing else.
+revealing a card's details lazily fetches `GET /daemon/brains/:id/status`
+and shows both the ready `claude mcp add` command (bearer token included
+for a LAN-bound brain) and the plain browser URL — `mcp_url` minus `/mcp`,
+a presentation-only transform of a value the daemon already computed —
+each with its own copy button, plus an "Open brain" button that hands the
+local URL to the system's default browser via the `opener` plugin. The
+tray icon polls the same status endpoint every 10s and reflects overall
+status in its tooltip — open or quit, nothing else.
 
 ## Why a browser-shaped webview needs CORS
 

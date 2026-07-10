@@ -2,6 +2,7 @@
 
 ## 2026-07-10
 
+- Added: the desktop app's brain cards now show the plain browser URL (copy button + "Open brain") alongside the MCP snippet; fixed a trailing-slash local-path bug (e.g. `/tmp/brain-test/`) that produced a doubled slash downstream — normalized once at the registry validation boundary.
 - Added: the desktop app — a Tauri v2 window over the daemon's control API (first-run bootstrap, an add-brain wizard with deploy-key + forge-deep-link flow, a brain list with MCP-snippet copy, a tray icon) with no logic of its own, everything an API call.
 - Fixed: the control API now sends CORS headers, and `henxels check --all` runs with a bounded timeout so a hung install can't wedge the whole daemon.
 - Added: the daemon's LAN story — a per-brain `host` (default loopback, `0.0.0.0` opts in), auto-provisioned bearer tokens for LAN-bound brains, an `advertise_host`-built `mcp_url` alongside an always-loopback `mcp_url_local`, and a `POST /daemon/keys` that can mint a brain id up front for the private-repo wizard flow.

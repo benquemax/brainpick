@@ -120,12 +120,21 @@ function nextFreePort(registry: Registry): number {
   return port;
 }
 
+/** A trailing separator survives `.trim()` and then poisons every naive
+ * `${repo}/${bundlePath}` join downstream (the brain card's repo display,
+ * say) with a doubled slash. Stripped once here so nothing built on top of
+ * `repo` has to re-guard against it — but never past a bare root. */
+function stripTrailingSlash(path: string): string {
+  return path.replace(/\/+$/, "") || "/";
+}
+
 /** Everything `POST /daemon/brains` needs before touching disk or a process:
  * repo is required; id/port are minted/assigned when absent; duplicates (id
  * or port) are rejected against the CURRENT registry, not the input alone. */
 export function validateBrainInput(input: BrainInput, registry: Registry): ValidationResult {
-  const repo = input.repo?.trim() ?? "";
-  if (repo === "") return { ok: false, error: "repo is required (a git URL or a local path)" };
+  const trimmed = input.repo?.trim() ?? "";
+  if (trimmed === "") return { ok: false, error: "repo is required (a git URL or a local path)" };
+  const repo = stripTrailingSlash(trimmed);
 
   const id = input.id?.trim() || generateBundleId();
   if (registry.brains.some((b) => b.id === id)) {

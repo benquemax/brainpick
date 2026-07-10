@@ -1,7 +1,9 @@
 /** brainpick desktop — a thin client of brainpickd. Renders the brain list
  * (MCP URL/snippet copy buttons) and hosts the add-brain wizard; every
  * action is a call into ./api, never a decision made here. */
-import { brainStatus, daemonInfo, listBrains, removeBrain, type BrainRecord } from "./api";
+import { openUrl } from "@tauri-apps/plugin-opener";
+
+import { brainStatus, daemonInfo, listBrains, removeBrain, webUrl, type BrainRecord } from "./api";
 import { openWizard } from "./wizard";
 
 const statusBanner = document.querySelector<HTMLElement>("#status-banner")!;
@@ -31,6 +33,12 @@ function brainCard(brain: BrainRecord): HTMLElement {
     </header>
     <p class="brain-repo">${brain.repo}${brain.bundle_path ? `/${brain.bundle_path}` : ""}</p>
     <div class="brain-details" hidden>
+      <p class="web-url"></p>
+      <div class="snippet-row">
+        <code class="web-url-value"></code>
+        <button type="button" class="copy-web-url">Copy</button>
+        <button type="button" class="open-brain">Open brain</button>
+      </div>
       <p class="mcp-url"></p>
       <div class="snippet-row">
         <code class="mcp-snippet"></code>
@@ -44,13 +52,20 @@ function brainCard(brain: BrainRecord): HTMLElement {
   `;
 
   const details = card.querySelector<HTMLElement>(".brain-details")!;
+  const webUrlLabelEl = card.querySelector<HTMLElement>(".web-url")!;
+  const webUrlValueEl = card.querySelector<HTMLElement>(".web-url-value")!;
   const mcpUrlEl = card.querySelector<HTMLElement>(".mcp-url")!;
   const snippetEl = card.querySelector<HTMLElement>(".mcp-snippet")!;
+  let webUrlLocal = "";
 
   card.querySelector(".reveal-details")!.addEventListener("click", () => {
     void (async () => {
       if (details.hidden) {
         const status = await brainStatus(brain.id);
+        const webUrlLan = webUrl(status.mcp_url);
+        webUrlLocal = webUrl(status.mcp_url_local);
+        webUrlLabelEl.textContent = "Open in your browser:";
+        webUrlValueEl.textContent = webUrlLan !== webUrlLocal ? `${webUrlLan} (local: ${webUrlLocal})` : webUrlLan;
         mcpUrlEl.textContent =
           status.mcp_url !== status.mcp_url_local
             ? `${status.mcp_url} (local: ${status.mcp_url_local})`
@@ -59,6 +74,14 @@ function brainCard(brain: BrainRecord): HTMLElement {
       }
       details.hidden = !details.hidden;
     })();
+  });
+
+  card.querySelector(".copy-web-url")!.addEventListener("click", () => {
+    void navigator.clipboard.writeText(webUrlValueEl.textContent ?? "");
+  });
+
+  card.querySelector(".open-brain")!.addEventListener("click", () => {
+    if (webUrlLocal !== "") void openUrl(webUrlLocal);
   });
 
   card.querySelector(".copy-snippet")!.addEventListener("click", () => {

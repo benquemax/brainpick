@@ -104,6 +104,22 @@ test("validateBrainInput requires repo, defaults bundle_path/enabled, mints an i
   }
 });
 
+test("validateBrainInput strips a trailing slash from a local path (no double slash downstream)", () => {
+  const result = validateBrainInput({ repo: "/tmp/brain-test/", bundle_path: "docs" }, { brains: [] });
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.brain.repo).toBe("/tmp/brain-test");
+});
+
+test("validateBrainInput strips multiple trailing slashes but keeps a bare root", () => {
+  const result = validateBrainInput({ repo: "/tmp/brain-test///" }, { brains: [] });
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.brain.repo).toBe("/tmp/brain-test");
+
+  const root = validateBrainInput({ repo: "/" }, { brains: [] });
+  expect(root.ok).toBe(true);
+  if (root.ok) expect(root.brain.repo).toBe("/");
+});
+
 test("validateBrainInput rejects a missing repo", () => {
   const result = validateBrainInput({}, { brains: [] });
   expect(result.ok).toBe(false);

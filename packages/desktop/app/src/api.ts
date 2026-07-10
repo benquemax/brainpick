@@ -128,3 +128,10 @@ export function isLocalRepo(repo: string): boolean {
   if (/^[^/\s]+@[^/\s]+:/.test(repo)) return false;
   return true;
 }
+
+/** The human (browser) URL for a brain is the same address as its MCP
+ * endpoint, minus `/mcp` — a presentation-only transform of a value the
+ * daemon already computed (mcp_url / mcp_url_local), not a new decision. */
+export function webUrl(mcpUrl: string): string {
+  return mcpUrl.replace(/\/mcp$/, "");
+}
