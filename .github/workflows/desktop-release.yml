@@ -96,11 +96,26 @@ jobs:
           # chunk — a linuxdeploy/modern-glibc incompatibility, not
           # anything of ours); harmless on macOS/Windows where it's unused.
           NO_STRIP: "1"
+          # FIRST FLIGHT (run 29118412509) failed Ubuntu with an instant,
+          # silent "failed to run linuxdeploy" — no strip/compile output at
+          # all, so NO_STRIP above (already present in that run) was not the
+          # cause. linuxdeploy ships AS an AppImage; GitHub's ubuntu-latest
+          # (24.04 "noble") runners restrict unprivileged user namespaces
+          # (AppArmor), which breaks its FUSE self-mount. This is the
+          # standard extract-and-run fallback — applies to every AppImage
+          # this job launches (linuxdeploy and its plugins included, not
+          # just the app being bundled); harmless where unused.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
         with:
           projectPath: packages/desktop/app
           tagName: ${{ github.event.inputs.version || github.ref_name }}
           releaseName: "Brainpick ${{ github.event.inputs.version || github.ref_name }}"
           releaseDraft: true
+          # FIRST FLIGHT also showed deb+rpm bundling burning ~57 minutes
+          # BEFORE the AppImage step even started (nobody asked for those two
+          # artifacts) — Linux builds AppImage only; macOS/Windows are
+          # unaffected (their own single-target bundlers already run alone).
+          args: ${{ matrix.platform == 'ubuntu-latest' && '--bundles appimage' || '' }}
           releaseBody: |
             Unsigned builds — this is expected for early testers, not a mistake:
 

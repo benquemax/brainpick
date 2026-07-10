@@ -55,6 +55,13 @@ export function nodeExecutablePath(nodeOutDir, target) {
   return join(nodeOutDir, ...target.exeRelPath);
 }
 
+/** On Windows, `npm` is a `.cmd` shim, not a directly-executable binary —
+ * execFileSync/spawnSync (no shell) can't find bare "npm" there (ENOENT).
+ * Every unix platform runs the plain binary. */
+export function npmCommand(platform = process.platform) {
+  return platform === "win32" ? "npm.cmd" : "npm";
+}
+
 /** onnxruntime-node ships ALL platforms' native binaries in one package
  * (unlike @lancedb, which splits per-platform via optionalDependencies) —
  * and among those, the CUDA/TensorRT execution providers are 500MB+ of

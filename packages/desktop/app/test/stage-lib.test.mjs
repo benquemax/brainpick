@@ -7,6 +7,7 @@ import {
   nodeArchiveFilename,
   nodeDownloadUrl,
   nodeExecutablePath,
+  npmCommand,
   resolveTarget,
   shouldPruneOnnxProvider,
 } from "../scripts/stage-lib.mjs";
@@ -65,6 +66,21 @@ describe("nodeExecutablePath", () => {
 
   test("windows is flat — node.exe directly, no bin/ (the layout bug this chunk fixes)", () => {
     expect(nodeExecutablePath("/out/node", resolveTarget("win-x64"))).toBe("/out/node/node.exe");
+  });
+});
+
+describe("npmCommand — the Windows spawn gotcha (npm is a .cmd shim there, not an exe)", () => {
+  test("win32 needs the .cmd suffix — execFileSync/spawnSync can't find bare 'npm'", () => {
+    expect(npmCommand("win32")).toBe("npm.cmd");
+  });
+
+  test("unix platforms use the plain binary", () => {
+    expect(npmCommand("linux")).toBe("npm");
+    expect(npmCommand("darwin")).toBe("npm");
+  });
+
+  test("defaults to the current host platform when none is given", () => {
+    expect(npmCommand()).toBe(process.platform === "win32" ? "npm.cmd" : "npm");
   });
 });
 

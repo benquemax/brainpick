@@ -44,6 +44,7 @@ import {
   nodeDownloadUrl,
   nodeExecutablePath,
   nodeShasumsUrl,
+  npmCommand,
   resolveTarget,
   shouldPruneOnnxProvider,
 } from "./stage-lib.mjs";
@@ -132,7 +133,7 @@ function stageDaemon(outDir) {
   // directory path by default (workspace-style), which would leak this dev
   // tree's absolute paths into the bundle instead of a real, portable copy.
   execFileSync(
-    "npm",
+    npmCommand(),
     ["install", "--omit=dev", "--no-save", "--no-audit", "--no-fund", "--install-links", NODE_PKG],
     { cwd: daemonOut, stdio: "inherit" },
   );
