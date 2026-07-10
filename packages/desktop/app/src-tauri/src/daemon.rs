@@ -10,7 +10,7 @@
 //! every platform the JS side currently supports.
 
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -102,6 +102,36 @@ async fn probe_health(token: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Where stage-resources.mjs puts the node binary: `bin/node` on unix,
+/// but the official Windows archive is FLAT — `node.exe` at the top,
+/// no `bin/` subdir. Pure and file-system-only so the fake-tree tests
+/// below don't need an AppHandle.
+fn node_binary_in(resources_dir: &Path) -> Option<PathBuf> {
+    let node_dir = resources_dir.join("node");
+    let unix = node_dir.join("bin").join("node");
+    if unix.is_file() {
+        return Some(unix);
+    }
+    let windows = node_dir.join("node.exe");
+    if windows.is_file() {
+        return Some(windows);
+    }
+    None
+}
+
+/// stage-resources.mjs copies packages/desktop/dist verbatim, so the staged
+/// layout matches a real npm package's shape (`dist/cli.js` beside its own
+/// `package.json`) — the same shape version.ts's `../package.json` lookup
+/// already assumes, dev or packaged, with no special case either way.
+fn daemon_cli_in(resources_dir: &Path) -> Option<PathBuf> {
+    let bundled = resources_dir.join("daemon").join("dist").join("cli.js");
+    if bundled.is_file() {
+        Some(bundled)
+    } else {
+        None
+    }
+}
+
 /// Resolve the node binary to run the daemon with — same override the daemon
 /// itself honors for spawning the ENGINE (BRAINPICK_NODE), reused here one
 /// level up: whatever `node` this app runs the daemon's cli.js with.
@@ -112,8 +142,7 @@ fn resolve_node_binary(app: &AppHandle) -> String {
         }
     }
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let bundled = resource_dir.join("node").join("bin").join("node");
-        if bundled.is_file() {
+        if let Some(bundled) = node_binary_in(&resource_dir) {
             return bundled.to_string_lossy().into_owned();
         }
     }
@@ -131,8 +160,7 @@ fn resolve_daemon_cli(app: &AppHandle) -> Option<PathBuf> {
         }
     }
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let bundled = resource_dir.join("daemon").join("cli.js");
-        if bundled.is_file() {
+        if let Some(bundled) = daemon_cli_in(&resource_dir) {
             return Some(bundled);
         }
     }
@@ -192,5 +220,80 @@ pub async fn ensure_daemon(app: &AppHandle) -> Result<DaemonInfo, DaemonError> {
                 None => Err(DaemonError::NoToken(token_path)),
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod resolver_tests {
+    use super::*;
+    use std::fs;
+
+    /// A fake `<resources>/node/...` tree, unix layout — mirrors exactly
+    /// what stage-resources.mjs produces on linux-x64 / darwin-arm64.
+    fn stage_unix_node(resources: &Path) {
+        let bin = resources.join("node").join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        fs::write(bin.join("node"), b"#!/bin/sh\n").unwrap();
+    }
+
+    /// The official Windows Node archive is FLAT (node.exe at the top, no
+    /// bin/) — this is the exact layout difference this chunk fixes.
+    fn stage_windows_node(resources: &Path) {
+        let node_dir = resources.join("node");
+        fs::create_dir_all(&node_dir).unwrap();
+        fs::write(node_dir.join("node.exe"), b"").unwrap();
+    }
+
+    fn stage_daemon_cli(resources: &Path) {
+        let dist = resources.join("daemon").join("dist");
+        fs::create_dir_all(&dist).unwrap();
+        fs::write(dist.join("cli.js"), b"").unwrap();
+        fs::write(resources.join("daemon").join("package.json"), b"{}").unwrap();
+    }
+
+    #[test]
+    fn finds_the_unix_node_binary_under_bin() {
+        let tmp = tempfile::tempdir().unwrap();
+        stage_unix_node(tmp.path());
+        let found = node_binary_in(tmp.path()).expect("should find node/bin/node");
+        assert_eq!(found, tmp.path().join("node").join("bin").join("node"));
+    }
+
+    #[test]
+    fn finds_the_flat_windows_node_exe() {
+        let tmp = tempfile::tempdir().unwrap();
+        stage_windows_node(tmp.path());
+        let found = node_binary_in(tmp.path()).expect("should find node/node.exe");
+        assert_eq!(found, tmp.path().join("node").join("node.exe"));
+    }
+
+    #[test]
+    fn no_node_staged_resolves_to_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(node_binary_in(tmp.path()).is_none());
+    }
+
+    #[test]
+    fn finds_the_daemon_cli_under_dist() {
+        let tmp = tempfile::tempdir().unwrap();
+        stage_daemon_cli(tmp.path());
+        let found = daemon_cli_in(tmp.path()).expect("should find daemon/dist/cli.js");
+        assert_eq!(found, tmp.path().join("daemon").join("dist").join("cli.js"));
+    }
+
+    #[test]
+    fn a_flat_cli_js_without_dist_is_not_found() {
+        // guards against silently reverting to the old (wrong) flat layout
+        let tmp = tempfile::tempdir().unwrap();
+        let daemon = tmp.path().join("daemon");
+        fs::create_dir_all(&daemon).unwrap();
+        fs::write(daemon.join("cli.js"), b"").unwrap();
+        assert!(daemon_cli_in(tmp.path()).is_none());
+    }
+
+    #[test]
+    fn no_daemon_staged_resolves_to_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(daemon_cli_in(tmp.path()).is_none());
     }
 }

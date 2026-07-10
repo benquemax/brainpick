@@ -2,7 +2,7 @@
 type: Concept
 title: The desktop app
 description: A Tauri v2 window over the daemon's control API — first-run bootstrap, an add-brain wizard, and a tray icon; no business logic lives in the app, only in brainpickd.
-timestamp: 2026-07-10T13:45:00Z
+timestamp: 2026-07-10T16:15:00Z
 ---
 
 # The desktop app
@@ -56,3 +56,36 @@ origins from its own port by construction. `brainpickd` answers every
 preflight `OPTIONS` request before the token check ever runs (a preflight
 never carries the real `Authorization` header). The bearer token remains
 the actual gate; origin is not treated as identity.
+
+## Packaging: no installed Node anywhere
+
+A tester's machine has neither Rust nor Node — the single-file installer
+carries its own runtime (the Packaging appendix,
+`_plans/2026-07-09-algorithmic-brain-phase1.md`). `scripts/stage-resources.mjs`
+assembles `src-tauri/resources/` before Tauri's own bundler ever runs
+(wired into `beforeBuildCommand`, so a bare `npm run tauri build` is the
+whole pipeline):
+
+- **`resources/node/`** — the official Node dist archive for the target
+  platform, downloaded and checked against nodejs.org's own
+  `SHASUMS256.txt` before anything trusts it. Node's own archives disagree
+  on layout: `bin/node` on Linux/macOS, a flat `node.exe` on Windows — the
+  Rust resolver (`daemon.rs`) checks both.
+- **`resources/daemon/`** — `packages/desktop/dist` copied flat, plus a
+  REAL (non-symlinked) `node_modules` for it and the engine. Getting a real
+  copy out of an npm workspace needs `--install-links` (npm symlinks local
+  directory paths by default, same as a workspace) and an explicit local
+  path for `brainpick` in the same install call — it isn't published, so
+  the registry 404s on it otherwise.
+- **Pruned before anyone ships it**: `onnxruntime-node` (a transitive
+  dependency of the local-embedding backend) bundles EVERY platform's
+  native binaries in one package regardless of which platform installed
+  it, including 500MB+ of CUDA/TensorRT datacenter-GPU provider libraries
+  this CPU-only embedding path never loads. Both the foreign platform
+  directories and the GPU providers are deleted post-install — roughly
+  650MB off a single staged tree, empirically.
+- Native optional deps (`@lancedb`, the pruned `onnxruntime-node`) can only
+  ever be correct for whatever platform actually RAN `npm install` — the
+  three-OS CI matrix (Phase 1.5-B) stages each target on its own runner;
+  cross-staging from one OS to build another's resources isn't possible
+  for the native pieces, only for the explicitly-downloaded Node binary.

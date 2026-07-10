@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Staged Tauri resources (stage-resources.mjs) — regenerated per build/target,
+# never committed: the bundled node runtime + a real production node_modules.
+src-tauri/resources
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
