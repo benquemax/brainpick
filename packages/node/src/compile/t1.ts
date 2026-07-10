@@ -20,6 +20,7 @@ const REPORT_PREAMBLE =
   "opens a doc, `brain_neighbors` walks its links.";
 
 export interface GraphNode {
+  about: string | null;
   description: string | null;
   id: string;
   in: number;
@@ -64,6 +65,7 @@ export interface Graph {
 }
 
 export interface DocRecord {
+  about: string | null;
   description: string | null;
   path: string;
   reserved: boolean;
@@ -120,6 +122,7 @@ export function buildGraph(docs: Document[]): Graph {
   const nodes: GraphNode[] = [...docs]
     .sort((a, b) => cmpStr(a.path, b.path))
     .map((doc) => ({
+      about: doc.about,
       description: doc.description,
       id: doc.path,
       in: incoming.get(doc.path) ?? 0,
@@ -199,6 +202,7 @@ export function buildDocsRecords(docs: Document[]): DocRecord[] {
   return [...docs]
     .sort((a, b) => cmpStr(a.path, b.path))
     .map((doc) => ({
+      about: doc.about,
       description: doc.description,
       path: doc.path,
       reserved: doc.reserved,
@@ -258,9 +262,31 @@ export function applyIndexSection(existing: string | null, block: string): strin
   return existing.replace(/\n+$/, "") + "\n\n" + block + "\n";
 }
 
+export interface GhostCount {
+  target: string;
+  count: number;
+}
+
+/** The ghost queue (spec/20): T1's own `ghosts` list is already deduplicated
+ * (source, target) pairs, so counting entries per target IS the distinct-
+ * reference count — no T3 dependency, works the moment T1 compiles. Highest
+ * reference count first, target path tie-break. Shared by the AGENTS.md
+ * report and `brain_overview` so both surfaces agree. */
+export function topGhosts(graph: Graph, limit = 5): GhostCount[] {
+  const counts = new Map<string, number>();
+  for (const ghost of graph.ghosts ?? []) {
+    counts.set(ghost.target, (counts.get(ghost.target) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || cmpStr(a[0], b[0]))
+    .slice(0, limit)
+    .map(([target, count]) => ({ target, count }));
+}
+
 /** The AGENTS.md brain report body (spec/20): a graph-before-grep directive,
- * counts, tier status, the top-5 hub docs by total degree, orphans (<= 5), and
- * the bundle root. Deterministic; cross-engine byte-identical. */
+ * counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
+ * the top-5 ghost queue by reference count, and the bundle root.
+ * Deterministic; cross-engine byte-identical. */
 export function renderReportBlock(
   graph: Graph,
   tiers: Record<string, unknown>,
@@ -293,6 +319,14 @@ export function renderReportBlock(
   if (orphans.length > 0) {
     for (const n of orphans.slice(0, 5)) lines.push(`  - ${n.title} (${n.id})`);
     if (orphans.length > 5) lines.push(`  - …and ${orphans.length - 5} more`);
+  } else {
+    lines.push("  - (none)");
+  }
+
+  lines.push("- Top ghosts:");
+  const ghosts = topGhosts(graph);
+  if (ghosts.length > 0) {
+    for (const g of ghosts) lines.push(`  - ${g.target} — ${g.count} refs`);
   } else {
     lines.push("  - (none)");
   }

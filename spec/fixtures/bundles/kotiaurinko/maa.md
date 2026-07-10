@@ -1,5 +1,6 @@
 ---
 type: Concept
+about: place
 title: Maa
 description: The blue world with a companion and a home.
 tags: [planeetta, koti]

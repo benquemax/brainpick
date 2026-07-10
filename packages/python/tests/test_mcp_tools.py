@@ -61,6 +61,11 @@ def test_overview_counts_and_tree(kotiaurinko):
     assert result["hint"]
 
 
+def test_overview_top_ghosts_is_the_write_next_queue(kotiaurinko):
+    result = overview_payload(make_state(kotiaurinko))
+    assert result["top_ghosts"] == [{"target": "olematon.md", "count": 1}]
+
+
 def test_overview_budget_trims_tree(kotiaurinko):
     state = make_state(kotiaurinko)
     full = overview_payload(state)

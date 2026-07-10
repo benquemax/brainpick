@@ -32,6 +32,7 @@ export interface Document {
   size: number;
   title: string;
   type: string | null;
+  about: string | null;
   description: string | null;
   tags: string[];
   timestamp: string | null;
@@ -267,6 +268,7 @@ export function scan(
       size: rawBytes.length,
       title: titleOf(meta, body, path),
       type: meta["type"] === null || meta["type"] === undefined ? null : pyStr(meta["type"]),
+      about: meta["about"] === null || meta["about"] === undefined ? null : pyStr(meta["about"]),
       description:
         meta["description"] === null || meta["description"] === undefined ? null : pyStr(meta["description"]),
       tags: normalizeTags(meta["tags"]),

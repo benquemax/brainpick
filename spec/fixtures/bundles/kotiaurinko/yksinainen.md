@@ -1,5 +1,6 @@
 ---
 type: Concept
+about: concept
 title: Yksinäinen
 description: A wanderer no other concept links to.
 tags: [mysteeri]

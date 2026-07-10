@@ -40,6 +40,11 @@ def test_graph_shape(kotiaurinko):
     assert g["tags"]["saari"] == ["saaret/atolli.md", "saaret/laguuni.md"]
     assert list(g["tags"]) == sorted(g["tags"])
 
+    # about is nullable on nodes too — absent frontmatter yields None
+    assert nodes["aurinko.md"]["about"] == "thing"
+    assert nodes["maa.md"]["about"] == "place"
+    assert nodes["kuu.md"]["about"] is None
+
     # edges sorted by (source, target, kind)
     keys = [(e["source"], e["target"], e["kind"]) for e in g["edges"]]
     assert keys == sorted(keys)
@@ -53,8 +58,15 @@ def test_docs_records(kotiaurinko):
     assert kuu["title"] == "Kuu" and kuu["description"] is None
     assert "tides" in kuu["text"] and "type: Concept" not in kuu["text"]
     assert set(kuu) == {
-        "description", "path", "reserved", "sha256", "tags", "text", "timestamp", "title", "type",
+        "about", "description", "path", "reserved", "sha256", "tags", "text", "timestamp", "title", "type",
     }
+
+    # about is nullable — absent frontmatter yields None, present flows through
+    assert kuu["about"] is None
+    aurinko = next(r for r in recs if r["path"] == "aurinko.md")
+    assert aurinko["about"] == "thing"
+    maa = next(r for r in recs if r["path"] == "maa.md")
+    assert maa["about"] == "place"
 
 
 def test_index_block_render(kotiaurinko):

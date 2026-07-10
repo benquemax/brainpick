@@ -9,6 +9,7 @@ import {
   REPORT_END_MARKER,
   renderReportBlock,
   type Graph,
+  type GhostEdge,
   type GraphNode,
 } from "../src/compile/t1";
 import { sha256Hex } from "../src/core/canonical";
@@ -16,17 +17,29 @@ import { sha256Hex } from "../src/core/canonical";
 const TIERS = { t1: "fresh", t2: "off", t3: "off" };
 
 function node(id: string, title: string, inbound: number, outbound: number, reserved = false, orphan = false): GraphNode {
-  return { id, title, in: inbound, out: outbound, reserved, orphan, description: null, tags: [], timestamp: null, type: null };
+  return {
+    id,
+    title,
+    in: inbound,
+    out: outbound,
+    reserved,
+    orphan,
+    about: null,
+    description: null,
+    tags: [],
+    timestamp: null,
+    type: null,
+  };
 }
 
-function graph(nodes: GraphNode[], stats: Partial<Graph["stats"]> = {}): Graph {
+function graph(nodes: GraphNode[], stats: Partial<Graph["stats"]> = {}, ghostPairs: GhostEdge[] = []): Graph {
   return {
     edges: [],
-    ghosts: [],
+    ghosts: ghostPairs,
     islands: [],
     nodes,
     tags: {},
-    stats: { docs: nodes.length, edges: 0, tags: 0, orphans: 0, ghosts: 0, islands: 0, ...stats },
+    stats: { docs: nodes.length, edges: 0, tags: 0, orphans: 0, ghosts: ghostPairs.length, islands: 0, ...stats },
   };
 }
 
@@ -64,16 +77,45 @@ describe("renderReportBlock", () => {
     const block = renderReportBlock(graph(nodes, { orphans: 6 }), TIERS);
     const lines = block.split("\n");
     const start = lines.indexOf("- Orphans:");
-    const end = lines.findIndex((l, i) => i > start && l.startsWith("- Bundle root:"));
+    const end = lines.findIndex((l, i) => i > start && l.startsWith("- Top ghosts:"));
     const orphanLines = lines.slice(start + 1, end).filter((l) => l.startsWith("  - "));
     expect(orphanLines).toHaveLength(6); // 5 shown + the truncation note
     expect(orphanLines[orphanLines.length - 1]).toBe("  - …and 1 more");
   });
 
-  test("empty hubs and orphans say (none)", () => {
+  test("empty hubs, orphans and ghosts say (none)", () => {
     const block = renderReportBlock(graph([]), TIERS);
     expect(block).toContain("- Top hubs (in/out):\n  - (none)");
     expect(block).toContain("- Orphans:\n  - (none)");
+    expect(block).toContain("- Top ghosts:\n  - (none)");
+  });
+
+  test("top ghosts rank by reference count then target", () => {
+    // b is referenced by 3 distinct docs, a by 2, c by 1 — count is DISTINCT
+    // sources, so a duplicate (source, target) pair must not double-count.
+    const ghostPairs: GhostEdge[] = [
+      { source: "x.md", target: "b.md" },
+      { source: "y.md", target: "b.md" },
+      { source: "z.md", target: "b.md" },
+      { source: "x.md", target: "a.md" },
+      { source: "y.md", target: "a.md" },
+      { source: "x.md", target: "c.md" },
+    ];
+    const block = renderReportBlock(graph([], {}, ghostPairs), TIERS);
+    const lines = block.split("\n");
+    const start = lines.indexOf("- Top ghosts:");
+    const end = lines.findIndex((l, i) => i > start && l.startsWith("- Bundle root:"));
+    expect(lines.slice(start + 1, end)).toEqual(["  - b.md — 3 refs", "  - a.md — 2 refs", "  - c.md — 1 refs"]);
+  });
+
+  test("top ghosts truncate to five", () => {
+    const ghostPairs: GhostEdge[] = Array.from({ length: 7 }, (_, i) => ({ source: `s${i}.md`, target: `g${i}.md` }));
+    const block = renderReportBlock(graph([], {}, ghostPairs), TIERS);
+    const lines = block.split("\n");
+    const start = lines.indexOf("- Top ghosts:");
+    const end = lines.findIndex((l, i) => i > start && l.startsWith("- Bundle root:"));
+    const ghostLines = lines.slice(start + 1, end).filter((l) => l.startsWith("  - "));
+    expect(ghostLines).toHaveLength(5);
   });
 
   test("counts, tiers and bundle root render", () => {

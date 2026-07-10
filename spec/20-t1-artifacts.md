@@ -10,7 +10,10 @@ A document is any bundle file matching the include globs. Per document:
 
 - `title`: frontmatter `title`, else the first `# ` heading, else the file
   stem with `-`/`_` replaced by spaces.
-- `type`, `description`, `timestamp`: frontmatter fields, absent → `null`.
+- `type`, `about`, `description`, `timestamp`: frontmatter fields, absent →
+  `null`. `type`/`about` are opaque strings at this layer — any enum
+  constraint on their values (a bundle's own two-axis ontology, say) is a
+  bundle-governance concern, not a T1 one.
 - `tags`: frontmatter list, absent → `[]`; non-list scalars wrap to a
   one-element list; values coerced to strings.
 - `reserved`: `true` for any `index.md` or `log.md`.
@@ -52,7 +55,7 @@ first occurrence's text as `label`.
   "edges": [{"count": 1, "kind": "link", "label": "Maa", "source": "kuu.md", "target": "maa.md"}],
   "ghosts": [{"source": "saaret/laguuni.md", "target": "olematon.md"}],
   "islands": [["saaret/atolli.md", "saaret/laguuni.md"]],
-  "nodes": [{"description": "The star everything in this bundle orbits.",
+  "nodes": [{"about": "thing", "description": "The star everything in this bundle orbits.",
              "id": "aurinko.md", "in": 4, "orphan": false, "out": 3,
              "reserved": false, "tags": ["tähti"], "timestamp": null,
              "title": "Aurinko", "type": "Concept"}],
@@ -81,7 +84,7 @@ One line per document, sorted by `path` — the substrate for keyword search
 and reading:
 
 ```json
-{"description":null,"path":"aurinko.md","reserved":false,"sha256":"…","tags":["tähti"],"text":"…body without frontmatter…","timestamp":null,"title":"Aurinko","type":"Concept"}
+{"about":"thing","description":null,"path":"aurinko.md","reserved":false,"sha256":"…","tags":["tähti"],"text":"…body without frontmatter…","timestamp":null,"title":"Aurinko","type":"Concept"}
 ```
 
 `text` is the body with frontmatter removed, original line endings
@@ -129,8 +132,11 @@ Body (normative order, one line each unless noted): a one-line directive
 ("consult brain_search/`brainpick search` BEFORE grepping this bundle"),
 counts (docs · links · tags · orphans · ghosts), tier status, top 5 hub
 documents by total degree (`- title (path) — in/out`), orphans list (≤5),
-and the bundle root. Deterministic; cross-engine byte-identical (a
-conformance golden accompanies the first implementation).
+the top 5 ghost queue by reference count (`- target — count refs`, highest
+first, target path tie-break; counts distinct source docs referencing that
+target — see `top_ghosts` below), and the bundle root. Deterministic;
+cross-engine byte-identical (a conformance golden accompanies the first
+implementation).
 
 ## Advisory T1 artifacts
 

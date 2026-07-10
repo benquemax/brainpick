@@ -2,6 +2,7 @@
 
 ## 2026-07-10
 
+- Added: `about` and `type` now flow into `t1/docs.jsonl` and `t1/graph.json` (nullable, byte-parity both engines) so the UI can render the two-axis ontology; the ghost queue — `top_ghosts` in `brain_overview` and a "Top ghosts" section in the AGENTS.md brain report — surfaces up to 5 dead-link targets by distinct reference count, the agents' standing write-next list.
 - Added: `.github/workflows/desktop-release.yml` — a `desktop-v*` tag builds the AppImage/dmg/msi trio (plus a standalone headless `brainpickd-<platform>.tar.gz` per platform) across a 3-OS matrix and attaches them to a draft GitHub Release; a one-line guard keeps the tag and `packages/desktop/app/package.json` in lockstep independently of the engines' own `v*` releases.
 - Added: a locally-proven single-file desktop installer — `stage-resources.mjs` bundles a checksum-verified Node runtime and a real production `node_modules` (with ~650MB of unused onnxruntime-node GPU providers and foreign platforms pruned) into Tauri resources; a clean-shell `.AppImage` run (no repo, no Node, no Rust on PATH) boots the daemon from those resources, adds a brain, and answers a real MCP handshake.
 - Added: the desktop app's brain cards now show the plain browser URL (copy button + "Open brain") alongside the MCP snippet; fixed a trailing-slash local-path bug (e.g. `/tmp/brain-test/`) that produced a doubled slash downstream — normalized once at the registry validation boundary.

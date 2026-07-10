@@ -3,7 +3,7 @@ type: article
 about: concept
 title: The two-axis ontology
 description: Why every page carries two independent fields — type (its document form) and about (its subject's ontological category) — and the philosophy lineage behind the split.
-timestamp: 2026-07-10T18:00:00Z
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # The two-axis ontology
@@ -76,7 +76,7 @@ brainstorming:
   across time, has temporal parts — a process, an event). That is the first
   fork in the `about` tree: happens-as-a-whole or unfolding (occurrents,
   `event`/`process`) versus everything else (continuants).
-- **DOLCE** (DescriptiveOntology for Linguistic and Cognitive Engineering,
+- **DOLCE** (Descriptive Ontology for Linguistic and Cognitive Engineering,
   Nicola Guarino et al.) splits physical objects into **agentive** (capable
   of intentional action) and **non-agentive**. That is the second fork: does
   it act? — separating `person`/`organization` from `place`/`thing`.

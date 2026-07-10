@@ -19,7 +19,7 @@ afterEach(cleanup);
 
 function record(path: string, text = "", tags: string[] = [], reserved = false): DocRecord {
   return {
-    description: null, path, reserved, sha256: "0".repeat(64),
+    about: null, description: null, path, reserved, sha256: "0".repeat(64),
     tags, text, timestamp: null, title: path, type: null,
   };
 }

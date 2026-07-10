@@ -14,7 +14,11 @@ truncated result says so and how to get the rest).
 
 No required args. → `{"bundle", "counts": {"docs", "edges", "tags",
 "orphans", "ghosts"}, "tiers", "tree": [{"group", "docs": [{"path",
-"title", "description"}]}], "hint"}`. Default budget 800.
+"title", "description"}]}], "top_ghosts": [{"target", "count"}], "hint"}`.
+`top_ghosts` is the write-next queue — up to 5 ghost link targets, highest
+reference count first (target path tie-break), always present (`[]` when
+there are none), never subject to budget trimming (bounded size already).
+Default budget 800.
 
 ## brain_search({query, mode?, limit?, budget_tokens?})
 

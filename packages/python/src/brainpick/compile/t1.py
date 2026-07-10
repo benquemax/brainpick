@@ -65,6 +65,7 @@ def build_graph(docs: list[Document]) -> dict:
     nodes = []
     for doc in sorted(docs, key=lambda d: d.path):
         nodes.append({
+            "about": doc.about,
             "description": doc.description,
             "id": doc.path,
             "in": incoming[doc.path],
@@ -132,6 +133,7 @@ def build_docs_records(docs: list[Document]) -> list[dict]:
     records = []
     for doc in sorted(docs, key=lambda d: d.path):
         records.append({
+            "about": doc.about,
             "description": doc.description,
             "path": doc.path,
             "reserved": doc.reserved,
@@ -183,10 +185,24 @@ def apply_index_section(existing: str | None, block: str) -> str:
     return existing.rstrip("\n") + "\n\n" + block + "\n"
 
 
+def top_ghosts(graph: dict, limit: int = 5) -> list[dict]:
+    """The ghost queue (spec/20): T1's own `ghosts` list is already deduplicated
+    (source, target) pairs, so counting entries per target IS the distinct-
+    reference count — no T3 dependency, works the moment T1 compiles. Highest
+    reference count first, target path tie-break. Shared by the AGENTS.md
+    report and `brain_overview` so both surfaces agree."""
+    counts: dict[str, int] = defaultdict(int)
+    for ghost in graph.get("ghosts", []):
+        counts[ghost["target"]] += 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{"target": target, "count": count} for target, count in ranked[:limit]]
+
+
 def render_report_block(graph: dict, tiers: dict, bundle_root: str = ".") -> str:
     """The AGENTS.md brain report body (spec/20): a graph-before-grep directive,
-    counts, tier status, the top-5 hub docs by total degree, orphans (<= 5), and
-    the bundle root. Deterministic; cross-engine byte-identical."""
+    counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
+    the top-5 ghost queue by reference count, and the bundle root.
+    Deterministic; cross-engine byte-identical."""
     stats = graph.get("stats", {})
     nodes = graph.get("nodes", [])
 
@@ -215,6 +231,13 @@ def render_report_block(graph: dict, tiers: dict, bundle_root: str = ".") -> str
         lines += [f"  - {n['title']} ({n['id']})" for n in orphans[:5]]
         if len(orphans) > 5:
             lines.append(f"  - …and {len(orphans) - 5} more")
+    else:
+        lines.append("  - (none)")
+
+    lines.append("- Top ghosts:")
+    ghosts = top_ghosts(graph)
+    if ghosts:
+        lines += [f"  - {g['target']} — {g['count']} refs" for g in ghosts]
     else:
         lines.append("  - (none)")
 

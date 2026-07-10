@@ -1,5 +1,6 @@
 ---
 type: Concept
+about: thing
 title: Aurinko
 description: The star everything in this bundle orbits.
 tags: [tähti]

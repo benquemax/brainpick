@@ -17,10 +17,10 @@ def _node(node_id, title, inbound, outbound, reserved=False, orphan=False):
     }
 
 
-def _graph(nodes, **stats):
-    base = {"docs": len(nodes), "edges": 0, "tags": 0, "orphans": 0, "ghosts": 0}
+def _graph(nodes, ghost_pairs=None, **stats):
+    base = {"docs": len(nodes), "edges": 0, "tags": 0, "orphans": 0, "ghosts": len(ghost_pairs or [])}
     base.update(stats)
-    return {"nodes": nodes, "stats": base}
+    return {"nodes": nodes, "stats": base, "ghosts": ghost_pairs or []}
 
 
 def _body(block: str) -> str:
@@ -59,7 +59,7 @@ def test_orphans_truncate_with_a_more_note():
     block = render_report_block(_graph(nodes, orphans=6), TIERS)
     lines = block.splitlines()
     start = lines.index("- Orphans:")
-    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("- Bundle root:"))
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("- Top ghosts:"))
     orphan_lines = [line for line in lines[start + 1:end] if line.startswith("  - ")]
     assert len(orphan_lines) == 6                 # 5 shown + the truncation note
     assert orphan_lines[-1] == "  - …and 1 more"
@@ -69,6 +69,40 @@ def test_empty_hubs_and_orphans_say_none():
     block = render_report_block(_graph([]), TIERS)
     assert "- Top hubs (in/out):\n  - (none)" in block
     assert "- Orphans:\n  - (none)" in block
+    assert "- Top ghosts:\n  - (none)" in block
+
+
+def test_top_ghosts_ranked_by_reference_count_then_target():
+    # b is referenced by 3 distinct docs, a by 2, c by 1 — count is DISTINCT
+    # sources, so a duplicate (source, target) pair must not double-count.
+    ghosts = [
+        {"source": "x.md", "target": "b.md"},
+        {"source": "y.md", "target": "b.md"},
+        {"source": "z.md", "target": "b.md"},
+        {"source": "x.md", "target": "a.md"},
+        {"source": "y.md", "target": "a.md"},
+        {"source": "x.md", "target": "c.md"},
+    ]
+    block = render_report_block(_graph([], ghost_pairs=ghosts), TIERS)
+    lines = block.splitlines()
+    start = lines.index("- Top ghosts:")
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("- Bundle root:"))
+    ghost_lines = lines[start + 1:end]
+    assert ghost_lines == [
+        "  - b.md — 3 refs",
+        "  - a.md — 2 refs",
+        "  - c.md — 1 refs",
+    ]
+
+
+def test_top_ghosts_truncates_to_five():
+    ghosts = [{"source": f"s{i}.md", "target": f"g{i}.md"} for i in range(7)]
+    block = render_report_block(_graph([], ghost_pairs=ghosts), TIERS)
+    lines = block.splitlines()
+    start = lines.index("- Top ghosts:")
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("- Bundle root:"))
+    ghost_lines = [line for line in lines[start + 1:end] if line.startswith("  - ")]
+    assert len(ghost_lines) == 5
 
 
 def test_counts_tiers_and_bundle_root_render():

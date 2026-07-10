@@ -10,8 +10,10 @@ settings:
   warn_about_similar_files:       # nudge when a new file looks like a copy
     above: 0.85
     # the three shipped SKILL.md copies are kept identical ON PURPOSE by
-    # scripts/sync-skill.mjs (one canonical source, shipped into both packages)
-    ignore: ["**/__init__.py", "**/SKILL.md", "**/*.codx/_meta.ts"]
+    # scripts/sync-skill.mjs (one canonical source, shipped into both packages);
+    # the packages/*/tsconfig.json files are intentionally near-identical
+    # scaffolding (same tsup+node20 TS setup repeated per package on purpose)
+    ignore: ["**/__init__.py", "**/SKILL.md", "**/*.codx/_meta.ts", "**/tsconfig.json"]
 
 henxels:
   - henxel: "The scratch folder survives: _temp/ exists with its .gitkeep"

@@ -22,6 +22,7 @@ function record(path: string, title: string, text: string, description: string |
   return {
     path,
     title,
+    about: null,
     description,
     text,
     reserved: false,

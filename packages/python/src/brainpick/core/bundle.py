@@ -36,6 +36,7 @@ class Document:
     size: int
     title: str
     type: str | None
+    about: str | None
     description: str | None
     tags: list[str]
     timestamp: str | None
@@ -160,6 +161,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             size=len(raw_bytes),
             title=_title_of(meta, body, path),
             type=None if meta.get("type") is None else str(meta["type"]),
+            about=None if meta.get("about") is None else str(meta["about"]),
             description=None if meta.get("description") is None else str(meta["description"]),
             tags=_normalize_tags(meta.get("tags")),
             timestamp=_normalize_timestamp(meta.get("timestamp")),

@@ -155,6 +155,7 @@
   ],
   "nodes": [
     {
+      "about": "thing",
       "description": "The star everything in this bundle orbits.",
       "id": "aurinko.md",
       "in": 4,
@@ -169,6 +170,7 @@
       "type": "Concept"
     },
     {
+      "about": null,
       "description": null,
       "id": "index.md",
       "in": 0,
@@ -181,6 +183,7 @@
       "type": null
     },
     {
+      "about": null,
       "description": "A visitor with a tail, seen only every few decades — pöllämystynyt matkalainen.",
       "id": "komeetta.md",
       "in": 2,
@@ -195,6 +198,7 @@
       "type": "Concept"
     },
     {
+      "about": null,
       "description": null,
       "id": "kuu.md",
       "in": 3,
@@ -209,6 +213,7 @@
       "type": "Concept"
     },
     {
+      "about": null,
       "description": null,
       "id": "log.md",
       "in": 0,
@@ -221,6 +226,7 @@
       "type": null
     },
     {
+      "about": "place",
       "description": "The blue world with a companion and a home.",
       "id": "maa.md",
       "in": 3,
@@ -236,6 +242,7 @@
       "type": "Concept"
     },
     {
+      "about": null,
       "description": "The catalogue of worlds around the star.",
       "id": "planeetat.md",
       "in": 3,
@@ -250,6 +257,7 @@
       "type": "Concept"
     },
     {
+      "about": null,
       "description": "A ring of coral in the island sea.",
       "id": "saaret/atolli.md",
       "in": 2,
@@ -264,6 +272,7 @@
       "type": "Concept"
     },
     {
+      "about": null,
       "description": "The calm water inside the ring.",
       "id": "saaret/laguuni.md",
       "in": 2,
@@ -278,6 +287,7 @@
       "type": "Concept"
     },
     {
+      "about": "concept",
       "description": "A wanderer no other concept links to.",
       "id": "yksinainen.md",
       "in": 1,

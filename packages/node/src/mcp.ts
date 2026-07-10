@@ -13,7 +13,7 @@ import { basename, join, resolve, sep } from "node:path";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { BEGIN_PREFIX, END_MARKER } from "./compile/t1";
+import { BEGIN_PREFIX, END_MARKER, topGhosts } from "./compile/t1";
 import type { DocRecord, GraphStats } from "./compile/t1";
 import { ALWAYS_EXCLUDED_DIRS, posixDirname, posixNormpath } from "./core/bundle";
 import { cmpStr, sha256Hex } from "./core/canonical";
@@ -105,6 +105,7 @@ export function overviewPayload(state: ServeState, budgetTokens?: number | null)
     counts,
     tiers: state.tiers(),
     tree,
+    top_ghosts: topGhosts(state.graph),
     truncated: false,
     hint: "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.",
   };

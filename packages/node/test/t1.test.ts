@@ -42,6 +42,11 @@ test("graph shape", () => {
   expect(g.tags["saari"]).toEqual(["saaret/atolli.md", "saaret/laguuni.md"]);
   expect(Object.keys(g.tags)).toEqual([...Object.keys(g.tags)].sort());
 
+  // about is nullable on nodes too — absent frontmatter yields null
+  expect(nodes["aurinko.md"]!.about).toBe("thing");
+  expect(nodes["maa.md"]!.about).toBe("place");
+  expect(nodes["kuu.md"]!.about).toBeNull();
+
   // edges sorted by (source, target, kind)
   const keys = g.edges.map((e) => `${e.source}${e.target}${e.kind}`);
   expect(keys).toEqual([...keys].sort());
@@ -58,6 +63,7 @@ test("docs records", () => {
   expect(kuu.text).toContain("tides");
   expect(kuu.text).not.toContain("type: Concept");
   expect(Object.keys(kuu).sort()).toEqual([
+    "about",
     "description",
     "path",
     "reserved",
@@ -68,6 +74,13 @@ test("docs records", () => {
     "title",
     "type",
   ]);
+
+  // about is nullable — absent frontmatter yields null, present flows through
+  expect(kuu.about).toBeNull();
+  const aurinko = recs.find((r) => r.path === "aurinko.md")!;
+  expect(aurinko.about).toBe("thing");
+  const maa = recs.find((r) => r.path === "maa.md")!;
+  expect(maa.about).toBe("place");
 });
 
 test("index block render", () => {

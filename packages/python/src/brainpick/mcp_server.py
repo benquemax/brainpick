@@ -12,7 +12,7 @@ import subprocess
 from datetime import datetime, timezone
 
 from brainpick.compile.pipeline import _atomic_write
-from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER
+from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER, top_ghosts
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
 from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
@@ -66,6 +66,7 @@ def overview_payload(state: ServeState, budget_tokens: int | None = None) -> dic
         "counts": counts,
         "tiers": state.manifest.get("tiers", {}),
         "tree": tree,
+        "top_ghosts": top_ghosts(state.graph),
         "truncated": False,
         "hint": "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.",
     }

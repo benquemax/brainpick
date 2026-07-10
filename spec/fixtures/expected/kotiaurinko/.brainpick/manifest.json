@@ -3,8 +3,8 @@
   "compiled_at": "1970-01-01T00:00:00Z",
   "files": {
     "aurinko.md": {
-      "bytes": 282,
-      "sha256": "5a33be368c5dab7c52b45810bff89516ca03692597638770566dd77eeca2cd71"
+      "bytes": 295,
+      "sha256": "c80a32c33f14f24d983d11b6d96ed1920ed1abc54938c6f3a201652bc0055d6b"
     },
     "index.md": {
       "bytes": 1321,
@@ -23,8 +23,8 @@
       "sha256": "732a3e4af75d3e944d986bc1d21c9bd6b6eb0dbc1bc640d528c90eb1cdfded89"
     },
     "maa.md": {
-      "bytes": 247,
-      "sha256": "72e706fdd9ebfff835cd1af2c61ac11074b79654c73d897caa3baa540ad666db"
+      "bytes": 260,
+      "sha256": "f0e3d69785ab1b38c6e92087c376c3d7cce034285ef9b822e78afd2dd0483982"
     },
     "planeetat.md": {
       "bytes": 243,
@@ -39,8 +39,8 @@
       "sha256": "f744932c8465daeee9a0a4dc88390890e57e3328f67fff37f68bafa5091115a3"
     },
     "yksinainen.md": {
-      "bytes": 245,
-      "sha256": "eff46e30b518558fd9b8c083e7e478b299504c2668b608b530191105505ca146"
+      "bytes": 260,
+      "sha256": "c1d01e17a5de5f1fa24bacbf019c09877580ac402a2e330518f0dcb7f1437891"
     }
   },
   "index_md": {

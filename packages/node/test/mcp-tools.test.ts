@@ -78,6 +78,12 @@ test("overview counts and tree", async () => {
   expect(result["hint"]).toBeTruthy();
 });
 
+test("overview top_ghosts is the write-next queue", async () => {
+  const root = copyBundle();
+  const result = overviewPayload(await makeState(root));
+  expect(result["top_ghosts"]).toEqual([{ target: "olematon.md", count: 1 }]);
+});
+
 test("overview budget trims tree", async () => {
   const state = await makeState(copyBundle());
   const full = overviewPayload(state);
