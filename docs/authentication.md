@@ -2,7 +2,7 @@
 type: Reference
 title: Authentication
 description: Tokens for agents, a password for humans, and open-by-choice as a first-class setup — how a brain locks its door without ever committing a secret.
-timestamp: 2026-07-03T22:36:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Authentication
@@ -39,3 +39,10 @@ the bundle root: salted scrypt hashes only (N=16384, r=8, p=1, 32-byte keys,
 owner-only permissions, and every command that touches the file appends it to
 the repo `.gitignore` itself. The plaintext token exists in exactly one place:
 the terminal where it was created, at the moment it was created.
+
+[The daemon](daemon.md) reuses exactly this machinery for provisioning: when
+a daemon user gets access to a brain, it mints a token on that brain's own
+`.brainpick-auth.json` — the same `token create`, the same storage, just
+called by the daemon instead of a human at the CLI. The daemon's own control
+API is a separate secret again (`brainpickd token`), gating `/daemon/*`
+routes rather than any one brain's `/api`/`/mcp`.
