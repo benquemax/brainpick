@@ -64,6 +64,7 @@ function proxyNode(dir: string, count: number, degree: number): GraphNode {
     title: dir === '' ? `+${count} more` : `${dir} +${count} more`,
     description: null,
     type: 'cluster',
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,

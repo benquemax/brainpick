@@ -15,6 +15,7 @@ function makeNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
     title: id,
     description: null,
     type: null,
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,
@@ -233,6 +234,23 @@ describe('lenses', () => {
     expect(s.lens).toEqual({ kind: 'tag', tag: 'nope' });
     expect(s.highlight.size).toBe(0);
     expect(s.dimOthers).toBe(true); // an empty lens still dims: "nothing matches" is honest
+  });
+
+  it('about lens highlights nodes with that ontology subject; toggling again releases', () => {
+    const store = createUIStore();
+    store.getState().ingestSnapshot(
+      { ...lensPayload, nodes: [makeNode('a.md', { about: 'person' }), makeNode('b.md', { about: 'place' })] },
+      10,
+    );
+    store.getState().toggleLens({ kind: 'about', about: 'person' });
+    let s = store.getState();
+    expect(s.lens).toEqual({ kind: 'about', about: 'person' });
+    expect([...s.highlight]).toEqual(['a.md']);
+    expect(s.dimOthers).toBe(true);
+    store.getState().toggleLens({ kind: 'about', about: 'person' });
+    s = store.getState();
+    expect(s.lens).toEqual({ kind: 'none' });
+    expect(s.dimOthers).toBe(false);
   });
 
   it('an active search overrides the lens highlight; clearing search restores it', () => {

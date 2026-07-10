@@ -82,7 +82,7 @@ export type CameraCommand =
 
 export const BOOKMARK_SLOTS = 3;
 
-export type HudPanel = 'tags' | null;
+export type HudPanel = 'tags' | 'ontology' | null;
 
 export interface UIState extends GraphSlice {
   tiers: TierMap | null;

@@ -21,7 +21,7 @@ const VERTEX = /* glsl */ `
   attribute float iBirth;
   attribute float iDeath;
   attribute float iActivity;
-  attribute float iFlags;
+  attribute float iFlags;      // bit 0 reserved · bit 1 cluster · bit 2 entity · bits 3-5 ontology shape (0-4)
   attribute float iHighlight;
   attribute float iStagger;
   attribute float iBirthIdx;   // TIME MACHINE: commit index this node is born at (−1 = always present)
@@ -40,6 +40,7 @@ const VERTEX = /* glsl */ `
   varying float vAlpha;
   varying float vCluster;
   varying float vEntity;
+  varying float vShape;
 
   void main() {
     // Per-node stagger: nodes stream into the brain in a spread, not all at once.
@@ -68,6 +69,7 @@ const VERTEX = /* glsl */ `
     float reserved = step(0.5, mod(iFlags, 2.0));
     float cluster = step(0.5, mod(floor(iFlags / 2.0), 2.0));
     float entity = step(0.5, mod(floor(iFlags / 4.0), 2.0));
+    float shapeIdx = mod(floor(iFlags / 8.0), 8.0);
     vEntity = entity;
     float highlight = clamp(iHighlight, 0.0, 1.0);
     float scale = iRadius * grow * (1.0 - death)
@@ -109,6 +111,7 @@ const VERTEX = /* glsl */ `
     vIntensity = bright;
     vAlpha = (1.0 - death) * ttAlpha;
     vCluster = cluster;
+    vShape = shapeIdx;
 
     // Billboard in VIEW space so sprites face the camera in both the ortho
     // cosmos and the perspective brain. Under the top-down ortho camera (no
@@ -130,13 +133,37 @@ const FRAGMENT = /* glsl */ `
   varying float vAlpha;
   varying float vCluster;
   varying float vEntity;
+  varying float vShape;
+
+  // Regular-polygon SDF (n sides), normalized so a flat edge sits at ~1.0 —
+  // the same threshold dCircle/dDiamond already use. Simple by design (the
+  // ontology TYPE channel; docs/ontology.md): a doc's shape has no bearing
+  // on identity, just legibility at a glance.
+  float sdPolygon(vec2 p, float n) {
+    float a = atan(p.x, p.y);
+    float seg = 6.283185307 / n;
+    float halfSeg = seg * 0.5;
+    float ang = mod(a + halfSeg, seg) - halfSeg;
+    return length(p) * cos(ang) / cos(halfSeg);
+  }
+
+  // tuning.TYPE_SHAPE: 0 circle (article/absent/unknown) · 1 triangle
+  // (decision) · 2 square (playbook) · 3 pentagon (reference) · 4 ring (log).
+  float sdOntologyShape(vec2 p, float shapeIdx, float dCircle) {
+    if (shapeIdx < 0.5) return dCircle;
+    if (shapeIdx < 1.5) return sdPolygon(p, 3.0);
+    if (shapeIdx < 2.5) return sdPolygon(p, 4.0);
+    if (shapeIdx < 3.5) return sdPolygon(p, 5.0);
+    return abs(dCircle - 0.6) * 2.0;
+  }
 
   void main() {
-    // Docs are discs (L2), entities are gems (L1 diamond) — the two families
-    // read apart at a glance even before color registers.
+    // Docs are their ontology TYPE shape (default: disc), entities are gems
+    // (diamond) — a different species, always, regardless of vShape.
     float dCircle = length(vQuad);
     float dDiamond = abs(vQuad.x) + abs(vQuad.y);
-    float d = mix(dCircle, dDiamond, vEntity);
+    float dDoc = sdOntologyShape(vQuad, vShape, dCircle);
+    float d = mix(dDoc, dDiamond, vEntity);
     if (d > 1.0) discard;
     // Hard-ish core with a restrained radial halo (tuning.ts owns the numbers).
     float core = smoothstep(0.32, 0.06, d);
@@ -185,8 +212,14 @@ function buildGeometry(runtime: GraphRuntime): THREE.InstancedBufferGeometry {
     radius[i] = runtime.radii[i] ?? 5;
     birth[i] = runtime.birth[i] ?? -1;
     activity[i] = runtime.activityAt[i] ?? -1;
-    // bit 0 = reserved (index/log), bit 1 = cluster proxy, bit 2 = entity (T3 gem).
-    flags[i] = (runtime.reserved[i] ?? 0) | ((runtime.cluster[i] ?? 0) << 1) | ((runtime.family[i] ?? 0) << 2);
+    // bit 0 = reserved (index/log), bit 1 = cluster proxy, bit 2 = entity (T3 gem),
+    // bits 3-5 = ontology shape index (0-4) — packed in rather than a dedicated
+    // attribute to stay under software/mobile GPUs' vertex-attribute limits.
+    flags[i] =
+      (runtime.reserved[i] ?? 0) |
+      ((runtime.cluster[i] ?? 0) << 1) |
+      ((runtime.family[i] ?? 0) << 2) |
+      ((runtime.shape[i] ?? 0) << 3);
     birthIdx[i] = runtime.birthIdx[i] ?? -1;
     deathIdx[i] = runtime.deathIdx[i] ?? 1e9;
     modIdx[i] = runtime.modIdx[i] ?? -1;

@@ -15,6 +15,7 @@ function makeNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
     title: id.replace(/\.md$/, ''),
     description: null,
     type: 'Concept',
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,

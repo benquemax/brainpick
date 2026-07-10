@@ -28,7 +28,7 @@ const ENTITY_GRAPH: EntityGraph = {
 };
 
 function docNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
-  return { id, title: id, description: null, type: null, tags: [], timestamp: null, in: 0, out: 0, orphan: false, reserved: false, ...over };
+  return { id, title: id, description: null, type: null, about: null, tags: [], timestamp: null, in: 0, out: 0, orphan: false, reserved: false, ...over };
 }
 const DOC_NODES = new Map<string, GraphNode>([
   ['aurinko.md', docNode('aurinko.md', { out: 1 })],

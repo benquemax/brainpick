@@ -18,6 +18,7 @@ const node = (id, title, over = {}) => ({
   title,
   description: null,
   type: 'Concept',
+  about: null,
   tags: [],
   timestamp: null,
   in: 0,
@@ -57,6 +58,7 @@ export function initialGraph() {
   const nodes = [
     node('aurinko.md', 'Aurinko', {
       description: 'The star everything in this bundle orbits.',
+      about: 'thing',
       tags: ['tähti'],
       in: 4,
       out: 3,
@@ -72,6 +74,7 @@ export function initialGraph() {
     node('log.md', 'Update log', { type: null, reserved: true }),
     node('maa.md', 'Maa', {
       description: 'The blue world with a companion and a home.',
+      about: 'place',
       tags: ['planeetta', 'koti'],
       timestamp: '2026-06-10T12:00:00Z',
       in: 3,
@@ -98,6 +101,7 @@ export function initialGraph() {
     }),
     node('yksinainen.md', 'Yksinäinen', {
       description: 'A wanderer no other concept links to.',
+      about: 'concept',
       tags: ['mysteeri'],
       in: 1,
       out: 1,

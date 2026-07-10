@@ -33,6 +33,7 @@ export function entityNodeToGraphNode(entity: EntityGraphNode): GraphNode {
     title: entity.name,
     description: entity.description,
     type: entity.type,
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,

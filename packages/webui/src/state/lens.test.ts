@@ -8,6 +8,7 @@ function makeNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
     title: id,
     description: null,
     type: null,
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,
@@ -28,6 +29,9 @@ describe('lensNodeSet', () => {
     makeNode('b.md', { tags: ['star', 'home'] }),
     makeNode('c.md', { orphan: true }),
     makeNode('d.md', { orphan: true, tags: ['home'] }),
+    makeNode('e.md', { about: 'person' }),
+    makeNode('f.md', { about: 'person' }),
+    makeNode('g.md', { about: 'place' }),
   );
 
   it('none lens selects nothing', () => {
@@ -48,12 +52,24 @@ describe('lensNodeSet', () => {
     expect(lensNodeSet(nodes, { kind: 'tag', tag: 'nope' }).size).toBe(0);
   });
 
-  it('sameLens treats equal lenses as equal and different tags as different', () => {
+  it('about lens selects nodes with that ontology subject', () => {
+    const set = lensNodeSet(nodes, { kind: 'about', about: 'person' });
+    expect([...set].sort()).toEqual(['e.md', 'f.md']);
+  });
+
+  it('about lens with an about value nothing has selects nothing (honest empty state)', () => {
+    expect(lensNodeSet(nodes, { kind: 'about', about: 'event' }).size).toBe(0);
+  });
+
+  it('sameLens treats equal lenses as equal and different tags/abouts as different', () => {
     expect(sameLens({ kind: 'none' }, { kind: 'none' })).toBe(true);
     expect(sameLens({ kind: 'orphans' }, { kind: 'orphans' })).toBe(true);
     expect(sameLens({ kind: 'tag', tag: 'star' }, { kind: 'tag', tag: 'star' })).toBe(true);
     expect(sameLens({ kind: 'tag', tag: 'star' }, { kind: 'tag', tag: 'home' })).toBe(false);
     expect(sameLens({ kind: 'orphans' }, { kind: 'none' })).toBe(false);
     expect(sameLens({ kind: 'tag', tag: 'star' }, { kind: 'orphans' })).toBe(false);
+    expect(sameLens({ kind: 'about', about: 'person' }, { kind: 'about', about: 'person' })).toBe(true);
+    expect(sameLens({ kind: 'about', about: 'person' }, { kind: 'about', about: 'place' })).toBe(false);
+    expect(sameLens({ kind: 'about', about: 'person' }, { kind: 'tag', tag: 'star' })).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ function makeNode(id: string, over: Partial<GraphNode> = {}): GraphNode {
     title: id,
     description: null,
     type: null,
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,

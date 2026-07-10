@@ -2,7 +2,7 @@
  * Node coloring: deterministic hash of the top-level directory group to a
  * hue, rendered in the dark sci-fi palette (saturated, luminous, additive).
  */
-import { ENTITY_COLOR } from './tuning';
+import { ABOUT_COLOR, ENTITY_COLOR, TYPE_SHAPE } from './tuning';
 
 /** Top-level directory of a bundle path; bundle-root docs group under ".". */
 export function groupOf(id: string): string {
@@ -88,4 +88,61 @@ export function entityColorForType(type: string | null): [number, number, number
 export function rgbToCss([r, g, b]: readonly [number, number, number]): string {
   const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
   return `rgb(${c(r)} ${c(g)} ${c(b)})`;
+}
+
+const aboutCache = new Map<string, [number, number, number]>();
+
+/**
+ * The two-axis ontology's COLOR channel (docs/ontology.md, tuning.ABOUT_COLOR):
+ * a page's `about` maps to a fixed, distinct hue. Returns null for absent or
+ * unrecognized values — the caller's cue to fall back to today's directory
+ * color, so a bundle without the field renders byte-identically to before.
+ */
+export function colorForAbout(about: string | null | undefined): [number, number, number] | null {
+  if (!about) return null;
+  const spec = (ABOUT_COLOR as Record<string, { hue: number; saturation: number; lightness: number } | undefined>)[
+    about
+  ];
+  if (!spec) return null;
+  let color = aboutCache.get(about);
+  if (!color) {
+    color = hslToRgb(spec.hue, spec.saturation, spec.lightness);
+    aboutCache.set(about, color);
+  }
+  return color;
+}
+
+/** CSS color for the about legend/HTML overlays, matching colorForAbout. */
+export function cssColorForAbout(about: string): string | null {
+  const color = colorForAbout(about);
+  return color ? rgbToCss(color) : null;
+}
+
+/**
+ * The color of a render node: entities keep their own gold family regardless
+ * of `about` (a different species, never confused with a doc's ontology
+ * color); a doc's `about` color wins when present, falling back to the
+ * existing directory-hash color so an ontology-less bundle is unaffected.
+ */
+export function colorForNode(
+  id: string,
+  about: string | null | undefined,
+  type: string | null,
+  isEntity: boolean,
+): [number, number, number] {
+  if (isEntity) return entityColorForType(type);
+  return colorForAbout(about) ?? colorForId(id);
+}
+
+/**
+ * The two-axis ontology's SHAPE channel (tuning.TYPE_SHAPE): a page's `type`
+ * maps to a shape index the NodesLayer fragment shader switches on. 0 (the
+ * existing circle) for `article`, absent, or any value outside the closed
+ * set — the legacy "Concept"/"Reference"/... capitalized values from before
+ * the two-axis migration fall through to 0 too, same as a bundle that never
+ * adopts the ontology at all.
+ */
+export function shapeIndexForType(type: string | null | undefined): number {
+  if (!type) return 0;
+  return TYPE_SHAPE[type] ?? 0;
 }

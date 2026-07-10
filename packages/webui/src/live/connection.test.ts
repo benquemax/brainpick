@@ -9,6 +9,7 @@ function makeNode(id: string): GraphNode {
     title: id,
     description: null,
     type: null,
+    about: null,
     tags: [],
     timestamp: null,
     in: 0,

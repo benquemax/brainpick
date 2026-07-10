@@ -8,8 +8,8 @@ import type { EntityGraphFetch } from './api';
 
 const GRAPH: GraphPayload = {
   nodes: [
-    { id: 'aurinko.md', title: 'Aurinko', description: null, type: null, tags: [], timestamp: null, in: 0, out: 1, orphan: false, reserved: false },
-    { id: 'kuu.md', title: 'Kuu', description: null, type: null, tags: [], timestamp: null, in: 1, out: 0, orphan: false, reserved: false },
+    { id: 'aurinko.md', title: 'Aurinko', description: null, type: null, about: null, tags: [], timestamp: null, in: 0, out: 1, orphan: false, reserved: false },
+    { id: 'kuu.md', title: 'Kuu', description: null, type: null, about: null, tags: [], timestamp: null, in: 1, out: 0, orphan: false, reserved: false },
   ],
   edges: [{ source: 'aurinko.md', target: 'kuu.md', kind: 'link', label: null, count: 1 }],
   ghosts: [], islands: [], stats: { docs: 2, edges: 1, ghosts: 0, islands: 0, orphans: 0, tags: 0 }, tags: {},

@@ -38,7 +38,7 @@ describe('mock graph (kotiaurinko-derived)', () => {
 
   it('has complete node records (graph.schema.json required keys)', () => {
     for (const n of initialGraph().nodes) {
-      for (const key of ['description', 'id', 'in', 'orphan', 'out', 'reserved', 'tags', 'timestamp', 'title', 'type']) {
+      for (const key of ['about', 'description', 'id', 'in', 'orphan', 'out', 'reserved', 'tags', 'timestamp', 'title', 'type']) {
         expect(Object.keys(n)).toContain(key);
       }
     }

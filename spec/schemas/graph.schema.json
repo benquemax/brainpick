@@ -8,9 +8,10 @@
   "$defs": {
     "node": {
       "type": "object",
-      "required": ["description", "id", "in", "orphan", "out", "reserved", "tags", "timestamp", "title", "type"],
+      "required": ["about", "description", "id", "in", "orphan", "out", "reserved", "tags", "timestamp", "title", "type"],
       "additionalProperties": false,
       "properties": {
+        "about": {"type": ["string", "null"]},
         "description": {"type": ["string", "null"]},
         "id": {"type": "string"},
         "in": {"type": "integer", "minimum": 0},

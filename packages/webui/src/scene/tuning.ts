@@ -105,6 +105,48 @@ export const ENTITY_EDGE = {
   virtualTint: [0.42, 0.52, 0.7] as [number, number, number],
 } as const;
 
+/**
+ * THE TWO-AXIS ONTOLOGY lens (docs/ontology.md): COLOR = about (a page's
+ * ontological subject), SHAPE = type (its document form) — orthogonal
+ * fields, orthogonal visual channels. Both are OPTIONAL frontmatter; a node
+ * with neither renders exactly as before (directory-hash color, circle).
+ *
+ * Seven `about` hues, evenly spaced (~42.8°) and confined to 75°–332°,
+ * deliberately clear of the entity gold band (ENTITY_COLOR: 44° ± 30°) so a
+ * doc's about-color never reads as "this is secretly an entity" — shape
+ * (disc vs diamond) already carries that distinction. Chosen for calm,
+ * colorblind-legible separation: no adjacent pure red/green pair, a
+ * green→teal→blue→violet→rose sweep that reads apart under deuteranopia
+ * and protanopia alike.
+ */
+export const ABOUT_COLOR = {
+  place: { hue: 75, saturation: 0.62, lightness: 0.64 },
+  process: { hue: 118, saturation: 0.6, lightness: 0.62 },
+  thing: { hue: 161, saturation: 0.55, lightness: 0.64 },
+  concept: { hue: 204, saturation: 0.62, lightness: 0.68 },
+  event: { hue: 246, saturation: 0.62, lightness: 0.7 },
+  organization: { hue: 289, saturation: 0.55, lightness: 0.68 },
+  person: { hue: 332, saturation: 0.68, lightness: 0.68 },
+} as const;
+
+/**
+ * `type` shape index (matches the fragment shader's shapeDist switch in
+ * NodesLayer.tsx): 0 keeps today's circle — the default for `article` AND
+ * for anything absent/unrecognized, so a bundle without the field, or a
+ * value outside the closed set, renders byte-identically to before this
+ * lens existed. 1-4 are simple regular-polygon / ring SDFs, deliberately
+ * plain ("keep it to simple shader shapes") and distinct from the entity
+ * layer's own diamond (vEntity wins over vShape — an entity is a different
+ * species from any doc type, gem always).
+ */
+export const TYPE_SHAPE: Record<string, number> = {
+  article: 0,
+  decision: 1, // triangle — a fork: context/decision/alternatives
+  playbook: 2, // square — a checklist of steps
+  reference: 3, // pentagon — a lookup table
+  log: 4, // ring — a cycle of dated entries
+};
+
 export const GHOST_GLOW = {
   /** Ghost edges are quieter than real links — they are absences. */
   opacity: 0.34,

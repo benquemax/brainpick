@@ -15,6 +15,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { UIState } from '../src/state/store';
+import { colorForAbout, colorForId } from '../src/scene/colors';
 
 declare global {
   interface Window {
@@ -22,6 +23,9 @@ declare global {
     __bp_runtime: {
       ids: string[];
       liveCount: number;
+      /** ontology channels (docs/ontology.md): per-node RGB + type-shape index. */
+      colors: Float32Array;
+      shape: Uint8Array;
       /** Emphasis wiring: incident edge indices / neighbour node indices per node. */
       incident: number[][];
       neighbors: number[][];
@@ -294,6 +298,48 @@ test('the orphan lens dims the cosmos around the orphans; the ghost toggle flips
   await page.waitForFunction(() => !window.__bp_store.getState().showGhosts);
   await page.keyboard.press('g'); // and the key path
   await page.waitForFunction(() => window.__bp_store.getState().showGhosts);
+});
+
+test('ontology: about-colors render on the real docs, and a doc with no about is byte-unchanged', async ({ page }) => {
+  await page.goto(baseURL() + '/');
+  await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+
+  // aurinko.md/maa.md carry `about` in the fixture (docs/O-C) — their rendered
+  // color is the ontology hue, not the directory hash. komeetta.md carries no
+  // `about` at all — its color must be the SAME directory-hash fallback the
+  // scene has always used, proving an about-less doc renders byte-unchanged.
+  const rendered = await page.evaluate(() => {
+    const rt = window.__bp_runtime;
+    const at = (id: string) => {
+      const i = rt.ids.indexOf(id);
+      return [rt.colors[i * 3], rt.colors[i * 3 + 1], rt.colors[i * 3 + 2]];
+    };
+    return { aurinko: at('aurinko.md'), maa: at('maa.md'), komeetta: at('komeetta.md') };
+  });
+  const close = (a: number[], b: readonly [number, number, number]) =>
+    a.length === 3 && a.every((v, i) => Math.abs(v - b[i]!) < 0.01);
+  expect(close(rendered.aurinko, colorForAbout('thing')!)).toBe(true);
+  expect(close(rendered.maa, colorForAbout('place')!)).toBe(true);
+  expect(close(rendered.komeetta, colorForId('komeetta.md'))).toBe(true);
+
+  // the ontology lens (per-about toggle) filters to exactly the docs with that subject.
+  await page.getByRole('button', { name: 'ontology' }).click();
+  await page.getByRole('menuitemradio', { name: 'all things' }).click();
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.lens.kind === 'about' && s.dimOthers && [...s.highlight].join(',') === 'aurinko.md';
+  });
+
+  // toggling the same about again releases the lens (same on/off contract as the other lenses).
+  await page.getByRole('menuitemradio', { name: 'all things' }).click();
+  await page.waitForFunction(() => {
+    const s = window.__bp_store.getState();
+    return s.lens.kind === 'none' && !s.dimOthers && s.highlight.size === 0;
+  });
+
+  // switching to a DIFFERENT about swaps the set, same as the tag lens.
+  await page.getByRole('menuitemradio', { name: 'all places' }).click();
+  await page.waitForFunction(() => [...window.__bp_store.getState().highlight].join(',') === 'maa.md');
 });
 
 test('camera save slots: shift+1 saves the view, 1 recalls it, 0 fits the cosmos', async ({ page }) => {

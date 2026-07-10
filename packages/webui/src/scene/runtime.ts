@@ -17,7 +17,7 @@ import { activeRenderGraph } from '../state/entityModel';
 import { communityLobes } from '../state/communities';
 import type { Vec3 } from './brainSDF';
 import { isEntityRenderId } from '../graph/entities';
-import { colorForId, entityColorForType } from './colors';
+import { colorForNode, shapeIndexForType } from './colors';
 import { buildGhostAnchors, type GhostAnchor } from './ghosts';
 import { buildAdjacency } from './adjacency';
 import { BRAIN, GHOST_GLOW } from './tuning';
@@ -122,6 +122,10 @@ export class GraphRuntime {
   cluster: Uint8Array = new Uint8Array(0);
   /** 1 for entity nodes (T3 gem sprite), 0 for docs (disc). */
   family: Uint8Array = new Uint8Array(0);
+  /** The two-axis ontology's SHAPE channel (tuning.TYPE_SHAPE): 0 for a doc's
+   * `type` absent/unrecognized/"article" (the existing circle) or for any
+   * entity (always the gem, this value is ignored), 1-4 otherwise. */
+  shape: Uint8Array = new Uint8Array(0);
   birth: Float32Array = new Float32Array(0); // scene seconds; -1 = no entrance animation
   activityAt: Float32Array = new Float32Array(0); // scene seconds; -1 = none
   /**
@@ -413,14 +417,17 @@ export class GraphRuntime {
     const reserved = new Uint8Array(n);
     const cluster = new Uint8Array(n);
     const family = new Uint8Array(n);
+    const shape = new Uint8Array(n);
     const birth = new Float32Array(n).fill(-1);
     const activityAt = new Float32Array(n).fill(-1);
 
     for (const node of view.renderNodes) {
       const i = index.get(node.id) as number;
-      // Entities are their own species: gold gem, doc paths keep the dir palette.
+      // Entities are their own species: gold gem, doc paths keep the dir
+      // palette UNLESS `about` is present — the two-axis ontology's color
+      // channel then wins (colorForNode), same node still just a disc.
       const entity = isEntityRenderId(node.id);
-      const [r, g, b] = entity ? entityColorForType(node.type) : colorForId(node.id);
+      const [r, g, b] = colorForNode(node.id, node.about, node.type, entity);
       colors[i * 3] = r;
       colors[i * 3 + 1] = g;
       colors[i * 3 + 2] = b;
@@ -430,6 +437,9 @@ export class GraphRuntime {
       reserved[i] = node.reserved ? 1 : 0;
       cluster[i] = isClusterId(node.id) ? 1 : 0;
       family[i] = entity ? 1 : 0;
+      // The ontology SHAPE channel is doc-only — an entity is always the gem
+      // (vEntity wins in the fragment shader regardless of this value).
+      shape[i] = entity ? 0 : shapeIndexForType(node.type);
       const join = state.joins.get(node.id);
       if (join) birth[i] = this.sceneTime(join.at);
       const activity = state.activity.get(node.id);
@@ -486,6 +496,7 @@ export class GraphRuntime {
     this.reserved = reserved;
     this.cluster = cluster;
     this.family = family;
+    this.shape = shape;
     this.birth = birth;
     this.activityAt = activityAt;
     this.edgePairs = Uint32Array.from(pairs);

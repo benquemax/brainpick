@@ -8,6 +8,7 @@ export interface GraphNode {
   title: string;
   description: string | null;
   type: string | null;
+  about: string | null;
   tags: string[];
   timestamp: string | null;
   in: number;

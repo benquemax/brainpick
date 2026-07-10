@@ -319,6 +319,33 @@ button {
   border-top: 1px dashed rgba(120, 150, 200, 0.75);
 }
 
+/* ---- ontology lens flyout: about-color swatch + type-shape key ---------- */
+
+.legend-swatch.about {
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.legend-shapes-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.legend-shape-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 2px 4px;
+}
+
+.legend-shape-glyph {
+  font-size: 12px;
+  color: var(--cyan);
+}
+
 /* ---- GPU budget line (only shown while the view is capped) -------------- */
 
 .hud-budget {
