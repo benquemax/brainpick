@@ -2,7 +2,7 @@
 type: Concept
 title: The daemon
 description: brainpickd — the service that owns every brain's git sync, supervision, deploy keys, LAN reachability and users behind one small control API; every face (desktop app, browser, CLI) is a thin client of it.
-timestamp: 2026-07-10T06:00:00Z
+timestamp: 2026-07-10T10:45:00Z
 ---
 
 # The daemon
@@ -87,6 +87,7 @@ down.
 
 The daemon is a peer of the two engines — [runtime parity](runtime-parity.md)
 is pip vs. npm; the daemon sits ABOVE either engine, spawning `brainpick
-serve` as a child process it never modifies. A future desktop app (Tauri) is
-a window hosting the daemon's own web UI plus first-run bootstrap; a browser
-on another machine on the LAN drives the exact same control API.
+serve` as a child process it never modifies. [The desktop app](desktop-app.md)
+is a window hosting first-run bootstrap and the add-brain wizard, calling
+this same control API; a browser on another machine on the LAN drives the
+exact same one.

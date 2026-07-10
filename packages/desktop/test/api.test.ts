@@ -79,6 +79,38 @@ test("every /daemon route 401s without a token", async () => {
   expect(brains.status).toBe(401);
 });
 
+// -- CORS: a webview (the desktop app, or any browser-based client) is a different ---
+// origin from the control API's own port — without CORS headers the response is
+// fetched fine server-side but the BROWSER refuses to hand it to JS, which is
+// invisible to curl/server-side tests and only shows up as a silent frontend failure.
+
+test("a CORS preflight (OPTIONS) succeeds without a token and carries the right headers", async () => {
+  const env = isolatedEnv();
+  const { base } = await startApi(env);
+  const res = await fetch(`${base}/daemon/brains`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: "http://localhost:1420",
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "authorization",
+    },
+  });
+  expect(res.status).toBe(204);
+  expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  expect(res.headers.get("access-control-allow-headers")).toContain("Authorization");
+});
+
+test("a real GET response carries Access-Control-Allow-Origin so the browser hands it to JS", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const { base } = await startApi(env);
+  const res = await fetch(`${base}/daemon/health`, {
+    headers: { Authorization: `Bearer ${token}`, Origin: "http://localhost:1420" },
+  });
+  expect(res.status).toBe(200);
+  expect(res.headers.get("access-control-allow-origin")).toBe("*");
+});
+
 test("a wrong token also 401s", async () => {
   const env = isolatedEnv();
   ensureDaemonToken(env);
@@ -151,6 +183,29 @@ test("POST /daemon/brains compiles a real local bundle and registers it", async 
   expect(result.body.fix_list).toBeNull(); // no henxels.yaml in this fixture
 
   expect(registryStore.get().brains).toHaveLength(1);
+});
+
+test("POST /daemon/brains does not hang forever if `henxels check --all` hangs", async () => {
+  const env: Env = { ...isolatedEnv(), BRAINPICK_HENXELS_TIMEOUT_MS: "200" };
+  const token = ensureDaemonToken(env);
+  const bundle = makeBundle();
+  writeFileSync(join(bundle, "henxels.yaml"), "rules: []\n", "utf8");
+
+  const fakeHenxelsDir = mkdtempSync(join(tmpdir(), "bp-desktop-fake-henxels-"));
+  dirs.push(fakeHenxelsDir);
+  writeFileSync(join(fakeHenxelsDir, "henxels"), "#!/bin/sh\nsleep 5\n", { mode: 0o755 });
+  env["PATH"] = `${fakeHenxelsDir}:${process.env["PATH"] ?? ""}`;
+
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+  const started = Date.now();
+  const result = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: bundle, enabled: false }),
+  });
+  expect(Date.now() - started).toBeLessThan(4000); // the whole request, not just the hang
+  expect(result.status).toBe(201);
+  expect(result.body.fix_list).toMatch(/did not finish/);
 });
 
 test("POST /daemon/brains with enabled: false never starts a supervised process", async () => {

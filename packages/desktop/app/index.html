@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>brainpick</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>brainpick</h1>
+        <button id="add-brain-button" type="button">+ Add brain</button>
+      </header>
+
+      <section id="status-banner" class="status-banner" hidden></section>
+
+      <section id="brain-list" class="brain-list" aria-label="brains"></section>
+
+      <dialog id="wizard-dialog">
+        <div id="wizard-body"></div>
+      </dialog>
+    </main>
+  </body>
+</html>

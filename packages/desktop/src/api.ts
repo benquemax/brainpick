@@ -68,17 +68,36 @@ function requireToken(env: Env) {
   };
 }
 
+const DEFAULT_HENXELS_TIMEOUT_MS = 20_000;
+
+function henxelsTimeoutMs(env: Env): number {
+  const raw = Number(env["BRAINPICK_HENXELS_TIMEOUT_MS"]);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_HENXELS_TIMEOUT_MS;
+}
+
 /** `henxels check --all` from the repo root that owns `henxels.yaml` — the
  * teach-don't-reject fix-list. Absent henxels (no contract, or the CLI isn't
- * on PATH) means no fix-list, never a rejection. */
-function henxelsFixList(bundleRoot: string): string | null {
+ * on PATH) means no fix-list, never a rejection. A hung henxels install must
+ * not take the whole daemon down with it (spec/80 discovery: `check --all`
+ * is known to hang indefinitely on at least one install) — bounded by a
+ * timeout, same as any other subprocess this API shells out to. */
+function henxelsFixList(bundleRoot: string, env: Env): string | null {
   const contract = detectHenxels(bundleRoot);
-  if (contract === null || !henxelsOnPath()) return null;
+  if (contract === null || !henxelsOnPath(env)) return null;
+  const timeout = henxelsTimeoutMs(env);
   try {
-    execFileSync("henxels", ["check", "--all"], { cwd: dirname(contract), encoding: "utf8" });
+    execFileSync("henxels", ["check", "--all"], {
+      cwd: dirname(contract),
+      encoding: "utf8",
+      env: { ...process.env, ...env },
+      timeout,
+    });
     return null; // exit 0 — nothing to teach
   } catch (error) {
-    const err = error as { stdout?: string; stderr?: string; message: string };
+    const err = error as { stdout?: string; stderr?: string; message: string; signal?: string | null };
+    if (err.signal) {
+      return `henxels check --all did not finish within ${timeout / 1000}s and was stopped — no fix-list this time.`;
+    }
     return (err.stdout || err.stderr || err.message).trim();
   }
 }
@@ -87,9 +106,32 @@ function bundleSummary(info: BundleInfo): { kind: string; docs: number; typed: n
   return { kind: info.kind, docs: info.docs, typed: info.typed };
 }
 
+/** The control API's only client is a webview or a browser — a different
+ * origin from its own port by construction (the desktop app's UI is served
+ * from a dev server or a tauri:// origin; a bare browser on the LAN is a
+ * third origin again). Without CORS headers the request still REACHES the
+ * daemon (curl, server logs, tests all see it) but the browser refuses to
+ * hand the response to JS — invisible server-side, fatal client-side. Origin
+ * is `*`: the bearer token is the real gate, not which page is asking. */
+function cors() {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") {
+      // a preflight never carries the real Authorization header — it must
+      // clear before requireToken, or every cross-origin request 401s here.
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  };
+}
+
 export function createApi(options: ApiOptions): Express {
   const { env, supervisor, registryStore } = options;
   const app = express();
+  app.use(cors());
   app.use(requireToken(env));
 
   app.get("/daemon/health", (_req, res) => {
@@ -143,7 +185,7 @@ export function createApi(options: ApiOptions): Express {
       return;
     }
 
-    const fixList = henxelsFixList(root);
+    const fixList = henxelsFixList(root, env);
     registryStore.set(addBrain(registry, brain));
     if (brain.enabled) supervisor.start(brain);
     ensureLanTokenForBrain(brain, env); // ready before the first status check, not just on-demand
