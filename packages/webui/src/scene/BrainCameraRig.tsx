@@ -186,7 +186,11 @@ export function BrainCameraRig({ runtime }: { runtime: GraphRuntime }) {
     } else {
       returning.current = false;
       const idleMs = performance.now() - lastInteract.current;
-      if (idleMs > BRAIN_CAMERA.autoRotateResumeMs) {
+      // Published for e2e/debug: the deterministic mirror of the branch below —
+      // true exactly while a gesture holds the turntable inside its resume window
+      // (asserting THIS is flake-proof; measuring motion over wall-clock is not).
+      runtime.spinPaused = idleMs <= BRAIN_CAMERA.autoRotateResumeMs;
+      if (!runtime.spinPaused) {
         // The Milky-Way turntable: advance the AZIMUTH around the vertical (Y) axis
         // (polar delta 0 keeps the tilt). Active immediately on entry (lastInteract
         // starts at -Infinity); pauses on gesture, resumes after the window.

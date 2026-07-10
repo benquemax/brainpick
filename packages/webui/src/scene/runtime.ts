@@ -186,6 +186,9 @@ export class GraphRuntime {
   /** e2e/debug: the orbit camera's azimuth, and whether it has been dragged. */
   brainAzimuth = 0;
   orbited = false;
+  /** e2e/debug: true while a gesture holds the idle turntable inside its
+   * resume window — the exact condition that gates the auto-rotate. */
+  spinPaused = false;
   /**
    * e2e/debug: the orbit camera's current look-at target in brain mode. A
    * search-as-flight (BrainCameraRig) moves it toward the focused hit's 3D
