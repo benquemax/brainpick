@@ -46,7 +46,7 @@ function makeRemote(): string {
 
 function brainFor(id: string, repo: string, dataDir: string): { brain: BrainRecord; env: Record<string, string> } {
   return {
-    brain: { id, repo, bundle_path: "", port: 1, enabled: true },
+    brain: { id, repo, bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" },
     env: { BRAINPICK_DAEMON_DATA_DIR: dataDir },
   };
 }

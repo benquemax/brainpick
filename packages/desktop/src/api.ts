@@ -16,6 +16,7 @@
 import {
   detectBundle,
   detectHenxels,
+  generateBundleId,
   henxelsOnPath,
   runCompile,
   type BundleInfo,
@@ -29,17 +30,21 @@ import express, { type Express, type NextFunction, type Request, type Response }
 import { verifyDaemonToken } from "./daemonToken";
 import { cloneIfMissing } from "./gitsync";
 import { ensureBrainKey } from "./keys";
+import { resolveAdvertiseHost } from "./network";
 import type { Env } from "./paths";
 import {
   addBrain,
   brainBundleRoot,
   findBrain,
+  isLocalHost,
   isLocalRepo,
   removeBrain,
   validateBrainInput,
   type RegistryStore,
 } from "./registry";
 import type { Supervisor } from "./supervisor";
+import { ensureLanTokenForBrain } from "./users";
+import { VERSION } from "./version";
 
 export interface ApiOptions {
   env: Env;
@@ -88,7 +93,7 @@ export function createApi(options: ApiOptions): Express {
   app.use(requireToken(env));
 
   app.get("/daemon/health", (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, version: VERSION });
   });
 
   app.get("/daemon/brains", (_req, res) => {
@@ -141,6 +146,7 @@ export function createApi(options: ApiOptions): Express {
     const fixList = henxelsFixList(root);
     registryStore.set(addBrain(registry, brain));
     if (brain.enabled) supervisor.start(brain);
+    ensureLanTokenForBrain(brain, env); // ready before the first status check, not just on-demand
 
     res.status(201).json({ brain, bundle: bundleSummary(bundle), compiled, fix_list: fixList });
   });
@@ -163,10 +169,26 @@ export function createApi(options: ApiOptions): Express {
       res.status(404).json({ error: `no such brain: ${req.params["id"]}` });
       return;
     }
-    const mcpUrl = `http://127.0.0.1:${brain.port}/mcp`;
+    // never advertise an address the brain isn't actually bound to: a
+    // loopback-only brain has no LAN url at all, only the local one.
+    const mcpUrlLocal = `http://127.0.0.1:${brain.port}/mcp`;
+    const lanBound = !isLocalHost(brain.host);
+    const mcpUrl = lanBound ? `http://${resolveAdvertiseHost(env)}:${brain.port}/mcp` : mcpUrlLocal;
+
+    let claudeMcpAdd = `claude mcp add --transport http ${brain.id} ${mcpUrl}`;
+    const lanSecret = lanBound ? ensureLanTokenForBrain(brain, env) : null;
+    if (lanSecret !== null) claudeMcpAdd += ` --header "Authorization: Bearer ${lanSecret}"`;
+
     let engineStatus: unknown = null;
     try {
-      const response = await fetch(`http://127.0.0.1:${brain.port}/api/status`, {
+      // the health probe always goes over loopback — this daemon and the
+      // brain it supervises share a machine regardless of what host clients
+      // are told to use. Once a LAN-bound brain has a provisioned token, the
+      // ENGINE itself starts requiring auth (spec/80) — including it here is
+      // what keeps this probe from going blind the moment that happens.
+      const headers: Record<string, string> = lanSecret !== null ? { Authorization: `Bearer ${lanSecret}` } : {};
+      const response = await fetch(mcpUrlLocal.replace("/mcp", "/api/status"), {
+        headers,
         signal: AbortSignal.timeout(2000),
       });
       if (response.ok) engineStatus = await response.json();
@@ -178,19 +200,26 @@ export function createApi(options: ApiOptions): Express {
       process_status: supervisor.status(brain.id) ?? "stopped",
       port: brain.port,
       mcp_url: mcpUrl,
-      claude_mcp_add: `claude mcp add --transport http ${brain.id} ${mcpUrl}`,
+      mcp_url_local: mcpUrlLocal,
+      claude_mcp_add: claudeMcpAdd,
       engine_status: engineStatus,
     });
   });
 
   app.post("/daemon/keys", jsonBody, (req, res) => {
-    const id = (req.body as Record<string, unknown> | undefined)?.["id"];
-    if (typeof id !== "string" || id === "") {
-      res.status(400).json({ error: "id is required (the brain this deploy key is for)" });
+    // A private-repo wizard needs the deploy key BEFORE the clone can happen
+    // (paste the pubkey into the forge first) — but POST /daemon/brains is
+    // the only other place that mints a brain id. Omitting id here mints one
+    // fresh, so the wizard can generate the key, then pass that SAME id to
+    // POST /daemon/brains once the pubkey is pasted in.
+    const rawId = (req.body as Record<string, unknown> | undefined)?.["id"];
+    if (rawId !== undefined && typeof rawId !== "string") {
+      res.status(400).json({ error: "id must be a string when given" });
       return;
     }
+    const id = rawId && rawId !== "" ? rawId : generateBundleId();
     const key = ensureBrainKey(id, env);
-    res.json({ public_key: key.publicKey });
+    res.json({ id, public_key: key.publicKey });
   });
 
   return app;

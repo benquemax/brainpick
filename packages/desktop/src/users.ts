@@ -4,7 +4,13 @@
  * sees the same stable id — cross-device account linking later needs that id to
  * never change under a user's feet. Password hashing reuses the engine's own
  * scrypt record shape (scryptHash from "brainpick") rather than inventing a
- * second hashing scheme in the same codebase. */
+ * second hashing scheme in the same codebase.
+ *
+ * Also owns provisioning: minting/revoking per-brain tokens via the engine's
+ * own auth machinery, plus the LAN auto-provisioning cache (D.1, checkpoint
+ * log) — a status snippet needs the PLAINTEXT secret, which the engine's own
+ * `.brainpick-auth.json` never retains by design (only a hash), so the
+ * daemon caches it in its own config dir instead. */
 import { createToken, listTokens, revokeToken, scryptHash, type TokenRecord } from "brainpick";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -12,10 +18,11 @@ import { dirname, join } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
 import { configDir, type Env } from "./paths";
-import { brainBundleRoot, type BrainRecord } from "./registry";
+import { brainBundleRoot, isLocalHost, type BrainRecord } from "./registry";
 
 export const USERS_FILE = "users.toml";
 export const DEFAULT_USER_NAME = "local";
+export const LAN_TOKENS_FILE = "lan-tokens.toml";
 
 export interface PasswordHash {
   algo: string;
@@ -147,4 +154,95 @@ export function revokeProvisionedToken(brain: BrainRecord, tokenId: string, env:
 
 export function listProvisionedTokens(brain: BrainRecord, env: Env = process.env): TokenRecord[] {
   return listTokens(brainBundleRoot(brain, env));
+}
+
+/** The user auto-provisioning targets: whoever has `"*"` access, or the
+ * first user if nobody does (the bootstrap default always has one). */
+export function defaultProvisioningUser(users: Users): UserRecord | null {
+  return users.users.find((u) => u.brains === "*") ?? users.users[0] ?? null;
+}
+
+// -- LAN auto-provisioning cache: the plaintext secret a status snippet -------------
+// embeds, keyed by (brain, user). The engine's own auth store never keeps the
+// plaintext (by design, spec/80) — so this is the daemon's own small secret,
+// same treatment as its control-API token (daemonToken.ts): a plain file in the
+// config dir, never committed, never part of a bundle.
+
+export interface LanToken {
+  brain_id: string;
+  user_id: string;
+  token_id: string;
+  secret: string;
+}
+
+function lanTokensPath(env: Env): string {
+  return join(configDir(env), LAN_TOKENS_FILE);
+}
+
+function isLanToken(value: unknown): value is LanToken {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v["brain_id"] === "string" &&
+    typeof v["user_id"] === "string" &&
+    typeof v["token_id"] === "string" &&
+    typeof v["secret"] === "string" &&
+    v["secret"] !== ""
+  );
+}
+
+function loadLanTokens(env: Env): LanToken[] {
+  let text: string;
+  try {
+    text = readFileSync(lanTokensPath(env), "utf8");
+  } catch {
+    return [];
+  }
+  let data: unknown;
+  try {
+    data = parseToml(text);
+  } catch {
+    return [];
+  }
+  const raw = (data as Record<string, unknown>)["token"];
+  return Array.isArray(raw) ? raw.filter(isLanToken) : [];
+}
+
+function saveLanTokens(tokens: LanToken[], env: Env): void {
+  const path = lanTokensPath(env);
+  mkdirSync(dirname(path), { recursive: true });
+  const text = stringifyToml({ token: tokens as unknown as Record<string, unknown>[] });
+  const tmp = join(dirname(path), `.lan-tokens-${randomBytes(4).toString("hex")}.tmp`);
+  writeFileSync(tmp, text, { encoding: "utf8", mode: 0o600 });
+  renameSync(tmp, path);
+}
+
+/** Get-or-mint the (brain, user) LAN token, self-healing: if the cached
+ * token was revoked (or the auth store reset) on the engine side, a fresh
+ * one is minted and the cache updated — never silently hands back a dead
+ * secret. Idempotent otherwise: repeated calls reuse the same secret, so a
+ * status snippet stays stable across requests. */
+export function ensureLanToken(brain: BrainRecord, user: UserRecord, env: Env = process.env): LanToken {
+  const cache = loadLanTokens(env);
+  const cached = cache.find((t) => t.brain_id === brain.id && t.user_id === user.id);
+  if (cached !== undefined) {
+    const stillValid = listProvisionedTokens(brain, env).some((t) => t.id === cached.token_id);
+    if (stillValid) return cached;
+  }
+
+  const [tokenId, secret] = provisionToken(brain, user, env);
+  const fresh: LanToken = { brain_id: brain.id, user_id: user.id, token_id: tokenId, secret };
+  saveLanTokens([...cache.filter((t) => t !== cached), fresh], env);
+  return fresh;
+}
+
+/** The single entry point callers (api.ts, daemon.ts) use: ensures a
+ * LAN-bound brain has a live token for the default user, minting one if
+ * needed; a local-only brain returns null (nothing needs a token). Safe to
+ * call repeatedly — provisioning is idempotent. */
+export function ensureLanTokenForBrain(brain: BrainRecord, env: Env = process.env): string | null {
+  if (isLocalHost(brain.host)) return null;
+  const user = defaultProvisioningUser(loadUsers(env));
+  if (user === null) return null; // no users at all — shouldn't happen past bootstrap
+  return ensureLanToken(brain, user, env).secret;
 }

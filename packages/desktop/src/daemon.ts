@@ -12,7 +12,7 @@ import { cloneIfMissing, pullOnce } from "./gitsync";
 import type { Env } from "./paths";
 import { createRegistryStore, type RegistryStore } from "./registry";
 import { Supervisor } from "./supervisor";
-import { loadUsers } from "./users";
+import { ensureLanTokenForBrain, loadUsers } from "./users";
 
 export const DEFAULT_DAEMON_PORT = 4748; // one above the brain-registry base (4750), below the engine default (4747)... see docs/daemon.md
 export const DEFAULT_SYNC_INTERVAL_MS = 60_000;
@@ -50,6 +50,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       /* surfaced by the next sync tick instead of blocking startup */
     }
     supervisor.start(brain);
+    ensureLanTokenForBrain(brain, env); // a hand-edited brains.toml may have flipped a brain to LAN
   }
 
   const syncIntervalMs = options.syncIntervalMs ?? DEFAULT_SYNC_INTERVAL_MS;

@@ -1,8 +1,8 @@
 ---
 type: Concept
 title: The daemon
-description: brainpickd — the service that owns every brain's git sync, supervision, deploy keys, and users behind one small control API; every face (desktop app, browser, CLI) is a thin client of it.
-timestamp: 2026-07-10T00:00:00Z
+description: brainpickd — the service that owns every brain's git sync, supervision, deploy keys, LAN reachability and users behind one small control API; every face (desktop app, browser, CLI) is a thin client of it.
+timestamp: 2026-07-10T06:00:00Z
 ---
 
 # The daemon
@@ -23,8 +23,10 @@ the pip and npm engines' own subcommands, and the daemon is neither.
 - **The registry** (`~/.config/brainpick/brains.toml`) — one `[[brain]]`
   table per brain: `id`, `repo` (a git URL or a local path), `bundle_path`
   (the wiki's subdirectory within the repo, if not the repo root), `port`,
-  `enabled`. Hand-editable, canonically written, forgiving to load (a
-  malformed entry is dropped, never fatal).
+  `enabled`, `host` (default `127.0.0.1` — loopback-only; `0.0.0.0` opts a
+  brain into the LAN, mirroring the engine's own `[serve] host`, spec/80).
+  Hand-editable, canonically written, forgiving to load (a malformed entry
+  is dropped, never fatal).
 - **The Supervisor** — one `brainpick serve` child process per enabled
   brain (process isolation; the engine itself is unmodified). A crashed
   process restarts on a bounded exponential backoff; a brain that keeps
@@ -52,6 +54,14 @@ the pip and npm engines' own subcommands, and the daemon is neither.
   engine's OWN [token machinery](authentication.md) — the daemon mints and
   revokes a bearer token on a brain's `.brainpick-auth.json`, tagged with
   the user's name; it never re-implements auth.
+- **LAN reachability** — spec/80 requires a token once a brain binds beyond
+  loopback, so a `host = "0.0.0.0"` brain gets one auto-provisioned for the
+  default (`"*"`-access) user the moment it is added or resumed. The engine
+  itself never retains the plaintext (only a hash), so the daemon caches the
+  secret in its own config dir (`lan-tokens.toml`, never committed) — the
+  ONE piece of state the control API needs to keep handing back a working
+  `claude mcp add` snippet. Self-healing: if the cached token is revoked or
+  the cache is lost, the next request mints a fresh one.
 
 ## The control API
 
@@ -59,12 +69,12 @@ Small on purpose — it gets extended deliberately, not organically:
 
 | Endpoint | Does |
 |---|---|
-| `GET /daemon/health` | liveness |
+| `GET /daemon/health` | liveness + `version` (the app's compatibility check) |
 | `GET /daemon/brains` | the registry, plus each brain's live process status |
 | `POST /daemon/brains` | add a brain: clones it if remote, compiles it as the structural check, runs `henxels check` if a contract governs it — **teach, don't reject**: a brain is created once T1 compiles, and any henxels fix-list rides along in the response for the caller to act on |
 | `DELETE /daemon/brains/{id}` | stop supervising and forget the brain (its clone is left on disk) |
-| `GET /daemon/brains/{id}/status` | port, process status, MCP URL, a ready `claude mcp add` snippet, and (when the brain answers) its own `/api/status` |
-| `POST /daemon/keys` | mint (or return the existing) deploy key for a brain id |
+| `GET /daemon/brains/{id}/status` | port, process status, `mcp_url` (built from `advertise_host` — best-effort primary non-loopback IPv4, override via config — ONLY for a LAN-bound brain; never an address it isn't actually bound to) alongside `mcp_url_local` (always loopback), a ready `claude mcp add` snippet (carrying the provisioned bearer token for a LAN-bound brain), and — when the brain answers — its own `/api/status` |
+| `POST /daemon/keys` | mint (or return the existing) deploy key for a brain id; omit `id` and it mints a FRESH brain id too, returned alongside the key — lets a private-repo wizard generate the deploy key (to paste into the forge) before the brain is registered |
 
 Every route needs `Authorization: Bearer <daemon token>` — a single secret
 distinct from any brain's own tokens, generated on first run and shown by

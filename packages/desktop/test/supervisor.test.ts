@@ -3,7 +3,7 @@
  * tiny real Node script instead of the engine (heavy, irrelevant here) —
  * `spawn`/`child_process` behavior is exercised for real, just against a
  * cheap stand-in. */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 function brain(id: string, extra: Partial<{ port: number }> = {}) {
-  return { id, repo: "/nowhere", bundle_path: "", port: extra.port ?? 1, enabled: true };
+  return { id, repo: "/nowhere", bundle_path: "", port: extra.port ?? 1, enabled: true, host: "127.0.0.1" };
 }
 
 /** A script that just stays alive until killed. */
@@ -40,6 +40,21 @@ function exitingScript(code: number, delayMs = 5): string {
   const script = join(dir, "run.js");
   writeFileSync(script, `setTimeout(() => process.exit(${code}), ${delayMs});\n`, "utf8");
   return script;
+}
+
+/** A script that dumps its own argv to a JSON file (skipping node + itself,
+ * so it lines up with what `serve` itself would see) and stays alive. */
+function argvRecordingScript(): { script: string; argvFile: string } {
+  const dir = scriptDir();
+  const script = join(dir, "run.js");
+  const argvFile = join(dir, "argv.json");
+  writeFileSync(
+    script,
+    `require("node:fs").writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2)));\n` +
+      "setInterval(() => {}, 1000);\n",
+    "utf8",
+  );
+  return { script, argvFile };
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
@@ -124,4 +139,16 @@ test("stopAll stops every managed brain", async () => {
   await waitFor(() => supervisor.status("a") === "running" && supervisor.status("b") === "running");
   supervisor.stopAll();
   await waitFor(() => supervisor.status("a") === "stopped" && supervisor.status("b") === "stopped");
+});
+
+test("the brain's host is passed through to serve as --host", async () => {
+  const { script, argvFile } = argvRecordingScript();
+  const supervisor = new Supervisor({ command: () => ({ node: process.execPath, cliPath: script }) });
+  supervisor.start({ id: "a", repo: "/nowhere", bundle_path: "", port: 1, enabled: true, host: "0.0.0.0" });
+  await waitFor(() => supervisor.status("a") === "running");
+  await waitFor(() => existsSync(argvFile));
+  const argv = JSON.parse(readFileSync(argvFile, "utf8")) as string[];
+  expect(argv).toContain("--host");
+  expect(argv[argv.indexOf("--host") + 1]).toBe("0.0.0.0");
+  supervisor.stop("a");
 });

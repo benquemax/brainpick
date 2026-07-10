@@ -72,7 +72,7 @@ export class Supervisor {
     const { node, cliPath } = this.commandFor(brain, this.env);
     const root = brainBundleRoot(brain, this.env);
     // --watch is already `serve`'s default (its flag is --no-watch to disable it)
-    const args = [cliPath, "serve", "--root", root, "--port", String(brain.port)];
+    const args = [cliPath, "serve", "--root", root, "--port", String(brain.port), "--host", brain.host];
     const child = spawn(node, args, { stdio: ["ignore", "pipe", "pipe"] });
     managed.child = child;
     managed.stopRequested = false;

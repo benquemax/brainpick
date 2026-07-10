@@ -35,7 +35,7 @@ function makeBundle(): string {
   return dir;
 }
 
-async function call(base: string, path: string, token: string) {
+async function call(base: string, path: string, token: string): Promise<{ status: number; body: any }> {
   const res = await fetch(`${base}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   return { status: res.status, body: await res.json() };
 }
@@ -46,7 +46,8 @@ test("startDaemon listens, mints a token, and answers /daemon/health", async () 
   stops.push(daemon.stop);
   expect(daemon.token.startsWith("bpd_")).toBe(true);
   const result = await call(daemon.base, "/daemon/health", daemon.token);
-  expect(result.body).toEqual({ ok: true });
+  expect(result.body.ok).toBe(true);
+  expect(typeof result.body.version).toBe("string");
 });
 
 test("startDaemon bootstraps users.toml on first run", async () => {
@@ -63,7 +64,7 @@ test("startDaemon resumes supervising every enabled brain already in the registr
   const bundle = makeBundle();
   const registryStore = createRegistryStore(env);
   registryStore.set(
-    addBrain(registryStore.get(), { id: "resumed", repo: bundle, bundle_path: "", port: 58101, enabled: true }),
+    addBrain(registryStore.get(), { id: "resumed", repo: bundle, bundle_path: "", port: 58101, enabled: true, host: "127.0.0.1" }),
   );
 
   const daemon = await startDaemon({ env, port: 0 });
@@ -76,7 +77,7 @@ test("startDaemon never supervises a disabled brain", async () => {
   const bundle = makeBundle();
   const registryStore = createRegistryStore(env);
   registryStore.set(
-    addBrain(registryStore.get(), { id: "off", repo: bundle, bundle_path: "", port: 58102, enabled: false }),
+    addBrain(registryStore.get(), { id: "off", repo: bundle, bundle_path: "", port: 58102, enabled: false, host: "127.0.0.1" }),
   );
 
   const daemon = await startDaemon({ env, port: 0 });
@@ -89,7 +90,7 @@ test("stop() tears down the server and every supervised brain", async () => {
   const bundle = makeBundle();
   const registryStore = createRegistryStore(env);
   registryStore.set(
-    addBrain(registryStore.get(), { id: "a", repo: bundle, bundle_path: "", port: 58103, enabled: true }),
+    addBrain(registryStore.get(), { id: "a", repo: bundle, bundle_path: "", port: 58103, enabled: true, host: "127.0.0.1" }),
   );
   const daemon = await startDaemon({ env, port: 0 });
   await daemon.stop();

@@ -87,13 +87,14 @@ test("a wrong token also 401s", async () => {
   expect(result.status).toBe(401);
 });
 
-test("the real token gets in", async () => {
+test("the real token gets in, and health reports the version (the app's compatibility check)", async () => {
   const env = isolatedEnv();
   const token = ensureDaemonToken(env);
   const { base } = await startApi(env);
   const result = await call(base, "/daemon/health", token);
   expect(result.status).toBe(200);
-  expect(result.body).toEqual({ ok: true });
+  expect(result.body.ok).toBe(true);
+  expect(result.body.version).toMatch(/^\d+\.\d+\.\d+/);
 });
 
 // -- brains: list, add, remove -------------------------------------------------------
@@ -213,8 +214,48 @@ test("GET /daemon/brains/:id/status reports process_status and the MCP snippet e
   expect(status.body.process_status).toBe("stopped");
   expect(status.body.port).toBe(59999);
   expect(status.body.mcp_url).toBe("http://127.0.0.1:59999/mcp");
+  expect(status.body.mcp_url_local).toBe("http://127.0.0.1:59999/mcp");
   expect(status.body.claude_mcp_add).toContain("claude mcp add --transport http");
+  expect(status.body.claude_mcp_add).not.toContain("Authorization"); // local-only — no token needed
   expect(status.body.engine_status).toBeNull(); // nothing is listening on that port
+});
+
+test("a LAN-bound brain's status advertises the configured host and carries a bearer token", async () => {
+  const env = { ...isolatedEnv(), BRAINPICK_DAEMON_ADVERTISE_HOST: "203.0.113.5" };
+  const token = ensureDaemonToken(env);
+  const bundle = makeBundle();
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+  const created = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: bundle, port: 59998, host: "0.0.0.0", enabled: false }),
+  });
+  const id = created.body.brain.id;
+
+  const status = await call(base, `/daemon/brains/${id}/status`, token);
+  expect(status.body.mcp_url).toBe("http://203.0.113.5:59998/mcp");
+  expect(status.body.mcp_url_local).toBe("http://127.0.0.1:59998/mcp");
+  expect(status.body.claude_mcp_add).toMatch(
+    new RegExp(`^claude mcp add --transport http ${id} http://203\\.0\\.113\\.5:59998/mcp` +
+      ' --header "Authorization: Bearer bp_[0-9a-f]+"$'),
+  );
+});
+
+test("a LAN-bound brain's token is stable across repeated status calls", async () => {
+  const env = { ...isolatedEnv(), BRAINPICK_DAEMON_ADVERTISE_HOST: "203.0.113.5" };
+  const token = ensureDaemonToken(env);
+  const bundle = makeBundle();
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+  const created = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: bundle, port: 59997, host: "0.0.0.0", enabled: false }),
+  });
+  const id = created.body.brain.id;
+
+  const first = await call(base, `/daemon/brains/${id}/status`, token);
+  const second = await call(base, `/daemon/brains/${id}/status`, token);
+  expect(second.body.claude_mcp_add).toBe(first.body.claude_mcp_add);
 });
 
 test("a brain the Supervisor actually runs answers its own /api/status through the daemon", async () => {
@@ -242,9 +283,38 @@ test("a brain the Supervisor actually runs answers its own /api/status through t
   expect(status!.body.engine_status.docs).toBe(2);
 }, 15_000);
 
+test("a LAN-bound brain the Supervisor actually runs still answers through the daemon — the auth-provisioned token reaches the real engine", async () => {
+  // once a real token exists, the ENGINE itself starts requiring auth
+  // (spec/80) — this proves the daemon's own status probe forwards the
+  // provisioned token, not just that it constructs the right URL string.
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const bundle = makeBundle();
+  const supervisor = new Supervisor(); // real engine command (resolveEngineCommand default)
+  const { base } = await startApi(env, supervisor);
+  const created = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: bundle, host: "0.0.0.0", enabled: true }),
+  });
+  const id = created.body.brain.id;
+
+  const start = Date.now();
+  let status: { status: number; body: any } | undefined;
+  while (Date.now() - start < 10_000) {
+    status = await call(base, `/daemon/brains/${id}/status`, token);
+    if (status.body.engine_status !== null) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  expect(status!.body.process_status).toBe("running");
+  expect(status!.body.claude_mcp_add).toContain("Authorization: Bearer bp_");
+  expect(status!.body.engine_status).not.toBeNull(); // would be null forever without the auth-forwarding fix
+  expect(status!.body.engine_status.docs).toBe(2);
+}, 15_000);
+
 // -- keys --------------------------------------------------------------------------
 
-test("POST /daemon/keys requires an id", async () => {
+test("POST /daemon/keys with no id mints a fresh brain id, for the private-repo wizard flow", async () => {
   const env = isolatedEnv();
   const token = ensureDaemonToken(env);
   const { base } = await startApi(env);
@@ -253,7 +323,58 @@ test("POST /daemon/keys requires an id", async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
+  expect(result.status).toBe(200);
+  expect(result.body.id).toMatch(/^[a-z0-9]{21}$/);
+  expect(result.body.public_key).toMatch(/^ssh-ed25519 /);
+});
+
+test("POST /daemon/keys with no id mints a DIFFERENT id each call", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const { base } = await startApi(env);
+  const first = await call(base, "/daemon/keys", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const second = await call(base, "/daemon/keys", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  expect(second.body.id).not.toBe(first.body.id);
+});
+
+test("POST /daemon/keys rejects a non-string id", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const { base } = await startApi(env);
+  const result = await call(base, "/daemon/keys", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: 123 }),
+  });
   expect(result.status).toBe(400);
+});
+
+test("the minted id from POST /daemon/keys can register the brain via POST /daemon/brains", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const bundle = makeBundle();
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+
+  const key = await call(base, "/daemon/keys", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  const created = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: key.body.id, repo: bundle, enabled: false }),
+  });
+  expect(created.status).toBe(201);
+  expect(created.body.brain.id).toBe(key.body.id);
 });
 
 test("POST /daemon/keys mints an ssh-ed25519 public key and is idempotent", async () => {

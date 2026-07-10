@@ -2,6 +2,7 @@
 
 ## 2026-07-10
 
+- Added: the daemon's LAN story — a per-brain `host` (default loopback, `0.0.0.0` opts in), auto-provisioned bearer tokens for LAN-bound brains, an `advertise_host`-built `mcp_url` alongside an always-loopback `mcp_url_local`, and a `POST /daemon/keys` that can mint a brain id up front for the private-repo wizard flow.
 - Added: `brainpickd` — the daemon (`packages/desktop`) that owns git sync, process supervision, ed25519 deploy keys and users behind a small token-authed control API; the desktop app and any other face become thin clients of it.
 - Added: the Node engine embeds locally too — `@huggingface/transformers` on onnxruntime-node (optionalDependency, `kind = "local"`, default `nomic-ai/nomic-embed-text-v1.5`) cuts the Ollama dependency for a Python-free desktop daemon; Ollama remains a supported rung when reachable.
 - Added: `[bundle] id` — a stable brain identity minted by `brainpick init` and shipped via `GET /api/status`, for multi-brain serving and future MCP routing.

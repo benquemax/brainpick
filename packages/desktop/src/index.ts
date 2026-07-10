@@ -5,13 +5,16 @@ export { daemonTokenPath, ensureDaemonToken, loadDaemonToken, verifyDaemonToken 
 export { resolveEngineCommand, type EngineCommand } from "./engine";
 export { cloneIfMissing, gitSshEnv, pullOnce, type CloneResult, type PullResult } from "./gitsync";
 export { ensureBrainKey, keyDir, type BrainKey } from "./keys";
+export { primaryNonLoopbackIPv4, resolveAdvertiseHost } from "./network";
 export { configDir, dataDir, type Env } from "./paths";
 export {
   addBrain,
   brainBundleRoot,
   clonedRepoDir,
   createRegistryStore,
+  DEFAULT_HOST,
   findBrain,
+  isLocalHost,
   isLocalRepo,
   loadRegistry,
   registryPath,
@@ -33,6 +36,9 @@ export {
 } from "./supervisor";
 export {
   addUser,
+  defaultProvisioningUser,
+  ensureLanToken,
+  ensureLanTokenForBrain,
   findUser,
   hasBrainAccess,
   listProvisionedTokens,
@@ -44,6 +50,7 @@ export {
   setUserPassword,
   usersPath,
   verifyUserPassword,
+  type LanToken,
   type PasswordHash,
   type UserRecord,
   type Users,

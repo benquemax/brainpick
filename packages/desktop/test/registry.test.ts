@@ -11,6 +11,7 @@ import {
   addBrain,
   brainBundleRoot,
   clonedRepoDir,
+  isLocalHost,
   isLocalRepo,
   loadRegistry,
   registryPath,
@@ -45,8 +46,8 @@ test("save then load round-trips", () => {
   const configDir = tempConfigDir();
   const registry: Registry = {
     brains: [
-      { id: "kotiaurinko", repo: "git@github.com:x/y.git", bundle_path: "docs", port: 4750, enabled: true },
-      { id: "local-one", repo: "/home/x/wiki", bundle_path: "", port: 4751, enabled: false },
+      { id: "kotiaurinko", repo: "git@github.com:x/y.git", bundle_path: "docs", port: 4750, enabled: true, host: "127.0.0.1" },
+      { id: "local-one", repo: "/home/x/wiki", bundle_path: "", port: 4751, enabled: false, host: "127.0.0.1" },
     ],
   };
   saveRegistry(registry, { BRAINPICK_DAEMON_CONFIG_DIR: configDir });
@@ -56,7 +57,7 @@ test("save then load round-trips", () => {
 test("saveRegistry writes canonical, hand-editable TOML", () => {
   const configDir = tempConfigDir();
   saveRegistry(
-    { brains: [{ id: "a", repo: "r", bundle_path: "", port: 1, enabled: true }] },
+    { brains: [{ id: "a", repo: "r", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" }] },
     { BRAINPICK_DAEMON_CONFIG_DIR: configDir },
   );
   const text = readFileSync(join(configDir, "brains.toml"), "utf8");
@@ -69,14 +70,14 @@ test("loadRegistry skips a malformed entry and keeps the rest", () => {
   saveRegistry(
     {
       brains: [
-        { id: "good", repo: "r", bundle_path: "", port: 1, enabled: true },
-        { id: "", repo: "r", bundle_path: "", port: 2, enabled: true }, // empty id: malformed
+        { id: "good", repo: "r", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" },
+        { id: "", repo: "r", bundle_path: "", port: 2, enabled: true, host: "127.0.0.1" }, // empty id: malformed
       ],
     },
     { BRAINPICK_DAEMON_CONFIG_DIR: configDir },
   );
   expect(loadRegistry({ BRAINPICK_DAEMON_CONFIG_DIR: configDir }).brains).toEqual([
-    { id: "good", repo: "r", bundle_path: "", port: 1, enabled: true },
+    { id: "good", repo: "r", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" },
   ]);
 });
 
@@ -109,27 +110,48 @@ test("validateBrainInput rejects a missing repo", () => {
 });
 
 test("validateBrainInput rejects a duplicate id", () => {
-  const existing: Registry = { brains: [{ id: "dup", repo: "r", bundle_path: "", port: 1, enabled: true }] };
+  const existing: Registry = { brains: [{ id: "dup", repo: "r", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" }] };
   const result = validateBrainInput({ id: "dup", repo: "r2" }, existing);
   expect(result.ok).toBe(false);
 });
 
 test("validateBrainInput rejects a duplicate port", () => {
-  const existing: Registry = { brains: [{ id: "a", repo: "r", bundle_path: "", port: 4750, enabled: true }] };
+  const existing: Registry = { brains: [{ id: "a", repo: "r", bundle_path: "", port: 4750, enabled: true, host: "127.0.0.1" }] };
   const result = validateBrainInput({ repo: "r2", port: 4750 }, existing);
   expect(result.ok).toBe(false);
 });
 
 test("validateBrainInput auto-assigns the next free port when none is given", () => {
-  const existing: Registry = { brains: [{ id: "a", repo: "r", bundle_path: "", port: 4750, enabled: true }] };
+  const existing: Registry = { brains: [{ id: "a", repo: "r", bundle_path: "", port: 4750, enabled: true, host: "127.0.0.1" }] };
   const result = validateBrainInput({ repo: "r2" }, existing);
   expect(result.ok).toBe(true);
   if (result.ok) expect(result.brain.port).toBe(4751);
 });
 
+test("validateBrainInput defaults host to 127.0.0.1", () => {
+  const result = validateBrainInput({ repo: "r" }, { brains: [] });
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.brain.host).toBe("127.0.0.1");
+});
+
+test("validateBrainInput accepts an explicit LAN host", () => {
+  const result = validateBrainInput({ repo: "r", host: "0.0.0.0" }, { brains: [] });
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.brain.host).toBe("0.0.0.0");
+});
+
+test("isLocalHost recognizes loopback forms; 0.0.0.0 and a LAN IP are not local", () => {
+  expect(isLocalHost("127.0.0.1")).toBe(true);
+  expect(isLocalHost("localhost")).toBe(true);
+  expect(isLocalHost("::1")).toBe(true);
+  expect(isLocalHost("")).toBe(true);
+  expect(isLocalHost("0.0.0.0")).toBe(false);
+  expect(isLocalHost("192.168.1.5")).toBe(false);
+});
+
 test("addBrain appends, removeBrain drops by id", () => {
   const registry: Registry = { brains: [] };
-  const withOne = addBrain(registry, { id: "a", repo: "r", bundle_path: "", port: 1, enabled: true });
+  const withOne = addBrain(registry, { id: "a", repo: "r", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" });
   expect(withOne.brains).toHaveLength(1);
   const withNone = removeBrain(withOne, "a");
   expect(withNone.brains).toHaveLength(0);
@@ -138,24 +160,24 @@ test("addBrain appends, removeBrain drops by id", () => {
 });
 
 test("removeBrain on an unknown id is a no-op", () => {
-  const registry: Registry = { brains: [{ id: "a", repo: "r", bundle_path: "", port: 1, enabled: true }] };
+  const registry: Registry = { brains: [{ id: "a", repo: "r", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" }] };
   expect(removeBrain(registry, "nope")).toEqual(registry);
 });
 
 // -- bundle root resolution ------------------------------------------------------------
 
 test("brainBundleRoot for a local repo serves the path directly", () => {
-  const brain = { id: "a", repo: "/home/x/wiki", bundle_path: "", port: 1, enabled: true };
+  const brain = { id: "a", repo: "/home/x/wiki", bundle_path: "", port: 1, enabled: true, host: "127.0.0.1" };
   expect(brainBundleRoot(brain, { HOME: "/home/x" })).toBe("/home/x/wiki");
 });
 
 test("brainBundleRoot for a local repo with a bundle_path subdirectory", () => {
-  const brain = { id: "a", repo: "/home/x/monorepo", bundle_path: "docs", port: 1, enabled: true };
+  const brain = { id: "a", repo: "/home/x/monorepo", bundle_path: "docs", port: 1, enabled: true, host: "127.0.0.1" };
   expect(brainBundleRoot(brain, { HOME: "/home/x" })).toBe(join("/home/x/monorepo", "docs"));
 });
 
 test("brainBundleRoot for a remote repo resolves under its clone", () => {
-  const brain = { id: "abc", repo: "git@github.com:x/y.git", bundle_path: "wiki", port: 1, enabled: true };
+  const brain = { id: "abc", repo: "git@github.com:x/y.git", bundle_path: "wiki", port: 1, enabled: true, host: "127.0.0.1" };
   const env = { HOME: "/home/x", BRAINPICK_DAEMON_DATA_DIR: "/data" };
   expect(brainBundleRoot(brain, env)).toBe(join(clonedRepoDir(brain, env), "wiki"));
   expect(clonedRepoDir(brain, env)).toBe(join("/data", "brains", "abc"));

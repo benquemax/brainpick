@@ -14,6 +14,17 @@ import { dataDir, configDir, type Env } from "./paths";
 
 export const REGISTRY_FILE = "brains.toml";
 export const DEFAULT_PORT_BASE = 4750; // one above the engine's own default (spec/80 serve.port)
+export const DEFAULT_HOST = "127.0.0.1";
+
+// Mirrors the engine's own LOCAL_HOSTS set (packages/node/src/serve/app.ts) —
+// "0.0.0.0" is deliberately absent: binding it opts a brain into the LAN.
+const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", ""]);
+
+/** Whether `host` only accepts loopback connections — the line that decides
+ * if a brain needs a token (spec/80: non-localhost binds require one). */
+export function isLocalHost(host: string): boolean {
+  return LOCAL_HOSTS.has(host);
+}
 
 export interface BrainRecord {
   id: string;
@@ -21,6 +32,7 @@ export interface BrainRecord {
   bundle_path: string;
   port: number;
   enabled: boolean;
+  host: string;
 }
 
 export interface Registry {
@@ -43,7 +55,9 @@ function isBrainRecord(value: unknown): value is BrainRecord {
     typeof v["port"] === "number" &&
     Number.isInteger(v["port"]) &&
     v["port"] > 0 &&
-    typeof v["enabled"] === "boolean"
+    typeof v["enabled"] === "boolean" &&
+    typeof v["host"] === "string" &&
+    v["host"] !== ""
   );
 }
 
@@ -94,6 +108,7 @@ export interface BrainInput {
   bundle_path?: string;
   port?: number;
   enabled?: boolean;
+  host?: string;
 }
 
 export type ValidationResult = { ok: true; brain: BrainRecord } | { ok: false; error: string };
@@ -125,6 +140,8 @@ export function validateBrainInput(input: BrainInput, registry: Registry): Valid
     return { ok: false, error: `port ${port} is already used by another brain` };
   }
 
+  const host = input.host?.trim() || DEFAULT_HOST;
+
   return {
     ok: true,
     brain: {
@@ -133,6 +150,7 @@ export function validateBrainInput(input: BrainInput, registry: Registry): Valid
       bundle_path: input.bundle_path ?? "",
       port,
       enabled: input.enabled ?? true,
+      host,
     },
   };
 }
