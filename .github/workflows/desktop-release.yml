@@ -141,6 +141,12 @@ jobs:
           tar czf brainpickd-${{ matrix.target }}.tar.gz \
             -C packages/desktop/app/src-tauri/resources node daemon
       - name: upload the standalone daemon artifact to the same release
+        # THIRD FLIGHT: Windows built the MSI fine and died only HERE —
+        # windows-latest runs steps in PowerShell by default, which can't
+        # parse the bash-style `\` line continuation ("Unexpected token
+        # 'clobber'"). bash exists on all three runners; harmless where it
+        # was already the default (ubuntu/macos).
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

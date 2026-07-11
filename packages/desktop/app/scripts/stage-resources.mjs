@@ -34,12 +34,13 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   currentPlatformKey,
   isForeignOnnxArchDir,
   isForeignOnnxPlatformDir,
+  isNapiVersionDir,
   nodeArchiveFilename,
   nodeDownloadUrl,
   nodeExecutablePath,
@@ -150,13 +151,65 @@ function stageDaemon(outDir) {
   console.log(`  ✓ ${cli}\n  ✓ ${engine}`);
 }
 
-/** onnxruntime-node bundles every OS's binaries (including 500MB+ of CUDA/
- * TensorRT datacenter GPU libraries) in one package regardless of what
- * platform actually installed it — there can be more than one copy nested
- * under different dependents (e.g. @lancedb's own pinned version), so this
- * walks the whole tree rather than assuming a single location. */
-function pruneOnnxBloat(nodeModulesRoot, target) {
-  if (!existsSync(nodeModulesRoot)) return;
+/** Finds every "onnxruntime-node" package dir at any depth under `root`
+ * (there can be more than one nested copy — e.g. @lancedb's own pinned
+ * version AND packages/node's own @huggingface/transformers pin, at
+ * DIFFERENT versions with DIFFERENT N-API bin layouts), invoking
+ * `onPackage(pkgDir)` for each. The shared discovery walk both
+ * pruneOnnxBloat and its postcondition check consume. */
+export function walkOnnxRuntimeNodePackages(root, onPackage) {
+  if (!existsSync(root)) return;
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = join(dir, entry.name);
+      if (entry.name === "onnxruntime-node") onPackage(path);
+      else if (entry.name !== ".bin") walk(path);
+    }
+  };
+  walk(root);
+}
+
+/** Visits every foreign-platform dir, foreign-arch dir, and prunable GPU
+ * provider file under a SINGLE onnxruntime-node package's bin/napi-vN/ tree
+ * (isNapiVersionDir — NOT a hardcoded version, THIRD FLIGHT's real Ubuntu
+ * root cause), calling `visit({ kind, path })` for each. pruneOnnxBloat and
+ * assertOnnxPruneComplete share this ONE walk instead of keeping two
+ * hand-written copies that can silently drift apart (the exact shape of
+ * bug this chunk fixes). */
+export function visitOnnxRuntimeNodeBinTree(pkgDir, target, visit) {
+  const binDir = join(pkgDir, "bin");
+  if (!existsSync(binDir)) return;
+  for (const napiEntry of readdirSync(binDir, { withFileTypes: true })) {
+    if (!napiEntry.isDirectory() || !isNapiVersionDir(napiEntry.name)) continue;
+    const napiDir = join(binDir, napiEntry.name);
+    for (const platformEntry of readdirSync(napiDir, { withFileTypes: true })) {
+      if (!platformEntry.isDirectory()) continue;
+      const platformDir = join(napiDir, platformEntry.name);
+      if (isForeignOnnxPlatformDir(platformEntry.name, target)) {
+        visit({ kind: "foreign platform dir", path: platformDir });
+        continue;
+      }
+      for (const archEntry of readdirSync(platformDir, { withFileTypes: true })) {
+        if (!archEntry.isDirectory()) continue;
+        const archDir = join(platformDir, archEntry.name);
+        if (isForeignOnnxArchDir(archEntry.name, target)) {
+          visit({ kind: "foreign arch dir", path: archDir });
+          continue;
+        }
+        for (const file of readdirSync(archDir)) {
+          if (shouldPruneOnnxProvider(file)) visit({ kind: "GPU provider lib", path: join(archDir, file) });
+        }
+      }
+    }
+  }
+}
+
+/** onnxruntime-node bundles every OS's binaries (including hundreds of MB of
+ * GPU/accelerator provider libraries) in one package regardless of what
+ * platform actually installed it — pruned from EVERY nested copy this repo
+ * ships, at whatever N-API version each one happens to be. */
+export function pruneOnnxBloat(nodeModulesRoot, target) {
   let prunedBytes = 0;
   const dirSize = (dir) => {
     let total = 0;
@@ -170,44 +223,32 @@ function pruneOnnxBloat(nodeModulesRoot, target) {
     prunedBytes += statSync(path).isDirectory() ? dirSize(path) : statSync(path).size;
     rmSync(path, { recursive: true, force: true });
   };
-  const walk = (dir) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const path = join(dir, entry.name);
-      if (entry.name === "onnxruntime-node") {
-        pruneOnnxRuntimeNodePackage(path);
-      } else if (entry.name !== ".bin") {
-        walk(path);
-      }
-    }
-  };
-  const pruneOnnxRuntimeNodePackage = (pkgDir) => {
-    const napiDir = join(pkgDir, "bin", "napi-v3");
-    if (!existsSync(napiDir)) return;
-    for (const platformEntry of readdirSync(napiDir, { withFileTypes: true })) {
-      if (!platformEntry.isDirectory()) continue;
-      const platformDir = join(napiDir, platformEntry.name);
-      if (isForeignOnnxPlatformDir(platformEntry.name, target)) {
-        prune(platformDir);
-        continue;
-      }
-      for (const archEntry of readdirSync(platformDir, { withFileTypes: true })) {
-        if (!archEntry.isDirectory()) continue;
-        const archDir = join(platformDir, archEntry.name);
-        if (isForeignOnnxArchDir(archEntry.name, target)) {
-          prune(archDir);
-          continue;
-        }
-        for (const file of readdirSync(archDir)) {
-          if (shouldPruneOnnxProvider(file)) prune(join(archDir, file));
-        }
-      }
-    }
-  };
-  walk(nodeModulesRoot);
+  walkOnnxRuntimeNodePackages(nodeModulesRoot, (pkgDir) => {
+    visitOnnxRuntimeNodeBinTree(pkgDir, target, ({ path }) => prune(path));
+  });
   if (prunedBytes > 0) {
     console.log(`  ✓ pruned ${(prunedBytes / 1024 / 1024).toFixed(0)} MB of unused onnxruntime-node platforms/providers`);
   }
+}
+
+/** HARD POSTCONDITION (THIRD FLIGHT, Chunk 1.5-E): a silently-incomplete
+ * prune is exactly what shipped linuxdeploy a TensorRT lib it choked on —
+ * the old hardcoded "napi-v3" walk skipped a nested onnxruntime-node copy
+ * entirely without any signal. Re-walks the SAME tree with the SAME visitor
+ * pruneOnnxBloat just used; any survivor is a real regression and fails the
+ * build loudly instead of shipping a bloated or (as happened) unbuildable
+ * artifact silently. */
+export function assertOnnxPruneComplete(nodeModulesRoot, target) {
+  const violations = [];
+  walkOnnxRuntimeNodePackages(nodeModulesRoot, (pkgDir) => {
+    visitOnnxRuntimeNodeBinTree(pkgDir, target, ({ kind, path }) => violations.push(`${kind}: ${path}`));
+  });
+  if (violations.length > 0) {
+    throw new Error(
+      `onnx prune postcondition failed — ${violations.length} artifact(s) survived pruning:\n  ${violations.join("\n  ")}`,
+    );
+  }
+  console.log("  ✓ postcondition: no GPU-provider libs or foreign-platform/arch dirs remain in any onnxruntime-node copy");
 }
 
 function dirSizeMb(dir) {
@@ -251,9 +292,17 @@ async function main() {
   mkdirSync(out, { recursive: true });
   await stageNodeRuntime(target, out);
   stageDaemon(out);
-  pruneOnnxBloat(join(out, "daemon", "node_modules"), target);
+  const nodeModulesRoot = join(out, "daemon", "node_modules");
+  pruneOnnxBloat(nodeModulesRoot, target);
+  assertOnnxPruneComplete(nodeModulesRoot, target);
   printSizeSummary(out);
   console.log(`\n✓ resources staged at ${out}`);
 }
 
-main().catch((error) => fail(error instanceof Error ? (error.stack ?? error.message) : String(error)));
+// Guarded so importing this module for tests (stage-onnx-prune.test.mjs)
+// doesn't trigger a real staging run — mirrors packages/webui/scripts/
+// mock-server.mjs's own isMain pattern.
+const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  main().catch((error) => fail(error instanceof Error ? (error.stack ?? error.message) : String(error)));
+}

@@ -4,6 +4,7 @@ import {
   currentPlatformKey,
   isForeignOnnxArchDir,
   isForeignOnnxPlatformDir,
+  isNapiVersionDir,
   needsShellForNpm,
   nodeArchiveFilename,
   nodeDownloadUrl,
@@ -100,7 +101,7 @@ describe("needsShellForNpm — SECOND FLIGHT's Windows wall (CVE-2024-27980)", (
   });
 });
 
-describe("onnxruntime-node bloat pruning — CUDA/TensorRT are datacenter GPU providers", () => {
+describe("onnxruntime-node bloat pruning — any GPU provider beyond the shared glue", () => {
   test("prunes the CUDA and TensorRT provider libraries (500MB+ we never use)", () => {
     expect(shouldPruneOnnxProvider("libonnxruntime_providers_cuda.so")).toBe(true);
     expect(shouldPruneOnnxProvider("libonnxruntime_providers_tensorrt.so")).toBe(true);
@@ -111,9 +112,45 @@ describe("onnxruntime-node bloat pruning — CUDA/TensorRT are datacenter GPU pr
     expect(shouldPruneOnnxProvider("libonnxruntime_providers_shared.so")).toBe(false);
     expect(shouldPruneOnnxProvider("onnxruntime_binding.node")).toBe(false);
   });
+
+  // THIRD FLIGHT: linuxdeploy died on a provider this repo's old cuda|tensorrt
+  // allowlist-style regex never named (any future/other accelerator — ROCm,
+  // DirectML, CoreML, QNN…) — prune is now a denylist of exactly "shared",
+  // across every platform's native-lib extension, not an allowlist of two.
+  test("prunes ANY other GPU/accelerator provider, not just cuda/tensorrt", () => {
+    expect(shouldPruneOnnxProvider("libonnxruntime_providers_rocm.so")).toBe(true);
+    expect(shouldPruneOnnxProvider("onnxruntime_providers_dml.dll")).toBe(true);
+    expect(shouldPruneOnnxProvider("libonnxruntime_providers_coreml.dylib")).toBe(true);
+  });
+
+  test("keeps the shared provider glue on every extension", () => {
+    expect(shouldPruneOnnxProvider("onnxruntime_providers_shared.dll")).toBe(false);
+    expect(shouldPruneOnnxProvider("libonnxruntime_providers_shared.dylib")).toBe(false);
+  });
 });
 
-describe("onnxruntime-node cross-platform dir pruning (bin/napi-v3/<platform>/<arch>)", () => {
+describe("isNapiVersionDir — THIRD FLIGHT's real Ubuntu root cause", () => {
+  // linuxdeploy died on .../onnxruntime-node/bin/napi-v6/linux/x64/
+  // libonnxruntime_providers_tensorrt.so — the prune's OWN napi dir lookup
+  // was hardcoded to "napi-v3" (this repo's top-level copy), so it silently
+  // no-op'd on any nested copy shipping a different N-API version (packages/
+  // node's own @huggingface/transformers pins onnxruntime-node 1.24.3, which
+  // ships napi-v6 — a real, already-nested nested nested copy, not a fixture).
+  test("matches any napi-vN dir, not a hardcoded version", () => {
+    expect(isNapiVersionDir("napi-v3")).toBe(true);
+    expect(isNapiVersionDir("napi-v6")).toBe(true);
+    expect(isNapiVersionDir("napi-v12")).toBe(true);
+  });
+
+  test("rejects anything that isn't a napi-vN dir", () => {
+    expect(isNapiVersionDir("linux")).toBe(false);
+    expect(isNapiVersionDir("napi")).toBe(false);
+    expect(isNapiVersionDir("napi-v")).toBe(false);
+    expect(isNapiVersionDir("napi-v3-extra")).toBe(false);
+  });
+});
+
+describe("onnxruntime-node cross-platform dir pruning (bin/napi-vN/<platform>/<arch>)", () => {
   test("a platform dir foreign to the target is prunable", () => {
     const target = resolveTarget("linux-x64");
     expect(isForeignOnnxPlatformDir("darwin", target)).toBe(true);

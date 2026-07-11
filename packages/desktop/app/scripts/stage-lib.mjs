@@ -75,18 +75,37 @@ export function needsShellForNpm(platform = process.platform) {
 
 /** onnxruntime-node ships ALL platforms' native binaries in one package
  * (unlike @lancedb, which splits per-platform via optionalDependencies) —
- * and among those, the CUDA/TensorRT execution providers are 500MB+ of
- * datacenter GPU libraries this CPU-only embedding use case never loads.
- * Confirmed empirically staging linux-x64: providers_cuda.so alone is
- * ~510MB of a ~690MB onnxruntime-node install. */
+ * and among those, the GPU/accelerator execution providers (CUDA, TensorRT,
+ * ROCm, DirectML, CoreML, …) are hundreds of MB of libraries this CPU-only
+ * embedding use case never loads. Confirmed empirically staging linux-x64:
+ * providers_cuda.so alone is ~510MB of a ~690MB onnxruntime-node install.
+ *
+ * THIRD FLIGHT (run 29143029457): linuxdeploy died walking a provider this
+ * function's old cuda|tensorrt allowlist never named. A denylist of exactly
+ * "shared" (the provider-loading glue every backend needs) is the only
+ * correct policy — any OTHER provider name is a specific accelerator this
+ * daemon never selects. Matches across every platform's native-lib
+ * extension (.so linux, .dll windows, .dylib macOS). */
 export function shouldPruneOnnxProvider(filename) {
-  return /providers_(cuda|tensorrt)\.so$/i.test(filename);
+  const match = /providers_([a-z0-9]+)\.(?:so|dll|dylib)$/i.exec(filename);
+  return match !== null && match[1].toLowerCase() !== "shared";
+}
+
+/** bin/napi-vN/ — the N-API version subdir onnxruntime-node's native
+ * binaries nest under. THIRD FLIGHT's real Ubuntu root cause: the prune
+ * used to hardcode "napi-v3" (this repo's top-level onnxruntime-node copy),
+ * so it silently no-op'd on any NESTED copy shipping a different N-API
+ * version — exactly what happened: packages/node's own
+ * `@huggingface/transformers` pins onnxruntime-node 1.24.3, which ships
+ * napi-v6, and linuxdeploy died on an unpruned TensorRT lib inside it. */
+export function isNapiVersionDir(name) {
+  return /^napi-v\d+$/.test(name);
 }
 
 const ONNX_PLATFORM_DIRS = { "linux-x64": "linux", "darwin-arm64": "darwin", "win-x64": "win32" };
 const ONNX_ARCH_DIRS = { "linux-x64": "x64", "darwin-arm64": "arm64", "win-x64": "x64" };
 
-/** bin/napi-v3/<platform>/<arch> — every OS's binaries ship in the same
+/** bin/napi-vN/<platform>/<arch> — every OS's binaries ship in the same
  * package; only the target's own platform dir is ever loaded. */
 export function isForeignOnnxPlatformDir(dirName, target) {
   return dirName !== ONNX_PLATFORM_DIRS[target.key];
