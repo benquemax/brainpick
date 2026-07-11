@@ -72,6 +72,25 @@ function threeCommitBrain(): string {
 test("commits chronological, oldest-first, with per-commit status", () => {
   const repo = threeCommitBrain();
   const tl = buildTimeline(repo, repo);
+  if (tl === null) {
+    // Flaps rarely, ONLY on CI runners; buildTimeline swallows git errors by
+    // design, so on failure re-run the underlying git and FAIL WITH ITS
+    // OUTPUT — the next flap self-diagnoses (instrument, don't guess).
+    let evidence: string;
+    try {
+      const out = execFileSync(
+        "git",
+        ["-c", "core.quotePath=false", "log", "--diff-filter=AMDR", "--name-status", "-M",
+         "--format=%H%x1f%aI%x1f%an%x1f%s", "--", "."],
+        { cwd: repo, encoding: "utf8", stdio: "pipe" },
+      );
+      evidence = `git log SUCCEEDED on re-run (transient?): ${out.slice(0, 400)}`;
+    } catch (error) {
+      const err = error as { stderr?: string; message: string };
+      evidence = `git log failed: ${(err.stderr ?? err.message).slice(0, 400)}`;
+    }
+    expect.fail(`buildTimeline returned null — ${evidence}`);
+  }
   expect(tl).not.toBeNull();
   const commits = tl!.commits;
   expect(commits.length).toBe(3);
