@@ -62,6 +62,17 @@ export function npmCommand(platform = process.platform) {
   return platform === "win32" ? "npm.cmd" : "npm";
 }
 
+/** SECOND FLIGHT's Windows wall: npmCommand() alone isn't enough — Node's
+ * CVE-2024-27980 hardening refuses to spawnSync a .cmd/.bat file at all
+ * without an explicit shell (EINVAL), regardless of whether the exact
+ * filename is given. The runner's staging paths never contain spaces or
+ * shell metacharacters (repo-relative tmp dirs), so `shell: true` here
+ * carries none of its usual arg-quoting risk — this would need revisiting
+ * if a staging path ever became user-controlled. */
+export function needsShellForNpm(platform = process.platform) {
+  return platform === "win32";
+}
+
 /** onnxruntime-node ships ALL platforms' native binaries in one package
  * (unlike @lancedb, which splits per-platform via optionalDependencies) —
  * and among those, the CUDA/TensorRT execution providers are 500MB+ of

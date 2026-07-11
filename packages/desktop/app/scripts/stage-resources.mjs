@@ -44,6 +44,7 @@ import {
   nodeDownloadUrl,
   nodeExecutablePath,
   nodeShasumsUrl,
+  needsShellForNpm,
   npmCommand,
   resolveTarget,
   shouldPruneOnnxProvider,
@@ -135,7 +136,11 @@ function stageDaemon(outDir) {
   execFileSync(
     npmCommand(),
     ["install", "--omit=dev", "--no-save", "--no-audit", "--no-fund", "--install-links", NODE_PKG],
-    { cwd: daemonOut, stdio: "inherit" },
+    // SECOND FLIGHT: npmCommand() alone still hit `spawnSync npm.cmd EINVAL`
+    // — Node's CVE-2024-27980 hardening refuses to spawn a .cmd/.bat at all
+    // without an explicit shell. Safe here: staging paths never carry spaces
+    // or shell metacharacters (see needsShellForNpm's own comment).
+    { cwd: daemonOut, stdio: "inherit", shell: needsShellForNpm() },
   );
 
   const cli = join(daemonOut, "dist", "cli.js");

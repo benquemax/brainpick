@@ -115,7 +115,11 @@ jobs:
           # BEFORE the AppImage step even started (nobody asked for those two
           # artifacts) — Linux builds AppImage only; macOS/Windows are
           # unaffected (their own single-target bundlers already run alone).
-          args: ${{ matrix.platform == 'ubuntu-latest' && '--bundles appimage' || '' }}
+          # SECOND FLIGHT: Linux still failed AppImage bundling after two
+          # blind cause-fixes (NO_STRIP, APPIMAGE_EXTRACT_AND_RUN) that
+          # didn't cure it — --verbose so linuxdeploy's real stderr reaches
+          # the log instead of guessing a third time.
+          args: ${{ matrix.platform == 'ubuntu-latest' && '--bundles appimage --verbose' || '' }}
           releaseBody: |
             Unsigned builds — this is expected for early testers, not a mistake:
 

@@ -4,6 +4,7 @@ import {
   currentPlatformKey,
   isForeignOnnxArchDir,
   isForeignOnnxPlatformDir,
+  needsShellForNpm,
   nodeArchiveFilename,
   nodeDownloadUrl,
   nodeExecutablePath,
@@ -81,6 +82,21 @@ describe("npmCommand — the Windows spawn gotcha (npm is a .cmd shim there, not
 
   test("defaults to the current host platform when none is given", () => {
     expect(npmCommand()).toBe(process.platform === "win32" ? "npm.cmd" : "npm");
+  });
+});
+
+describe("needsShellForNpm — SECOND FLIGHT's Windows wall (CVE-2024-27980)", () => {
+  test("win32 needs a shell — Node refuses spawnSync of a .cmd/.bat without one (EINVAL)", () => {
+    expect(needsShellForNpm("win32")).toBe(true);
+  });
+
+  test("unix platforms never need a shell for a plain binary", () => {
+    expect(needsShellForNpm("linux")).toBe(false);
+    expect(needsShellForNpm("darwin")).toBe(false);
+  });
+
+  test("defaults to the current host platform when none is given", () => {
+    expect(needsShellForNpm()).toBe(process.platform === "win32");
   });
 });
 
