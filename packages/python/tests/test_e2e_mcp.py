@@ -23,6 +23,20 @@ async def _call(session, name, arguments):
     return json.loads(result.content[0].text)
 
 
+# CI-1 (_plans/2026-07-10-phase1.5-release.md): the prime suspect for
+# python-windows' 6-hour job-kill hang — a stdio subprocess pipe that never
+# unblocks. asyncio.wait_for cancels the whole scenario (including the
+# stdio_client/ClientSession context managers' own awaits) if it doesn't
+# finish well inside pytest-timeout's blunter 180s thread-kill backstop, so a
+# genuine hang fails FAST with a specific, actionable TimeoutError instead of
+# either backstop's coarser signal. Real protocol traffic here (compile a
+# 10-doc fixture + a handful of tool calls) finishes in well under a second
+# locally — 60s is generous headroom for CI resource contention, not a tight
+# budget.
+def _run_scenario(coro):
+    asyncio.run(asyncio.wait_for(coro, timeout=60))
+
+
 async def _scenario(root):
     params = StdioServerParameters(
         command=sys.executable, args=["-m", "brainpick", "mcp", "--root", str(root)],
@@ -77,7 +91,7 @@ async def _scenario(root):
 
 def test_mcp_stdio_roundtrip(kotiaurinko):
     run_compile(kotiaurinko)
-    asyncio.run(_scenario(kotiaurinko))
+    _run_scenario(_scenario(kotiaurinko))
     text = (kotiaurinko / "uusi-kivi.md").read_text(encoding="utf-8")
     assert re.search(r"^timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", text, re.MULTILINE)
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
@@ -111,7 +125,7 @@ def test_mcp_semantic_search_over_mock_vectors(kotiaurinko):
     run_compile(kotiaurinko)
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["tiers"]["t2"] == "fresh"
-    asyncio.run(_semantic_scenario(kotiaurinko))
+    _run_scenario(_semantic_scenario(kotiaurinko))
 
 
 async def _t3_scenario(root):
@@ -148,7 +162,7 @@ def test_mcp_t3_entity_queries(kotiaurinko):
     (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "off"\n', encoding="utf-8")
     run_compile(kotiaurinko)
     stage_t3_export(kotiaurinko)  # the reader loads the staged export; no extractor runs
-    asyncio.run(_t3_scenario(kotiaurinko))
+    _run_scenario(_t3_scenario(kotiaurinko))
 
 
 KUU_REWRITE = (
@@ -191,7 +205,7 @@ def test_mcp_write_conflict_roundtrip(kotiaurinko):
         '[models.extraction]\nkind = "mock"\n', encoding="utf-8",
     )
     run_compile(kotiaurinko)
-    asyncio.run(_conflict_scenario(kotiaurinko))
+    _run_scenario(_conflict_scenario(kotiaurinko))
     assert "rewritten" in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["seq"] == 2

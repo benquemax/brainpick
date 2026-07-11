@@ -12,7 +12,7 @@
  * environment).
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -25,6 +25,14 @@ const repoRoot = path.resolve(webuiDir, '..', '..');
 const pythonProject = path.join(repoRoot, 'packages', 'python');
 const fixtureBundle = path.join(repoRoot, 'spec', 'fixtures', 'bundles', 'kotiaurinko');
 const t3Fixture = path.join(repoRoot, 'spec', 'fixtures', 'expected', 'kotiaurinko', 't3');
+
+// CI-1: every spawned engine's stdout/stderr also lands here (not just the
+// in-memory buffer waitForHealth reads on a startup timeout) — the CI
+// workflow uploads this dir as an artifact on any e2e failure, so a
+// runner-only failure (e.g. a config that never reached the process) reads
+// from a real log instead of another blind guess.
+const engineLogDir = path.join(webuiDir, 'test-results', 'engine-logs');
+mkdirSync(engineLogDir, { recursive: true });
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -70,15 +78,21 @@ interface Spawned {
   output: () => string;
 }
 
-function spawnServe(bundle: string, port: number): Spawned {
+function spawnServe(name: string, bundle: string, port: number): Spawned {
   const child = spawn(
     'uv',
     ['run', '--project', pythonProject, 'brainpick', 'serve', '--root', bundle, '--port', String(port)],
     { cwd: webuiDir, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
   );
   let output = '';
-  child.stdout?.on('data', (chunk: Buffer) => (output += chunk.toString()));
-  child.stderr?.on('data', (chunk: Buffer) => (output += chunk.toString()));
+  const logFile = path.join(engineLogDir, `${name}.log`);
+  writeFileSync(logFile, '', 'utf-8');
+  const capture = (chunk: Buffer) => {
+    output += chunk.toString();
+    appendFileSync(logFile, chunk);
+  };
+  child.stdout?.on('data', capture);
+  child.stderr?.on('data', capture);
   return { child, url: `http://127.0.0.1:${port}`, output: () => output };
 }
 
@@ -138,10 +152,10 @@ export default async function globalSetup(): Promise<void> {
   cpSync(fixtureBundle, bundleEdit, { recursive: true });
 
   const [port, portT2less, portT3, portEdit] = [await freePort(), await freePort(), await freePort(), await freePort()];
-  const primary = spawnServe(bundle, port);
-  const t2less = spawnServe(bundleT2less, portT2less);
-  const t3 = spawnServe(bundleT3, portT3);
-  const edit = spawnServe(bundleEdit, portEdit);
+  const primary = spawnServe('primary', bundle, port);
+  const t2less = spawnServe('t2less', bundleT2less, portT2less);
+  const t3 = spawnServe('t3', bundleT3, portT3);
+  const edit = spawnServe('edit', bundleEdit, portEdit);
 
   try {
     await waitForHealth(`${primary.url}/api/health`, HEALTH_TIMEOUT_MS, primary.output);

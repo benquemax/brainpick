@@ -26,7 +26,14 @@ jobs:
         run: uv run ruff check .
       - name: tests (unit + conformance)
         working-directory: packages/python
-        run: uv run pytest -q
+        # CI-1: python-windows hung a full 6 hours to the job kill on the
+        # FIRST public-repo flight (one test between 15-30% never returned).
+        # --timeout converts ANY future hang into a named, fast failure with a
+        # thread-dump traceback instead of burning the whole job budget again
+        # — CI-only (pytest-timeout is a dev dependency, but this flag stays
+        # out of the local `henxels _precommit` invocation on purpose: a dev
+        # machine under load, or paused at a breakpoint, is not a hang).
+        run: uv run pytest -q --timeout=180 --timeout-method=thread
 
   vectors-local:
     # The offline fastembed fallback ([vectors-local]) is import-guarded and its
@@ -114,9 +121,16 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+      # CI-1 (evidence: run 29125813729): the FIRST test failed — .hud-tiers
+      # stuck on "t2 off" for the mock-embedder bundle (global-setup.ts writes
+      # `[models.embedding] kind = "mock"` on purpose). Root cause, confirmed
+      # against t2.py's own t2_gate(): T2 needs BOTH a configured embedder AND
+      # an importable lancedb, mock embedder or not — this step synced without
+      # `--extra vectors` (unlike the `python` job above), so lancedb was never
+      # installed and T2 stayed off no matter how long the test waited.
       - name: sync python engine
         working-directory: packages/python
-        run: uv sync
+        run: uv sync --extra vectors
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -125,6 +139,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: playwright against brainpick serve
         run: npm run e2e -w packages/webui
+      - name: upload spawned-engine logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webui-e2e-engine-logs
+          path: packages/webui/test-results/engine-logs
+          if-no-files-found: ignore
 
   docs-truth:
     name: documented claims hold

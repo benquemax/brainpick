@@ -1,0 +1,24 @@
+# CI-1 (Phase 1.5): a Windows checkout without this file rewrites text files'
+# line endings on the way to disk (core.autocrlf's default), which drifts
+# every byte-sensitive golden (conformance goldens, canonicalJson output,
+# guarded-write three-way merges) away from what Linux/macOS produce and
+# what's actually committed. Pin everything to LF; the checked-out bytes on
+# every platform then match the repo's own bytes.
+* text=auto eol=lf
+
+# True binaries: never touched by line-ending normalization.
+*.png -text
+*.ico -text
+*.icns -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.woff -text
+*.woff2 -text
+*.ttf -text
+*.otf -text
+*.eot -text
+*.zip -text
+*.gz -text
+*.tar -text
+*.pdf -text

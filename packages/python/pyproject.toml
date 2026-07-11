@@ -35,6 +35,7 @@ Issues = "https://github.com/benquemax/brainpick/issues"
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-timeout>=2.3",
     "ruff>=0.6",
 ]
 vectors = [

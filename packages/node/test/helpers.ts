@@ -52,5 +52,14 @@ export function stageT3Export(root: string, bundle = "kotiaurinko"): void {
 
 /** Register in each test file via `afterEach(cleanup)`. */
 export function cleanup(): void {
-  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true });
+  // CI-1 evidence (run 29143029495, node engine ubuntu-latest): timeline.test.ts's
+  // own throwaway git repos hit `ENOTEMPTY: directory not empty, rmdir
+  // '.../.git'` here — a transient race, not a git-identity gap (that repo
+  // was already fully hermetic: local `git config user.*` + GIT_AUTHOR/
+  // COMMITTER env on every commit). `rmSync(recursive)` defaults to zero
+  // retries; a just-exited `git` subprocess's file handles/directory entries
+  // can still be settling on the runner's filesystem when the very next
+  // synchronous call tries to remove them. maxRetries+retryDelay is Node's
+  // own documented remedy for exactly this class of transient EBUSY/ENOTEMPTY.
+  for (const dir of created.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
