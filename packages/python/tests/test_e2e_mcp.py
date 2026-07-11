@@ -29,12 +29,23 @@ async def _call(session, name, arguments):
 # stdio_client/ClientSession context managers' own awaits) if it doesn't
 # finish well inside pytest-timeout's blunter 180s thread-kill backstop, so a
 # genuine hang fails FAST with a specific, actionable TimeoutError instead of
-# either backstop's coarser signal. Real protocol traffic here (compile a
-# 10-doc fixture + a handful of tool calls) finishes in well under a second
-# locally — 60s is generous headroom for CI resource contention, not a tight
-# budget.
+# either backstop's coarser signal.
+#
+# CI-2 (run 29145923212): this DID catch a real hang on python-windows, but
+# the write-conflict scenario (2 full brain_write round trips + a mock LLM
+# merge negotiation, each against a FRESH `python -m brainpick mcp`
+# subprocess) surfaced as BrokenResourceError, not a clean TimeoutError —
+# anyio's own task-group cleanup can shadow the original cancellation with a
+# new exception raised while tearing down the stdout-reader task, once
+# wait_for's timeout actually fires mid-request. That reads as this specific
+# scenario genuinely needing more than 60s on a cold/loaded Windows runner
+# (subprocess + interpreter cold-start is markedly slower there than the
+# POSIX fork-based startup "well under a second locally" was measured
+# against), not a NEW bug — raised to 120s, still comfortably under
+# pytest-timeout's 180s per-test backstop, matching the same generosity
+# global-setup.ts's HEALTH_TIMEOUT_MS already uses for identical reasons.
 def _run_scenario(coro):
-    asyncio.run(asyncio.wait_for(coro, timeout=60))
+    asyncio.run(asyncio.wait_for(coro, timeout=120))
 
 
 async def _scenario(root):

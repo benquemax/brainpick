@@ -187,13 +187,19 @@ def resolve(base: str | None, theirs: str, yours: str, chat: ChatClient | None) 
 def git_base(root: str | Path, rel: str) -> bytes | None:
     """`git show HEAD:./<rel>` — the committed bytes, or None (no git, not a
     repo, never committed). The `./` scopes the path to the bundle root even
-    when the bundle is a subdirectory of the repository."""
+    when the bundle is a subdirectory of the repository.
+
+    A backslash is not a directory separator to git's pathspec parser on ANY
+    platform — it can only ever arrive here on win32 if a caller built `rel`
+    with `os.sep`; normalized defensively so this stays correct regardless
+    of caller discipline (CI-2, _plans/2026-07-10-phase1.5-release.md)."""
     git = shutil.which("git")
     if git is None:
         return None
+    pathspec_rel = rel.replace("\\", "/")
     try:
         proc = subprocess.run(
-            [git, "-C", str(root), "show", f"HEAD:./{rel}"],
+            [git, "-C", str(root), "show", f"HEAD:./{pathspec_rel}"],
             capture_output=True, timeout=10,
         )
     except (OSError, subprocess.TimeoutExpired, subprocess.SubprocessError):

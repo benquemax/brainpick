@@ -242,6 +242,23 @@ test("gitBase scopes to a bundle subdir", () => {
   expect(gitBase(bundle, "kuu.md")!.equals(Buffer.from(BASE, "utf8"))).toBe(true); // HEAD:./kuu.md
 });
 
+test("gitBase normalizes a backslash rel to a valid pathspec", () => {
+  // CI-2 (_plans/2026-07-10-phase1.5-release.md): a literal backslash in the
+  // `HEAD:./<rel>` pathspec is NOT a directory separator to git's pathspec
+  // parser (on ANY platform — confirmed directly against a real git: `git
+  // show HEAD:./a\b.md` fails to find a committed `a/b.md` even on Linux) —
+  // it can only ever arrive here if a caller ever builds `rel` with
+  // path.sep on win32 (today's one caller already forbids backslashes
+  // earlier in the pipeline, but gitBase has no defense of its own against
+  // a future one that doesn't).
+  const bundle = committedBundle();
+  mkdirSync(join(bundle, "saaret"), { recursive: true });
+  writeFileSync(join(bundle, "saaret", "atolli.md"), BASE, "utf8");
+  git(bundle, "add", "-A");
+  git(bundle, "commit", "-qm", "add nested doc");
+  expect(gitBase(bundle, "saaret\\atolli.md")!.equals(Buffer.from(BASE, "utf8"))).toBe(true);
+});
+
 test("findBase only trusts a hash-verified HEAD", () => {
   const bundle = committedBundle();
   const baseSha = sha256Hex(Buffer.from(BASE, "utf8"));

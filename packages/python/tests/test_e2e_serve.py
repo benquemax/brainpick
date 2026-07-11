@@ -25,7 +25,7 @@ from brainpick.serve.app import build_app
 from brainpick.serve.live import sse_frame
 from brainpick.serve.watcher import recompile_and_broadcast
 
-from conftest import stage_t3_export
+from conftest import prepend_path, stage_fake_henxels, stage_t3_export
 
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi\ndescription: New rock.\n---\n\n"
@@ -655,11 +655,8 @@ def test_put_docs_writes_bumps_timestamp_returns_sha_and_fires_delta(kotiaurinko
 
 def test_put_docs_henxels_violation_is_422_verbatim_and_rolls_back(kotiaurinko, monkeypatch, tmp_path):
     (kotiaurinko / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
-    fake = tmp_path / "bin" / "henxels"
-    fake.parent.mkdir()
-    fake.write_text("#!/bin/sh\necho 'one concept per page'\nexit 1\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    bin_dir = stage_fake_henxels(tmp_path / "bin", "one concept per page")
+    monkeypatch.setenv("PATH", prepend_path(os.environ["PATH"], bin_dir))
     app = make_app(kotiaurinko)
     with TestClient(app) as client:
         before = (kotiaurinko / "kuu.md").read_text(encoding="utf-8")

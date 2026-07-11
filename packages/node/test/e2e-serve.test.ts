@@ -4,7 +4,7 @@
  * socket is the honest test of a serve layer (the twin of test_e2e_serve.py).
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -17,7 +17,7 @@ import { sha256Hex } from "../src/core/canonical";
 import { buildApp, type BuildAppOptions, type ServeHandles } from "../src/serve/app";
 import { sseFrame } from "../src/serve/live";
 import { recompileAndBroadcast } from "../src/serve/watcher";
-import { cleanup, copyBundle, tempDir, stageT3Export } from "./helpers";
+import { cleanup, copyBundle, prependPath, stageFakeHenxels, tempDir, stageT3Export } from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi\ndescription: New rock.\n---\n\n# Uusi\n\nNear [Kuu](kuu.md).\n";
@@ -807,12 +807,8 @@ test("PUT /api/docs writes, bumps timestamp, returns new sha, fires a delta", as
 test("PUT /api/docs henxels violation is 422 verbatim and rolls back", async () => {
   const root = copyBundle();
   writeFileSync(join(root, "henxels.yaml"), "henxels: []\n", "utf8");
-  const bin = join(tempDir(), "bin");
-  mkdirSync(bin, { recursive: true });
-  const fake = join(bin, "henxels");
-  writeFileSync(fake, "#!/bin/sh\necho 'one concept per page'\nexit 1\n", "utf8");
-  chmodSync(fake, 0o755);
-  process.env["PATH"] = `${bin}:${savedPath}`;
+  const bin = stageFakeHenxels(join(tempDir(), "bin"), "one concept per page");
+  process.env["PATH"] = prependPath(savedPath, bin);
   const { base } = await serve(await makeApp(root));
   const original = readFileSync(join(root, "kuu.md"), "utf8");
   const { status, body } = await putJson(`${base}/api/docs/kuu.md`, {

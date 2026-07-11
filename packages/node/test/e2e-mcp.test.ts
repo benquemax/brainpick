@@ -11,7 +11,7 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { runCompile } from "../src/compile/pipeline";
 import { sha256Hex } from "../src/core/canonical";
 import { PACKAGE_ROOT } from "../src/version";
-import { cleanup, copyBundle, stageT3Export } from "./helpers";
+import { cleanup, copyBundle, needsShellForNpm, npmCommand, stageT3Export } from "./helpers";
 
 const CLI = join(PACKAGE_ROOT, "dist", "cli.js");
 
@@ -19,9 +19,16 @@ const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
 
 beforeAll(() => {
-  // the e2e spawns the built CLI — build once when dist is missing or stale
+  // the e2e spawns the built CLI — build once when dist is missing or stale.
+  // CI-2 (flagged, run 29125813729): bare "npm" is a .cmd shim on win32,
+  // invisible to execFileSync without a shell (ENOENT) — same fix as
+  // packages/desktop/app/scripts/stage-resources.mjs's own npm spawn (1.5-C/D).
   if (!existsSync(CLI)) {
-    execFileSync("npm", ["run", "build", "--silent"], { cwd: PACKAGE_ROOT, stdio: "ignore" });
+    execFileSync(npmCommand(), ["run", "build", "--silent"], {
+      cwd: PACKAGE_ROOT,
+      stdio: "ignore",
+      shell: needsShellForNpm(),
+    });
   }
 }, 180_000);
 

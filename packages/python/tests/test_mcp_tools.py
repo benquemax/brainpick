@@ -17,7 +17,7 @@ from brainpick.mcp_server import (
 )
 from brainpick.serve.state import ServeState
 
-from conftest import stage_t3_export
+from conftest import prepend_path, stage_fake_henxels, stage_t3_export
 
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
@@ -299,11 +299,8 @@ def test_write_gate_refusal(kotiaurinko):
 
 def test_write_henxels_violation_restores(kotiaurinko, monkeypatch, tmp_path):
     (kotiaurinko / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
-    fake = tmp_path / "bin" / "henxels"
-    fake.parent.mkdir()
-    fake.write_text("#!/bin/sh\necho 'kebab-case or bust'\nexit 1\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    bin_dir = stage_fake_henxels(tmp_path / "bin", "kebab-case or bust")
+    monkeypatch.setenv("PATH", prepend_path(os.environ["PATH"], bin_dir))
     state = make_state(kotiaurinko)
 
     created = write_payload(state, "uusi.md", "# X\n")

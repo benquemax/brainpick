@@ -232,6 +232,22 @@ def test_git_base_scopes_to_a_bundle_subdir(tmp_path):
     assert git_base(bundle, "kuu.md") == BASE.encode("utf-8")  # HEAD:./kuu.md, not repo-root
 
 
+def test_git_base_normalizes_a_backslash_rel_to_a_valid_pathspec(committed_bundle):
+    # CI-2 (_plans/2026-07-10-phase1.5-release.md): a literal backslash in the
+    # `HEAD:./<rel>` pathspec is NOT a directory separator to git's pathspec
+    # parser (on ANY platform — confirmed directly: `git show HEAD:./a\b.md`
+    # fails to find a committed `a/b.md` even on Linux) — it can only ever
+    # arrive here if a caller ever builds `rel` with os.sep on win32 (today's
+    # one caller already forbids backslashes earlier in the pipeline, but
+    # git_base has no defense of its own against a future one that doesn't).
+    nested = committed_bundle / "saaret"
+    nested.mkdir()
+    (nested / "atolli.md").write_text(BASE, encoding="utf-8")
+    git("add", "-A", cwd=committed_bundle)
+    git("commit", "-qm", "add nested doc", cwd=committed_bundle)
+    assert git_base(committed_bundle, "saaret\\atolli.md") == BASE.encode("utf-8")
+
+
 def test_find_base_only_trusts_a_hash_verified_head(committed_bundle):
     base_sha = sha256_hex(BASE.encode("utf-8"))
     assert find_base(committed_bundle, "kuu.md", base_sha) == BASE

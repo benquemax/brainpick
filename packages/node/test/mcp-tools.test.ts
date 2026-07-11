@@ -1,7 +1,7 @@
 /** MCP tool payloads (spec/70): budget shaping, forgiving resolution, guarded
  * writes, base_sha conflicts (the twin of packages/python/tests/test_mcp_tools.py). */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
@@ -18,7 +18,7 @@ import {
   writePayload,
 } from "../src/mcp";
 import { ServeState } from "../src/serve/state";
-import { cleanup, copyBundle, stageT3Export, tempDir } from "./helpers";
+import { cleanup, copyBundle, prependPath, stageFakeHenxels, stageT3Export, tempDir } from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
@@ -353,12 +353,8 @@ test("write gate refusal", async () => {
 test("write henxels violation restores", async () => {
   const root = copyBundle();
   writeFileSync(join(root, "henxels.yaml"), "henxels: []\n", "utf8");
-  const bin = join(tempDir(), "bin");
-  mkdirSync(bin, { recursive: true });
-  const fake = join(bin, "henxels");
-  writeFileSync(fake, "#!/bin/sh\necho 'kebab-case or bust'\nexit 1\n", "utf8");
-  chmodSync(fake, 0o755);
-  process.env["PATH"] = `${bin}:${savedPath}`;
+  const bin = stageFakeHenxels(join(tempDir(), "bin"), "kebab-case or bust");
+  process.env["PATH"] = prependPath(savedPath, bin);
   const state = await makeState(root);
 
   const created = await writePayload(state, "uusi.md", "# X\n");

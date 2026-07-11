@@ -229,11 +229,17 @@ export async function resolve(
 
 /** `git show HEAD:./<rel>` — the committed bytes, or null (no git, not a repo,
  * never committed). The `./` scopes the path to the bundle root even when the
- * bundle is a subdirectory of the repository. */
+ * bundle is a subdirectory of the repository.
+ *
+ * A backslash is not a directory separator to git's pathspec parser on ANY
+ * platform — it can only ever arrive here on win32 if a caller built `rel`
+ * with `path.sep`; normalized defensively so this stays correct regardless
+ * of caller discipline (CI-2, _plans/2026-07-10-phase1.5-release.md). */
 export function gitBase(root: string, rel: string): Buffer | null {
   const git = which("git");
   if (git === null) return null;
-  const proc = spawnSync(git, ["-C", root, "show", `HEAD:./${rel}`], {
+  const pathspecRel = rel.replace(/\\/g, "/");
+  const proc = spawnSync(git, ["-C", root, "show", `HEAD:./${pathspecRel}`], {
     timeout: 10_000,
     maxBuffer: 64 * 1024 * 1024,
   });
