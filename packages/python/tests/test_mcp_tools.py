@@ -394,6 +394,7 @@ def test_write_conflict_three_way_from_a_git_base(kotiaurinko):
     def git(*args):
         subprocess.run(
             ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+             "-c", "core.autocrlf=false",  # deterministic blobs on Windows runners
              *args],
             cwd=kotiaurinko, check=True, capture_output=True,
         )
@@ -409,7 +410,11 @@ def test_write_conflict_three_way_from_a_git_base(kotiaurinko):
         "The moon pulls the tides of [Maa](maa.md).",
         "The moon pulls the spring tides of [Maa](maa.md).",
     )
-    (kotiaurinko / "kuu.md").write_text(theirs, encoding="utf-8")
+    # newline="\n": Windows text-mode would rewrite every \n as CRLF, making
+    # EVERY line differ from the LF git base — the three-way then sees total
+    # overlap and rightly declines. (Real CRLF forks degrade to llm/manual by
+    # design; this test exercises the clean-fork path.)
+    (kotiaurinko / "kuu.md").write_text(theirs, encoding="utf-8", newline="\n")
 
     state = make_state(kotiaurinko)
     yours = base_text + "\n## Vaiheet\n\nNew moon, then full moon.\n"

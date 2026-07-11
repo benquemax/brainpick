@@ -690,7 +690,9 @@ def test_put_docs_stale_base_sha_is_409_conflict_without_writing(kotiaurinko):
 def test_put_docs_conflict_offers_three_way_merged_from_git_base(kotiaurinko):
     def git(*args):
         subprocess.run(
-            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+             "-c", "core.autocrlf=false",  # deterministic blobs on Windows runners
+             *args],
             cwd=kotiaurinko, check=True, capture_output=True,
         )
 
@@ -703,7 +705,9 @@ def test_put_docs_conflict_offers_three_way_merged_from_git_base(kotiaurinko):
         "The moon pulls the tides of [Maa](maa.md).",
         "The moon pulls the spring tides of [Maa](maa.md).",
     )
-    (kotiaurinko / "kuu.md").write_text(theirs, encoding="utf-8")
+    # newline="\n": see test_mcp_tools.py's twin — Windows CRLF translation
+    # would defeat the three-way against the LF git base.
+    (kotiaurinko / "kuu.md").write_text(theirs, encoding="utf-8", newline="\n")
     app = make_app(kotiaurinko)
     with TestClient(app) as client:
         yours = base_text + "\n## Vaiheet\n\nNew moon, then full moon.\n"

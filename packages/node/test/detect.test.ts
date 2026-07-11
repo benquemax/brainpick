@@ -12,6 +12,7 @@ import {
   detectBundle,
   detectHenxels,
   detectLinkStyle,
+  needsShellForScript,
   pickBackend,
   probeBackends,
   probeOllama,
@@ -211,4 +212,12 @@ test("detectHenxels none outside any contract", () => {
   const lone = join(tempDir(), "lone");
   mkdirSync(lone);
   expect(detectHenxels(lone)).toBeNull();
+});
+
+test("needsShellForScript: only .bat/.cmd need Node's CVE-guard shell", () => {
+  expect(needsShellForScript("C:\\tools\\henxels.bat")).toBe(true);
+  expect(needsShellForScript("C:\\tools\\HENXELS.CMD")).toBe(true);
+  expect(needsShellForScript("C:\\tools\\henxels.exe")).toBe(false);
+  expect(needsShellForScript("/usr/local/bin/henxels")).toBe(false);
+  expect(needsShellForScript("/opt/batcave/henxels")).toBe(false); // "bat" in the path, not the ext
 });

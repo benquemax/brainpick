@@ -91,6 +91,9 @@ function henxelsFixList(bundleRoot: string, env: Env): string | null {
       encoding: "utf8",
       env: { ...process.env, ...env },
       timeout,
+      // win32: let cmd resolve henxels(.exe/.bat/.cmd) itself — a bare-name
+      // execFile can't spawn .bat/.cmd (CVE-2024-27980 EINVAL). Fixed argv.
+      shell: process.platform === "win32",
     });
     return null; // exit 0 — nothing to teach
   } catch (error) {

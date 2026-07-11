@@ -44,8 +44,30 @@ async def _call(session, name, arguments):
 # against), not a NEW bug — raised to 120s, still comfortably under
 # pytest-timeout's 180s per-test backstop, matching the same generosity
 # global-setup.ts's HEALTH_TIMEOUT_MS already uses for identical reasons.
+def _all_broken_resource(exc) -> bool:
+    """True when an exception (group) contains ONLY anyio BrokenResourceError —
+    the Windows stdio pipe-close teardown race. Group-walking is done by hand
+    because 3.10 lacks BaseExceptionGroup."""
+    import anyio
+
+    nested = getattr(exc, "exceptions", None)
+    if nested is not None:
+        return all(_all_broken_resource(e) for e in nested)
+    return isinstance(exc, anyio.BrokenResourceError)
+
+
 def _run_scenario(coro):
-    asyncio.run(asyncio.wait_for(coro, timeout=120))
+    try:
+        asyncio.run(asyncio.wait_for(coro, timeout=120))
+    except BaseException as exc:  # noqa: BLE001 — filtered immediately below
+        # Windows-only: the stdio transport can raise BrokenResourceError at
+        # CONTEXT EXIT when the child closes its pipe before the client's
+        # reader drains (every in-scenario assertion has already passed by
+        # then; callers re-verify on-disk outcomes after we return). Anything
+        # else — or the same error on POSIX — is a real failure.
+        if sys.platform == "win32" and _all_broken_resource(exc):
+            return
+        raise
 
 
 async def _scenario(root):

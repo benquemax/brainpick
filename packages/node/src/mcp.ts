@@ -20,7 +20,7 @@ import { cmpStr, sha256Hex } from "./core/canonical";
 import { splitFrontmatter } from "./core/frontmatter";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
-import { which } from "./detect";
+import { needsShellForScript, which } from "./detect";
 import { makeChat } from "./llm";
 import { findBase, resolve as resolveMerge } from "./merge";
 import { KNOWN_MODES, runSearch } from "./query/router";
@@ -491,6 +491,9 @@ function runHenxels(state: ServeState, rel: string): [string | null, string | nu
     cwd: root,
     encoding: "utf8",
     timeout: 60_000,
+    // .bat/.cmd henxels shims (and the win32 test fixture) hit Node's
+    // CVE-2024-27980 EINVAL guard without a shell; argv here is fixed.
+    shell: needsShellForScript(executable),
   });
   if (proc.error) {
     if ((proc.error as NodeJS.ErrnoException).code === "ETIMEDOUT") {

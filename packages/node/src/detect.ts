@@ -244,6 +244,14 @@ export function detectHenxels(root: string): string | null {
   return null;
 }
 
+/** Node refuses to spawn .bat/.cmd without a shell (CVE-2024-27980 hardening
+ * → EINVAL) — anything which() resolves to one of those must be spawned with
+ * `shell: true`. Callers pass fixed argv (no user-controlled words), so the
+ * shell's arg joining is safe here. */
+export function needsShellForScript(resolved: string): boolean {
+  return /\.(bat|cmd)$/i.test(resolved);
+}
+
 /** shutil.which, minimally: scan PATH for an executable regular file. */
 export function which(cmd: string, env: Env = process.env): string | null {
   if (cmd.includes("/") || cmd.includes("\\")) {
