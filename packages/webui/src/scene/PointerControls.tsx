@@ -16,7 +16,7 @@ import { pickNearest, pickNearest3D, type Projected } from './pick';
 import { dirOfClusterId, isClusterId } from '../state/budget';
 import { bareEntityId, isEntityRenderId } from '../graph/entities';
 import { morphedWorldOf, type GraphRuntime } from './runtime';
-import { BRAIN } from './tuning';
+import { BRAIN, PICK_CORE_FRACTION } from './tuning';
 
 const CLICK_SLOP_PX = 6;
 const CLICK_MAX_MS = 500;
@@ -51,7 +51,15 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
       v.set(nx, ny, 0).unproject(camera);
       const zoom = (camera as THREE.OrthographicCamera).zoom || 1;
-      return pickNearest(runtime.positions, runtime.liveCount, runtime.radii, v.x, v.y, COSMOS_MIN_PICK_PX / zoom);
+      return pickNearest(
+        runtime.positions,
+        runtime.liveCount,
+        runtime.radii,
+        v.x,
+        v.y,
+        COSMOS_MIN_PICK_PX / zoom,
+        PICK_CORE_FRACTION, // hitbox = the visible dot, not the halo quad
+      );
     };
 
     // --- BRAIN: project each morphed node to the screen; nearest dot wins. ---
@@ -77,7 +85,9 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
         const radiusPx = Math.hypot((edge.x - ndc.x) * 0.5 * rect.width, (edge.y - ndc.y) * halfH);
         return { sx, sy, radiusPx, depth, visible: true };
       };
-      return pickNearest3D(runtime.liveCount, project, px, py, BRAIN_MIN_PICK_PX);
+      // hitbox = the visible dot, not the halo quad — a near node's halo must not
+      // shadow the far node the cursor is dead-centre on (Tom, 2026-07-12).
+      return pickNearest3D(runtime.liveCount, project, px, py, BRAIN_MIN_PICK_PX, PICK_CORE_FRACTION);
     };
 
     // Dispatch by the ACTUAL render camera, not by morphActive: during the swap

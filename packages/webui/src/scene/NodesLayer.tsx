@@ -283,6 +283,7 @@ interface HighlightStamp {
   selection: string | null;
   hovered: string | null;
   highlight: ReadonlySet<string>;
+  dim: boolean; // dimOthers can flip while the highlight set identity stays
 }
 
 export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
@@ -352,13 +353,21 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     // lift so the local neighbourhood reads instantly on hover (scene/emphasis).
     const s = runtime.store.getState();
     const stamp = tracked.current.stamp;
-    if (!stamp || stamp.selection !== s.selection || stamp.hovered !== s.hovered || stamp.highlight !== s.highlight) {
-      tracked.current.stamp = { selection: s.selection, hovered: s.hovered, highlight: s.highlight };
+    if (
+      !stamp ||
+      stamp.selection !== s.selection ||
+      stamp.hovered !== s.hovered ||
+      stamp.highlight !== s.highlight ||
+      stamp.dim !== s.dimOthers
+    ) {
+      tracked.current.stamp = { selection: s.selection, hovered: s.hovered, highlight: s.highlight, dim: s.dimOthers };
       const hl = geo.getAttribute('iHighlight') as THREE.InstancedBufferAttribute;
       const hlArr = hl.array as Float32Array;
       const hoveredIdx = s.hovered !== null ? runtime.index.get(s.hovered) ?? -1 : -1;
       const selectionIdx = s.selection !== null ? runtime.index.get(s.selection) ?? -1 : -1;
-      const focus = focusIndex(hoveredIdx, selectionIdx);
+      // A lens-hidden hover never becomes the focus (and a selection anchors it).
+      const hoveredHidden = s.dimOthers && s.hovered !== null && !s.highlight.has(s.hovered);
+      const focus = focusIndex(hoveredIdx, selectionIdx, hoveredHidden);
       const neighborSet = focus >= 0 ? new Set(runtime.neighbors[focus] ?? []) : null;
       for (let i = 0; i < runtime.liveCount; i++) {
         const id = runtime.ids[i] as string;
@@ -367,6 +376,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
           isHovered: s.hovered === id,
           inSearch: s.highlight.has(id),
           isNeighbor: neighborSet !== null && neighborSet.has(i),
+          lensHidden: s.dimOthers && !s.highlight.has(id),
         });
       }
       hlArr.fill(0, runtime.liveCount);

@@ -18,6 +18,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { rgbToCss } from './colors';
+import { lensAllowsLabel } from './emphasis';
 import { entityRenderId } from '../graph/entities';
 import { isBehindBrainCenter, projectLabelPointMat } from './labelProjection';
 import { labelBudget } from './semanticZoom';
@@ -135,6 +136,9 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
       if (seen.has(i)) continue;
       seen.add(i);
       if (traveling && !present(i)) continue;
+      // LENS: a hidden node's name over an invisible dot is noise (Tom,
+      // 2026-07-12) — with a lens active only its members get labeled.
+      if (!lensAllowsLabel(ui.dimOthers, ui.highlight.has(runtime.ids[i] as string))) continue;
       const isForced = forced.includes(i);
       const sticky = shownPrev.has(i);
       // Budget with hysteresis: a fresh label only within the budget; a forced/settled

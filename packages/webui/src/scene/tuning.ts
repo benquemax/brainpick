@@ -62,11 +62,22 @@ export const EMPHASIS = {
   neighbor: 0.34,
 } as const;
 
+/** What fraction of a node's render quad counts as its CLICKABLE dot (Tom's aim
+ * report, 2026-07-12): the fragment's solid core ends at ~0.32 of the quad and the
+ * rest is faint halo — treating the whole quad as hitbox let near nodes swallow
+ * clicks aimed at nodes behind/beside them. 0.45 = the core plus a little edge
+ * grace; must track the fragment shader's core smoothstep if that ever moves. */
+export const PICK_CORE_FRACTION = 0.45;
+
 export const EDGE_GLOW = {
   /** Base additive opacity of link lines (was 0.3, then 0.24). A calm idle web. */
   opacity: 0.2,
-  /** Opacity factor while dimOthers is on. */
-  dimFactor: 0.22,
+  /** LENS grading, per edge (scene/emphasis edgeLensDim; Tom 2026-07-12): an edge
+   * between two lens members keeps full strength; a member's outward connection
+   * reads at half (it answers "what is this connected to")… */
+  lensHalfFactor: 0.5,
+  /** …and the hidden-to-hidden background web fades to a whisper. */
+  lensHiddenFactor: 0.08,
   /** HOVER NEIGHBOURHOOD (the important one): the focused node's incident edges jump
    * far above the idle web so you can instantly SEE what a node connects to. A big
    * multiplier on the base opacity (0.2 → ~1.0, a bright lit line)… */

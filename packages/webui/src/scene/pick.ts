@@ -10,6 +10,12 @@
  * NEAREST the cursor wins. `maxDist` is only a small FALLBACK floor, consulted solely
  * when the cursor is inside no dot at all (so a tiny far dot stays clickable) — a
  * contained hit always beats a floor-only one, however near the floor dot sits.
+ *
+ * PRECISION 2 (2026-07-12, Tom's aim report): a node's stored radius is its render
+ * QUAD half-size, but the sprite's VISIBLE core ends well inside it (the fragment's
+ * core smoothstep) — the rest is faint halo. `radiusScale` shrinks containment to the
+ * visible dot (tuning.NODE_GLOW.pickCoreFraction), so a big near dot's halo can no
+ * longer swallow clicks aimed at what's beside — or, in 3D, behind — it.
  */
 export function pickNearest(
   positions: Float32Array,
@@ -18,6 +24,7 @@ export function pickNearest(
   x: number,
   y: number,
   maxDist: number,
+  radiusScale = 1,
 ): number {
   let best = -1;
   let bestDist = Infinity;
@@ -26,7 +33,7 @@ export function pickNearest(
     const dx = (positions[i * 2] ?? 0) - x;
     const dy = (positions[i * 2 + 1] ?? 0) - y;
     const d = Math.hypot(dx, dy);
-    const r = radii ? radii[i] ?? 0 : 0;
+    const r = (radii ? radii[i] ?? 0 : 0) * radiusScale;
     if (d <= r) {
       // Genuinely inside this dot — contained hits always outrank floor-only ones.
       if (!haveContained || d < bestDist) {
@@ -77,6 +84,7 @@ export function pickNearest3D(
   px: number,
   py: number,
   minPickPx: number,
+  radiusScale = 1,
 ): number {
   let best = -1;
   let bestDepth = Infinity;
@@ -86,7 +94,7 @@ export function pickNearest3D(
     const p = project(i);
     if (!p || !p.visible) continue;
     const d = Math.hypot(p.sx - px, p.sy - py);
-    if (d <= p.radiusPx) {
+    if (d <= p.radiusPx * radiusScale) {
       // Genuinely inside this dot. Among contained dots the FRONT-most (nearest the
       // camera) wins; a raw-distance tie-break settles co-planar overlaps. A contained
       // hit always outranks a floor-only one, so switch modes on the first one seen.

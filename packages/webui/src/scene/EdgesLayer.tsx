@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
-import { focusIndex } from './emphasis';
+import { edgeLensDim, focusIndex } from './emphasis';
 import { BRAIN, DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
@@ -20,6 +20,7 @@ const VERTEX = /* glsl */ `
   attribute float aEnd;    // 0 at the source vertex, 1 at the target
   attribute float aFire;   // scene-time this edge last fired (−1 = never)
   attribute float aHighlight; // 1 when this edge is incident to the focused (hover/selected) node
+  attribute float aLensDim; // 0 both endpoints in the lens · 0.5 one · 1 none (scene/emphasis)
   attribute float aBirthIdx; // TIME MACHINE: commit index the edge forms at (max of endpoints)
   attribute float aDeathIdx; // commit index it breaks at (min of endpoints)
   uniform float uMorph;
@@ -27,6 +28,7 @@ const VERTEX = /* glsl */ `
   varying float vT;
   varying float vFire;
   varying float vHi;
+  varying float vLensDim;
   varying float vBirthIdx;
   varying float vDeathIdx;
 
@@ -35,6 +37,7 @@ const VERTEX = /* glsl */ `
     vT = aEnd;
     vFire = aFire;
     vHi = aHighlight;
+    vLensDim = aLensDim;
     vBirthIdx = aBirthIdx;
     vDeathIdx = aDeathIdx;
     float span = ${f(BRAIN.staggerSpan)};
@@ -57,11 +60,18 @@ const FRAGMENT = /* glsl */ `
   varying float vT;
   varying float vFire;
   varying float vHi;
+  varying float vLensDim;
   varying float vBirthIdx;
   varying float vDeathIdx;
 
   void main() {
-    float k = uOpacity * mix(1.0, ${f(EDGE_GLOW.dimFactor)}, uDim);
+    // LENS DIM is per-edge (Tom, 2026-07-12): edges BETWEEN lens members keep
+    // full strength, a member's outward connections read at half, and the
+    // hidden-to-hidden web fades to a whisper — uDim eases the whole grading
+    // in/out so releasing the lens restores the calm idle web smoothly.
+    float lensFac = vLensDim < 0.25 ? 1.0
+      : (vLensDim < 0.75 ? ${f(EDGE_GLOW.lensHalfFactor)} : ${f(EDGE_GLOW.lensHiddenFactor)});
+    float k = uOpacity * mix(1.0, lensFac, uDim);
     // HOVER NEIGHBOURHOOD: the focused node's incident edges jump far above the calm
     // idle web (a big multiplier), plus an additive pop, so you SEE what it connects to.
     k *= 1.0 + ${f(EDGE_GLOW.hoverBoost)} * vHi;
@@ -177,6 +187,10 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   const hiAttr = new THREE.Float32BufferAttribute(highlight, 1);
   hiAttr.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('aHighlight', hiAttr);
+  // Per-vertex lens grading (scene/emphasis edgeLensDim), refilled when the lens changes.
+  const lensAttr = new THREE.Float32BufferAttribute(new Float32Array(vertCount), 1);
+  lensAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('aLensDim', lensAttr);
   geo.setAttribute('aBirthIdx', new THREE.Float32BufferAttribute(birthIdx, 1));
   geo.setAttribute('aDeathIdx', new THREE.Float32BufferAttribute(deathIdx, 1));
   return geo;
@@ -205,10 +219,18 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
       }),
     [],
   );
-  const tracked = useRef<{ version: number; geometry: THREE.BufferGeometry | null; focus: number }>({
+  const tracked = useRef<{
+    version: number;
+    geometry: THREE.BufferGeometry | null;
+    focus: number;
+    lens: ReadonlySet<string> | null;
+    lensDimOn: boolean;
+  }>({
     version: -1,
     geometry: null,
     focus: -2,
+    lens: null,
+    lensDimOn: false,
   });
 
   useEffect(() => {
@@ -229,17 +251,20 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
       tracked.current.geometry = geo;
       tracked.current.version = runtime.version;
       tracked.current.focus = -2; // force the hover-incidence buffer to recompute
+      tracked.current.lens = null; // …and the lens grading (fresh geometry, fresh buffers)
       old?.dispose();
     }
     const geo = tracked.current.geometry;
     if (!geo) return;
 
-    // Light the FOCUS node's incident edges (hover, or the selection when nothing is
-    // hovered). Only rewritten when the focus changes — a hover is not per-frame work.
+    // Light the FOCUS node's incident edges (the selection anchors; hover explores
+    // only when nothing is selected, and a lens-hidden hover pops nothing — see
+    // scene/emphasis). Only rewritten when the focus changes — not per-frame work.
     const st = runtime.store.getState();
     const hoveredIdx = st.hovered !== null ? runtime.index.get(st.hovered) ?? -1 : -1;
     const selectionIdx = st.selection !== null ? runtime.index.get(st.selection) ?? -1 : -1;
-    const focus = focusIndex(hoveredIdx, selectionIdx);
+    const hoveredHidden = st.dimOthers && st.hovered !== null && !st.highlight.has(st.hovered);
+    const focus = focusIndex(hoveredIdx, selectionIdx, hoveredHidden);
     if (tracked.current.focus !== focus) {
       tracked.current.focus = focus;
       const hi = geo.getAttribute('aHighlight') as THREE.BufferAttribute;
@@ -253,6 +278,30 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
         }
       }
       hi.needsUpdate = true;
+    }
+
+    // Per-edge lens grading, refilled only when the lens (highlight set / dim flag)
+    // changes: 0 both endpoints visible · 0.5 one · 1 none (scene/emphasis).
+    if (tracked.current.lens !== st.highlight || tracked.current.lensDimOn !== st.dimOthers) {
+      tracked.current.lens = st.highlight;
+      tracked.current.lensDimOn = st.dimOthers;
+      const lens = geo.getAttribute('aLensDim') as THREE.BufferAttribute;
+      const lensArr = lens.array as Float32Array;
+      if (!st.dimOthers) {
+        lensArr.fill(0);
+      } else {
+        for (let e = 0; e < runtime.edgeCount; e++) {
+          const src = runtime.edgePairs[e * 2] ?? 0;
+          const tgt = runtime.edgePairs[e * 2 + 1] ?? 0;
+          const level = edgeLensDim(
+            st.highlight.has(runtime.ids[src] as string),
+            st.highlight.has(runtime.ids[tgt] as string),
+          );
+          lensArr[e * 2] = level;
+          lensArr[e * 2 + 1] = level;
+        }
+      }
+      lens.needsUpdate = true;
     }
 
     // Stream the latest cosmos endpoints (the brain targets are static per build).

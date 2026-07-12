@@ -83,4 +83,32 @@ describe('pickNearest3D (brain-mode screen-space pick)', () => {
     const project = (i: number): Projected | null => dots[i] ?? null;
     expect(pickNearest3D(2, project, 103, 100, 16)).toBe(0);
   });
+
+  it("a near dot's halo cannot shadow a far dot clicked dead-centre (radiusScale)", () => {
+    // Tom (2026-07-12): "when I click a node exactly in the center far away, some
+    // node in front of it is often chosen even when I don't even hit that node."
+    // The sprite's VISIBLE core ends well inside its quad — the halo is not the
+    // dot. radiusScale shrinks containment to the core, so only the far dot the
+    // cursor is actually ON contains the click.
+    const dots: Record<number, Projected> = {
+      0: { sx: 120, sy: 100, radiusPx: 30, depth: 5, visible: true }, // near, fat quad, cursor in its HALO
+      1: { sx: 100, sy: 100, radiusPx: 8, depth: 60, visible: true }, // far, clicked dead-centre
+    };
+    const project = (i: number): Projected | null => dots[i] ?? null;
+    expect(pickNearest3D(2, project, 100, 100, 16, 0.45)).toBe(1); // core-scaled: the aimed dot wins
+    expect(pickNearest3D(2, project, 100, 100, 16)).toBe(0); // unscaled quad radius: the old shadowing bug
+  });
+});
+
+describe('radiusScale in the flat cosmos pick', () => {
+  it('a halo-only click is not a hit — the quad beyond the visible core grabs nothing', () => {
+    // One big dot at the origin: quad r5, visible core r5·0.45 = 2.25. The cursor at
+    // (3.4, 0) sits in the faint halo — visually empty space. Unscaled, the quad
+    // swallowed the click; core-scaled (and past the 2-unit floor) it picks nothing.
+    const pos = new Float32Array([0, 0]);
+    const rad = new Float32Array([5]);
+    expect(pickNearest(pos, 1, rad, 3.4, 0, 2)).toBe(0); // unscaled quad: halo grabs
+    expect(pickNearest(pos, 1, rad, 3.4, 0, 2, 0.45)).toBe(-1); // core-scaled: honest miss
+    expect(pickNearest(pos, 1, rad, 1.8, 0, 2, 0.45)).toBe(0); // ON the visible dot: hit
+  });
 });
