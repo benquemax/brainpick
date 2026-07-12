@@ -25,11 +25,15 @@ export function pickNearest(
   y: number,
   maxDist: number,
   radiusScale = 1,
+  // What the lens hides, the picker must not see (Tom, 2026-07-12: an
+  // invisible node kept catching clicks aimed at the visible one behind it).
+  pickable?: (i: number) => boolean,
 ): number {
   let best = -1;
   let bestDist = Infinity;
   let haveContained = false;
   for (let i = 0; i < count; i++) {
+    if (pickable && !pickable(i)) continue;
     const dx = (positions[i * 2] ?? 0) - x;
     const dy = (positions[i * 2 + 1] ?? 0) - y;
     const d = Math.hypot(dx, dy);
@@ -48,6 +52,17 @@ export function pickNearest(
     }
   }
   return best;
+}
+
+/**
+ * Whether a node exists at the time-machine scrub position (spec/90 boundary
+ * rules: created ≤ T inclusive, deleted > T exclusive) — while travelling, a
+ * not-yet-born node is invisible and must not catch clicks either. Mirrors
+ * the shaders' presence math; pure, shared by picking (and label placement
+ * keeps its own inline copy of the same rule).
+ */
+export function presentAtScrub(birthIdx: number, deathIdx: number, scrub: number): boolean {
+  return (birthIdx < 0 || scrub >= birthIdx) && scrub < deathIdx;
 }
 
 /** A node projected to the screen for 3D picking (brain mode). */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPHASIS } from './tuning';
-import { edgeLensDim, focusIndex, lensAllowsLabel, nodeHighlightLevel } from './emphasis';
+import { edgeLensDim, focusIndex, lensAllowsInteraction, nodeHighlightLevel } from './emphasis';
 
 describe('focusIndex', () => {
   // Tom (2026-07-12): with a node SELECTED, hovering must not steal the
@@ -44,9 +44,11 @@ describe('nodeHighlightLevel', () => {
   });
 
   // Tom (2026-07-12): nodes outside an active lens are "hidden" — hovering
-  // them must not lift them or their neighbourhood out of the dim. Only a
-  // deliberate selection still reads (it was clicked on purpose).
-  it('a lens-hidden node stays dim under hover and neighbourhood lift', () => {
+  // them must not lift them out of the dim. Call sites derive lensHidden via
+  // lensAllowsInteraction, so a focus-NEIGHBOR never arrives here as hidden
+  // (the selection's connections must be shown); a truly hidden node is
+  // suppressed whatever else it is. Only a deliberate selection still reads.
+  it('a truly lens-hidden node stays dim whatever the hover/neighbour state', () => {
     expect(lvl({ isHovered: true, lensHidden: true })).toBe(0);
     expect(lvl({ isNeighbor: true, lensHidden: true })).toBe(0);
     expect(lvl({ isSelection: true, lensHidden: true })).toBe(EMPHASIS.selection);
@@ -72,13 +74,27 @@ describe('edgeLensDim', () => {
   });
 });
 
-describe('lensAllowsLabel', () => {
-  // Tom (2026-07-12): with a lens active, labels of hidden nodes "make no
-  // sense because the nodes aren't shown" — only lens members get named.
-  it('hides labels for nodes outside an active lens', () => {
-    expect(lensAllowsLabel(false, false)).toBe(true); // no lens: everyone may label
-    expect(lensAllowsLabel(false, true)).toBe(true);
-    expect(lensAllowsLabel(true, true)).toBe(true); // lens member: labeled
-    expect(lensAllowsLabel(true, false)).toBe(false); // hidden: no name floating
+describe('lensAllowsInteraction', () => {
+  const allows = (over: Partial<Parameters<typeof lensAllowsInteraction>[0]> = {}) =>
+    lensAllowsInteraction({ dimOthers: true, inHighlight: false, isSelection: false, isFocusNeighbor: false, ...over });
+
+  // Tom (2026-07-12): with a lens active, hidden nodes must not carry labels,
+  // catch clicks, or pop on hover — but the SELECTION's connected nodes must
+  // be shown ("what is the point of seeing only lines to invisible nodes").
+  it('no lens: everything interacts', () => {
+    expect(allows({ dimOthers: false })).toBe(true);
+  });
+
+  it('lens members interact; plain hidden nodes do not', () => {
+    expect(allows({ inHighlight: true })).toBe(true);
+    expect(allows()).toBe(false);
+  });
+
+  it("the focus's neighbours pierce the lens — connections must point at visible nodes", () => {
+    expect(allows({ isFocusNeighbor: true })).toBe(true);
+  });
+
+  it('a deliberate selection stays interactive even outside the lens', () => {
+    expect(allows({ isSelection: true })).toBe(true);
   });
 });

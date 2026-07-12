@@ -18,7 +18,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { rgbToCss } from './colors';
-import { lensAllowsLabel } from './emphasis';
+import { focusIndex, lensAllowsInteraction } from './emphasis';
 import { entityRenderId } from '../graph/entities';
 import { isBehindBrainCenter, projectLabelPointMat } from './labelProjection';
 import { labelBudget } from './semanticZoom';
@@ -126,6 +126,15 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
       return (b < 0 || runtime.scrub >= b) && runtime.scrub < d;
     };
 
+    // LENS: the same one rule the node/edge layers and the pickers apply
+    // (scene/emphasis lensAllowsInteraction) — hidden nodes carry no name,
+    // but the focus's neighbours pierce the lens and get labeled with it.
+    const hoveredIdx = ui.hovered !== null ? runtime.index.get(ui.hovered) ?? -1 : -1;
+    const focusIdx = focusId !== null ? runtime.index.get(focusId) ?? -1 : -1;
+    const hoveredHidden = ui.dimOthers && ui.hovered !== null && !ui.highlight.has(ui.hovered);
+    const lensFocus = focusIndex(hoveredIdx, focusIdx, hoveredHidden);
+    const lensNeighbors = ui.dimOthers && lensFocus >= 0 ? new Set(runtime.neighbors[lensFocus] ?? []) : null;
+
     const placed: Array<{ x: number; y: number }> = [];
     const seen = new Set<number>();
     const shownNow = new Set<number>();
@@ -136,9 +145,16 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
       if (seen.has(i)) continue;
       seen.add(i);
       if (traveling && !present(i)) continue;
-      // LENS: a hidden node's name over an invisible dot is noise (Tom,
-      // 2026-07-12) — with a lens active only its members get labeled.
-      if (!lensAllowsLabel(ui.dimOthers, ui.highlight.has(runtime.ids[i] as string))) continue;
+      const candidateId = runtime.ids[i] as string;
+      if (
+        !lensAllowsInteraction({
+          dimOthers: ui.dimOthers,
+          inHighlight: ui.highlight.has(candidateId),
+          isSelection: focusId === candidateId,
+          isFocusNeighbor: lensNeighbors !== null && lensNeighbors.has(i),
+        })
+      )
+        continue;
       const isForced = forced.includes(i);
       const sticky = shownPrev.has(i);
       // Budget with hysteresis: a fresh label only within the budget; a forced/settled

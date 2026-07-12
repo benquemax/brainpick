@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickNearest, pickNearest3D, type Projected } from './pick';
+import { pickNearest, pickNearest3D, presentAtScrub, type Projected } from './pick';
 
 // positions: xy pairs. Three nodes at (0,0), (10,0), (0,10).
 const positions = new Float32Array([0, 0, 10, 0, 0, 10]);
@@ -110,5 +110,32 @@ describe('radiusScale in the flat cosmos pick', () => {
     expect(pickNearest(pos, 1, rad, 3.4, 0, 2)).toBe(0); // unscaled quad: halo grabs
     expect(pickNearest(pos, 1, rad, 3.4, 0, 2, 0.45)).toBe(-1); // core-scaled: honest miss
     expect(pickNearest(pos, 1, rad, 1.8, 0, 2, 0.45)).toBe(0); // ON the visible dot: hit
+  });
+});
+
+describe('pickable predicate — what the lens hides, the picker must not see', () => {
+  // Tom (2026-07-12): with "all processes" on, shooting a process node kept
+  // selecting an INVISIBLE lens-hidden node in front of it. Invisible things
+  // must not catch clicks — hidden nodes are skipped outright.
+  it('a hidden node overlapping the aim cannot steal the pick from the visible one', () => {
+    const pos = new Float32Array([0, 0, 0.4, 0]); // A visible; B hidden, centre NEARER the cursor
+    const rad = new Float32Array([2, 2]);
+    expect(pickNearest(pos, 2, rad, 0.5, 0, 2, 1)).toBe(1); // no predicate: B wins by distance
+    expect(pickNearest(pos, 2, rad, 0.5, 0, 2, 1, (i) => i === 0)).toBe(0); // lens on: B is not there
+  });
+
+  it('when everything under the cursor is hidden, the click lands on nothing', () => {
+    const pos = new Float32Array([0, 0]);
+    const rad = new Float32Array([2]);
+    expect(pickNearest(pos, 1, rad, 0.5, 0, 2, 1, () => false)).toBe(-1);
+  });
+});
+
+describe('presentAtScrub', () => {
+  it('a node is pickable only while it exists at the scrub position', () => {
+    expect(presentAtScrub(-1, 1e9, 3)).toBe(true); // present throughout
+    expect(presentAtScrub(5, 1e9, 3)).toBe(false); // not yet born at commit 3
+    expect(presentAtScrub(5, 1e9, 5)).toBe(true); // born exactly at 5 (inclusive)
+    expect(presentAtScrub(1, 4, 4)).toBe(false); // deleted AT commit 4 (exclusive)
   });
 });

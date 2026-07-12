@@ -12,7 +12,8 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
 import * as THREE from 'three';
-import { pickNearest, pickNearest3D, type Projected } from './pick';
+import { pickNearest, pickNearest3D, presentAtScrub, type Projected } from './pick';
+import { focusIndex, lensAllowsInteraction } from './emphasis';
 import { dirOfClusterId, isClusterId } from '../state/budget';
 import { bareEntityId, isEntityRenderId } from '../graph/entities';
 import { morphedWorldOf, type GraphRuntime } from './runtime';
@@ -44,6 +45,35 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
     const right = new THREE.Vector3();
     const ndc = new THREE.Vector3();
 
+    // What the lens (or the time machine) hides, the picker must not see —
+    // an invisible node kept catching clicks aimed at the visible one behind
+    // it (Tom, 2026-07-12). One rule with the layers (scene/emphasis): lens
+    // members, the selection, and the focus's lens-piercing neighbours are
+    // clickable; everything else is simply not there. Undefined when nothing
+    // hides anything, so the common path pays nothing.
+    const makePickable = (): ((i: number) => boolean) | undefined => {
+      const st = runtime.store.getState();
+      const traveling = runtime.timeTravelAmt > 0.5;
+      if (!st.dimOthers && !traveling) return undefined;
+      const hoveredIdx = st.hovered !== null ? runtime.index.get(st.hovered) ?? -1 : -1;
+      const selectionIdx = st.selection !== null ? runtime.index.get(st.selection) ?? -1 : -1;
+      const hoveredHidden = st.dimOthers && st.hovered !== null && !st.highlight.has(st.hovered);
+      const focus = focusIndex(hoveredIdx, selectionIdx, hoveredHidden);
+      const neighborSet = st.dimOthers && focus >= 0 ? new Set(runtime.neighbors[focus] ?? []) : null;
+      return (i: number): boolean => {
+        if (traveling && !presentAtScrub(runtime.birthIdx[i] ?? -1, runtime.deathIdx[i] ?? 1e9, runtime.scrub)) {
+          return false;
+        }
+        const id = runtime.ids[i] as string;
+        return lensAllowsInteraction({
+          dimOthers: st.dimOthers,
+          inHighlight: st.highlight.has(id),
+          isSelection: st.selection === id,
+          isFocusNeighbor: neighborSet !== null && neighborSet.has(i),
+        });
+      };
+    };
+
     // --- COSMOS: flat nearest-node scan in world space. ---
     const pickAt = (e: PointerEvent, camera: THREE.Camera): number => {
       const rect = el.getBoundingClientRect();
@@ -59,6 +89,7 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
         v.y,
         COSMOS_MIN_PICK_PX / zoom,
         PICK_CORE_FRACTION, // hitbox = the visible dot, not the halo quad
+        makePickable(),
       );
     };
 
@@ -68,7 +99,9 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
       const halfH = rect.height / 2;
+      const pickable = makePickable();
       const project = (i: number): Projected | null => {
+        if (pickable && !pickable(i)) return null; // hidden by the lens/scrub: not there
         // The node's CURRENT morphed world position — the exact mix (flat cosmos
         // target ⇄ 3D brain target, per-node stagger) the shader + labels share.
         if (!morphedWorldOf(i, runtime.morph, runtime.positions, runtime.brainPositions, BRAIN.staggerSpan, world)) return null;

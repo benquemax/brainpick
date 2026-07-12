@@ -62,10 +62,20 @@ export function edgeLensDim(aVisible: boolean, bVisible: boolean): number {
 }
 
 /**
- * Whether a node may carry a floating label. With a lens active, a hidden
- * node's name over an invisible dot reads as noise (Tom: "explanation texts of
- * nodes that aren't shown make no sense") — only lens members get named.
+ * Whether a node participates in the scene at all while a lens is active —
+ * one rule for labels, picking, and emphasis (Tom, 2026-07-12, in three
+ * escalating reports): hidden nodes must not carry labels ("names of nodes
+ * that aren't shown make no sense"), must not catch clicks ("a node in front
+ * gets selected… but is invisible"), and must not pop on hover — BUT the
+ * focus's neighbours pierce the lens ("what is the point of seeing only
+ * lines to invisible nodes"), and a deliberate selection always reads.
  */
-export function lensAllowsLabel(dimOthers: boolean, inHighlight: boolean): boolean {
-  return !dimOthers || inHighlight;
+export function lensAllowsInteraction(args: {
+  dimOthers: boolean;
+  inHighlight: boolean;
+  isSelection: boolean;
+  isFocusNeighbor: boolean;
+}): boolean {
+  if (!args.dimOthers) return true;
+  return args.inHighlight || args.isSelection || args.isFocusNeighbor;
 }

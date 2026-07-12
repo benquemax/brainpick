@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
-import { focusIndex, nodeHighlightLevel } from './emphasis';
+import { focusIndex, lensAllowsInteraction, nodeHighlightLevel } from './emphasis';
 import { BRAIN, DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
@@ -371,12 +371,21 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
       const neighborSet = focus >= 0 ? new Set(runtime.neighbors[focus] ?? []) : null;
       for (let i = 0; i < runtime.liveCount; i++) {
         const id = runtime.ids[i] as string;
+        const isNeighbor = neighborSet !== null && neighborSet.has(i);
+        const isSelection = s.selection === id;
         hlArr[i] = nodeHighlightLevel({
-          isSelection: s.selection === id,
+          isSelection,
           isHovered: s.hovered === id,
           inSearch: s.highlight.has(id),
-          isNeighbor: neighborSet !== null && neighborSet.has(i),
-          lensHidden: s.dimOthers && !s.highlight.has(id),
+          isNeighbor,
+          // One rule (scene/emphasis): the focus's neighbours PIERCE the lens —
+          // its connections must point at visible nodes, not empty space.
+          lensHidden: !lensAllowsInteraction({
+            dimOthers: s.dimOthers,
+            inHighlight: s.highlight.has(id),
+            isSelection,
+            isFocusNeighbor: isNeighbor,
+          }),
         });
       }
       hlArr.fill(0, runtime.liveCount);
