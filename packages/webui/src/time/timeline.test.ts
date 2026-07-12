@@ -5,6 +5,7 @@ import {
   birthIndexOf,
   commitAt,
   deathIndexOf,
+  flashRecency,
   hasHistory,
   indexOfTime,
   lastModIndexOf,
@@ -182,5 +183,25 @@ describe('commitAt', () => {
     expect(commitAt(timeline, 0.4)?.sha).toBe('aaaaaaa');
     expect(commitAt(timeline, 1.6)?.sha).toBe('ccccccc');
     expect(commitAt(EMPTY_TIMELINE, 0)).toBeNull();
+  });
+});
+
+describe('flashRecency', () => {
+  // Found live (2026-07-12): birth/mod flashes were a pure function of scrub
+  // POSITION, so standing on a commit held them at full glow forever — a
+  // whole-wiki commit turned every node white until you scrubbed away.
+  // Recency gates flashes by wall-clock time since the scrub last MOVED.
+  it('holds full flash briefly, then decays to zero once the scrub rests', () => {
+    expect(flashRecency(0, 0.35, 1.2)).toBe(1);
+    expect(flashRecency(0.35, 0.35, 1.2)).toBe(1); // still inside the hold
+    const mid = flashRecency(0.95, 0.35, 1.2);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+    expect(flashRecency(1.55, 0.35, 1.2)).toBe(0); // hold + decay elapsed
+    expect(flashRecency(60, 0.35, 1.2)).toBe(0);
+  });
+
+  it('a scrub that never moved reads as fully decayed', () => {
+    expect(flashRecency(Number.POSITIVE_INFINITY, 0.35, 1.2)).toBe(0);
   });
 });

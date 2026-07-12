@@ -176,6 +176,14 @@ export function findBrain(registry: Registry, id: string): BrainRecord | null {
   return registry.brains.find((b) => b.id === id) ?? null;
 }
 
+/** Idempotency lookup: the same repo (trailing-slash-insensitive, like
+ * validateBrainInput's own normalization) must map to ONE brain — re-adding
+ * returns the existing record instead of minting a new id + port + serve. */
+export function findBrainByRepo(registry: Registry, repo: string): BrainRecord | null {
+  const wanted = stripTrailingSlash(repo.trim());
+  return registry.brains.find((b) => stripTrailingSlash(b.repo) === wanted) ?? null;
+}
+
 /** Where a remote-repo brain gets cloned (git sync, Supervisor) — never
  * touched for a local-path brain, which serves its `repo` path directly. */
 export function clonedRepoDir(brain: BrainRecord, env: Env = process.env): string {

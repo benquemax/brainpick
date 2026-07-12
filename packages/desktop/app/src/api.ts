@@ -48,76 +48,60 @@ export interface AddBrainResult {
   bundle: { kind: string; docs: number; typed: number };
   compiled: Record<string, unknown>;
   fix_list: string | null;
+  /** Paste-into-your-coding-agent hand-off, non-null whenever the bundle
+   * isn't Brainpick-ready (not OKF, or henxels has findings). Composed by
+   * the daemon — the app only copies it. */
+  agent_prompt: string | null;
 }
-
-let cachedInfo: DaemonInfo | null = null;
 
 /** Ensures a daemon is running (spawning one on first run) and returns its
- * address + control token. Cached after the first successful call in a
- * session — call {@link forgetDaemon} to force a re-check (e.g. after an
- * API call fails, in case the daemon was restarted with a new token). */
-export async function daemonInfo(): Promise<DaemonInfo> {
-  if (cachedInfo !== null) return cachedInfo;
-  cachedInfo = await invoke<DaemonInfo>("daemon_info");
-  return cachedInfo;
+ * address + control token — used by the UI for display (the web URL), never
+ * for fetching. */
+export function daemonInfo(): Promise<DaemonInfo> {
+  return invoke<DaemonInfo>("daemon_info");
 }
 
-export function forgetDaemon(): void {
-  cachedInfo = null;
-}
-
-async function call<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-  const info = await daemonInfo();
-  const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${info.token}`);
-  let response: Response;
-  try {
-    response = await fetch(`${info.base_url}${path}`, { ...init, headers });
-  } catch (error) {
-    if (retry) {
-      forgetDaemon();
-      return call<T>(path, init, false);
-    }
-    throw error;
-  }
-  const text = await response.text();
-  const body: unknown = text === "" ? null : JSON.parse(text);
-  if (!response.ok) {
+/** ALL control-API traffic rides the Rust `api_call` command (tester-zero,
+ * 2026-07-12): the packaged webview's cross-origin fetch SENDS requests but
+ * WebKit never hands the response back to JS — the wizard's adds landed
+ * (seven times, thanks to a blind retry that is also gone now) while the UI
+ * saw nothing. Rust/reqwest has no scheme/CORS politics. NEVER add a
+ * webview fetch back here. */
+async function call<T>(method: string, path: string, payload?: unknown): Promise<T> {
+  const raw = await invoke<{ status: number; body: string }>("api_call", {
+    method,
+    path,
+    body: payload === undefined ? null : JSON.stringify(payload),
+  });
+  const body: unknown = raw.body === "" ? null : JSON.parse(raw.body);
+  if (raw.status >= 400) {
     const message =
       body !== null && typeof body === "object" && "error" in body
         ? String((body as { error: unknown }).error)
-        : `HTTP ${response.status}`;
+        : `HTTP ${raw.status}`;
     throw new Error(message);
   }
   return body as T;
 }
 
 export function listBrains(): Promise<{ brains: BrainRecord[] }> {
-  return call("/daemon/brains");
+  return call("GET", "/daemon/brains");
 }
 
 export function brainStatus(id: string): Promise<BrainStatus> {
-  return call(`/daemon/brains/${encodeURIComponent(id)}/status`);
+  return call("GET", `/daemon/brains/${encodeURIComponent(id)}/status`);
 }
 
 export function removeBrain(id: string): Promise<void> {
-  return call(`/daemon/brains/${encodeURIComponent(id)}`, { method: "DELETE" });
+  return call("DELETE", `/daemon/brains/${encodeURIComponent(id)}`);
 }
 
 export function mintKey(id?: string): Promise<MintedKey> {
-  return call("/daemon/keys", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(id ? { id } : {}),
-  });
+  return call("POST", "/daemon/keys", id ? { id } : {});
 }
 
 export function addBrain(input: AddBrainInput): Promise<AddBrainResult> {
-  return call("/daemon/brains", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  return call("POST", "/daemon/brains", input);
 }
 
 /** A local filesystem path, as opposed to a git remote — mirrors

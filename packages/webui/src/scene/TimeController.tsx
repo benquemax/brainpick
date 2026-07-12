@@ -43,7 +43,12 @@ export function TimeController({ runtime }: { runtime: GraphRuntime }) {
     // Ease the animated scrub toward the target (snap when negligibly close).
     const target = s.scrubIndex;
     const next = runtime.scrub + (target - runtime.scrub) * TIME_MACHINE.scrubEase;
-    runtime.scrub = Math.abs(next - target) < 0.001 ? target : next;
+    const eased = Math.abs(next - target) < 0.001 ? target : next;
+    // Stamp actual movement: the shaders decay the birth/mod flashes by
+    // time-since-this (flashRecency), so a RESTING scrub settles to true
+    // colors instead of holding every just-touched node at full glow.
+    if (eased !== runtime.scrub) runtime.scrubStamp = runtime.now();
+    runtime.scrub = eased;
   });
   return null;
 }

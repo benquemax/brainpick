@@ -19,6 +19,22 @@ function showError(el: HTMLElement, message: string): void {
   el.hidden = false;
 }
 
+/** Busy-state guard (tester-zero, 2026-07-12): an add can clone + compile for
+ * whole seconds — a still-clickable Next with no feedback is what turned one
+ * add into seven. While the promise is in flight the button is disabled and
+ * says so; it re-arms only on failure (success re-renders the step anyway). */
+async function withBusy(button: HTMLButtonElement, busyLabel: string, work: () => Promise<void>): Promise<void> {
+  const idleLabel = button.textContent ?? "";
+  button.disabled = true;
+  button.textContent = busyLabel;
+  try {
+    await work();
+  } finally {
+    button.disabled = false;
+    button.textContent = idleLabel;
+  }
+}
+
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
@@ -52,15 +68,17 @@ function renderRepoStep(body: HTMLElement, callbacks: WizardCallbacks): void {
   const errorEl = body.querySelector<HTMLElement>("#w-error")!;
 
   body.querySelector("#w-cancel")!.addEventListener("click", () => closeDialog(body));
-  body.querySelector("#w-next")!.addEventListener("click", () => {
-    void (async () => {
-      const repo = repoInput.value.trim();
-      if (repo === "") {
-        showError(errorEl, "a repo URL or local path is required");
-        return;
-      }
-      const host = lanCheckbox.checked ? "0.0.0.0" : undefined;
-      const bundlePath = bundlePathInput.value.trim() || undefined;
+  const nextButton = body.querySelector<HTMLButtonElement>("#w-next")!;
+  nextButton.addEventListener("click", () => {
+    const repo = repoInput.value.trim();
+    if (repo === "") {
+      showError(errorEl, "a repo URL or local path is required");
+      return;
+    }
+    errorEl.hidden = true;
+    const host = lanCheckbox.checked ? "0.0.0.0" : undefined;
+    const bundlePath = bundlePathInput.value.trim() || undefined;
+    void withBusy(nextButton, isLocalRepo(repo) ? "Adding…" : "Minting key…", async () => {
       try {
         if (isLocalRepo(repo)) {
           const result = await addBrain({ repo, bundle_path: bundlePath, host });
@@ -72,7 +90,7 @@ function renderRepoStep(body: HTMLElement, callbacks: WizardCallbacks): void {
       } catch (error) {
         showError(errorEl, error instanceof Error ? error.message : String(error));
       }
-    })();
+    });
   });
 }
 
@@ -105,32 +123,55 @@ function renderKeyStep(
     void navigator.clipboard.writeText(key.public_key);
   });
   body.querySelector("#w-cancel")!.addEventListener("click", () => closeDialog(body));
-  body.querySelector("#w-next")!.addEventListener("click", () => {
-    void (async () => {
+  const nextButton = body.querySelector<HTMLButtonElement>("#w-next")!;
+  nextButton.addEventListener("click", () => {
+    errorEl.hidden = true;
+    void withBusy(nextButton, "Cloning + compiling…", async () => {
       try {
         const result = await addBrain({ id: key.id, repo, bundle_path: bundlePath, host });
         renderResultStep(body, result, callbacks);
       } catch (error) {
         showError(errorEl, error instanceof Error ? error.message : String(error));
       }
-    })();
+    });
   });
 }
 
 function renderResultStep(body: HTMLElement, result: AddBrainResult, callbacks: WizardCallbacks): void {
-  const fixList =
-    result.fix_list !== null
-      ? `<pre class="fix-list">${escapeHtml(result.fix_list)}</pre>`
-      : `<p>No henxels contract issues.</p>`;
   const docs = "docs" in result.compiled ? String(result.compiled["docs"]) : "?";
+  const ready = result.agent_prompt === null;
+  // Three honest states (tester-zero: "No henxels contract issues." on a
+  // plain folder read as a clean bill of health it never earned):
+  const verdict = ready
+    ? `<p>OKF bundle — ${docs} docs compiled. Ready to serve.</p>`
+    : result.bundle.kind === "okf"
+      ? `<p>OKF bundle — ${docs} docs compiled, but its henxels contract has findings:</p>`
+      : `<p>Not an OKF bundle yet (${docs} docs found) — added, but served in degraded form.</p>`;
+  const fixList = result.fix_list !== null ? `<pre class="fix-list">${escapeHtml(result.fix_list)}</pre>` : "";
+  const handoff = ready
+    ? ""
+    : `
+    <p>Have your coding agent make it Brainpick-ready — copy this prompt
+    into Claude Code (or any agent) running in that repo:</p>
+    <div class="wizard-actions">
+      <button id="w-copy-prompt" type="button">Copy agent prompt</button>
+    </div>`;
   body.innerHTML = `
     <h2>Brain added</h2>
-    <p>${escapeHtml(result.bundle.kind)} bundle — ${docs} docs compiled.</p>
+    ${verdict}
     ${fixList}
+    ${handoff}
     <div class="wizard-actions">
       <button id="w-done" type="button">Done</button>
     </div>
   `;
+  const copyPrompt = body.querySelector<HTMLButtonElement>("#w-copy-prompt");
+  if (copyPrompt !== null) {
+    copyPrompt.addEventListener("click", () => {
+      void navigator.clipboard.writeText(result.agent_prompt ?? "");
+      copyPrompt.textContent = "Copied ✓";
+    });
+  }
   body.querySelector("#w-done")!.addEventListener("click", () => {
     closeDialog(body);
     callbacks.onDone();

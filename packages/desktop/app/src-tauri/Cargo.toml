@@ -1,6 +1,6 @@
 [package]
 name = "brainpick-desktop"
-version = "0.1.0"
+version = "0.1.1"
 description = "brainpick — the desktop app (a thin client of brainpickd; all magic lives in the daemon)"
 authors = ["brainpick"]
 edition = "2021"

@@ -124,7 +124,9 @@ jobs:
             Unsigned builds — this is expected for early testers, not a mistake:
 
             - **Linux (.AppImage)**: `chmod +x Brainpick_*.AppImage`, then run it.
-              If your desktop's AppImage integration errors on launch, run with
+              Requires system `webkit2gtk-4.1` (the standard Tauri Linux
+              prerequisite — preinstalled on most desktop distros). If your
+              desktop's AppImage integration errors on launch, run with
               `APPIMAGE_EXTRACT_AND_RUN=1 ./Brainpick_*.AppImage` instead.
             - **macOS (.dmg, Apple Silicon only — Intel Mac? tell us, we'll add
               the target)**: first launch needs right-click → Open once (Gatekeeper
@@ -135,6 +137,26 @@ jobs:
             Also attached: a standalone `brainpickd-<platform>.tar.gz` per
             platform (the daemon + bundled Node runtime, no Tauri shell) for
             headless/NAS use.
+      - name: strip bundled platform libs + repack the AppImage (Linux only)
+        # tester-zero (2026-07-12): linuxdeploy bundles the build distro's
+        # platform libs (libwayland/libgst/libglib/GTK, ~155 files). Tauri
+        # never bundles WebKit — a REQUIRED system dep — so those elderly
+        # libs poison the host's newer WebKit via LD_LIBRARY_PATH: its GPU
+        # process dies (EGL_BAD_PARAMETER) → abort/white window. Proven on
+        # Arch/GNOME by quarantining the libs live. The repack script strips
+        # them all (with a fail-loud postcondition) and re-clobbers the draft
+        # asset tauri-action just uploaded — the draft is invisible until
+        # published, so the brief poisoned-asset window never reaches anyone.
+        if: matrix.platform == 'ubuntu-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          APPIMG=$(ls packages/desktop/app/src-tauri/target/release/bundle/appimage/*.AppImage)
+          node packages/desktop/app/scripts/repack-appimage.mjs "$APPIMG"
+          gh release upload "${{ github.event.inputs.version || github.ref_name }}" \
+            "$APPIMG" --clobber
       - name: standalone daemon artifact (headless/NAS)
         shell: bash
         run: |

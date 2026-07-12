@@ -33,6 +33,7 @@ const VERTEX = /* glsl */ `
   uniform float uDim;
   uniform float uTimeTravel;   // 0 = live present, →1 = travelling history
   uniform float uScrub;        // the animated fractional commit index
+  uniform float uScrubStamp;   // uTime when the scrub last moved (flash recency)
 
   varying vec2 vQuad;
   varying vec3 vColor;
@@ -95,12 +96,17 @@ const VERTEX = /* glsl */ `
       float alive = 1.0 - smoothstep(iDeathIdx - ${f(TIME_MACHINE.fadeWindow)}, iDeathIdx, uScrub);
       float present = born * alive;
       float p = mix(1.0, present, uTimeTravel);
+      // Flashes are gated by RECENCY of scrub movement (wall clock): full while
+      // stepping/playing, easing out once the viewer stands still. Without it a
+      // flash is a pure function of position and freezes at full glow ON a
+      // commit — a whole-wiki commit whited out the entire brain (2026-07-12).
+      float recency = 1.0 - smoothstep(${f(TIME_MACHINE.flashHold)}, ${f(TIME_MACHINE.flashHold + TIME_MACHINE.flashDecay)}, uTime - uScrubStamp);
       float bsince = uScrub - iBirthIdx;
-      float bflash = (iBirthIdx >= 0.0 && bsince >= 0.0 && bsince < ${f(TIME_MACHINE.flashWindow)})
-        ? (1.0 - bsince / ${f(TIME_MACHINE.flashWindow)}) : 0.0;
+      float bflash = recency * ((iBirthIdx >= 0.0 && bsince >= 0.0 && bsince < ${f(TIME_MACHINE.flashWindow)})
+        ? (1.0 - bsince / ${f(TIME_MACHINE.flashWindow)}) : 0.0);
       float msince = uScrub - iModIdx;
-      float mflash = (iModIdx >= 0.0 && msince >= 0.0 && msince < ${f(TIME_MACHINE.flashWindow)})
-        ? (1.0 - msince / ${f(TIME_MACHINE.flashWindow)}) : 0.0;
+      float mflash = recency * ((iModIdx >= 0.0 && msince >= 0.0 && msince < ${f(TIME_MACHINE.flashWindow)})
+        ? (1.0 - msince / ${f(TIME_MACHINE.flashWindow)}) : 0.0);
       scale *= p * (1.0 + uTimeTravel * (${f(TIME_MACHINE.birthPop)} * bflash + ${f(TIME_MACHINE.modPop)} * mflash));
       bright = bright * p + uTimeTravel * p * (${f(TIME_MACHINE.birthGlow)} * bflash + ${f(TIME_MACHINE.modGlow)} * mflash);
       ttAlpha = p;
@@ -293,6 +299,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
           uBloom: { value: 1 }, // additive-halo strength; the GPU tier sets it
           uTimeTravel: { value: 0 }, // TIME MACHINE: eased 0→1 by TimeController
           uScrub: { value: 0 }, // the animated fractional commit index
+          uScrubStamp: { value: -1e9 }, // uTime when the scrub last moved (flash recency)
         },
         transparent: true,
         depthWrite: false,
@@ -370,6 +377,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     material.uniforms.uMorph!.value = runtime.morph;
     material.uniforms.uTimeTravel!.value = runtime.timeTravelAmt;
     material.uniforms.uScrub!.value = runtime.scrub;
+    material.uniforms.uScrubStamp!.value = runtime.scrubStamp;
     material.uniforms.uBloom!.value = s.gpu.bloomEnabled ? 1 : GPU_BUDGET.bloomDisabledScale;
     const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;

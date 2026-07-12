@@ -175,6 +175,10 @@ export class GraphRuntime {
   scrub = 0;
   /** Animated 0→1 time-travel amount (uTimeTravel); eases the whole reconstruction in/out. */
   timeTravelAmt = 0;
+  /** Wall-clock (runtime.now()) moment the scrub last MOVED — the shaders decay
+   * birth/mod flashes by time-since-this (timeline.ts flashRecency), so standing
+   * on a commit settles instead of holding every touched node at full glow. */
+  scrubStamp = -1e9;
 
   // ---- Holographic brain (lazy; nothing computed until the first toggle) ----
   /** Current animated morph 0 (cosmos) → 1 (brain); eased by MorphController. */

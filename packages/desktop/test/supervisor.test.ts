@@ -152,3 +152,18 @@ test("the brain's host is passed through to serve as --host", async () => {
   expect(argv[argv.indexOf("--host") + 1]).toBe("0.0.0.0");
   supervisor.stop("a");
 });
+
+test("reconcile stops every brain whose registry entry is gone", async () => {
+  const script = longRunningScript();
+  const supervisor = new Supervisor({ command: () => ({ node: process.execPath, cliPath: script }) });
+  supervisor.start(brain("kept"));
+  supervisor.start(brain("orphan"));
+  await waitFor(() => supervisor.status("kept") === "running" && supervisor.status("orphan") === "running");
+
+  // The registry only knows "kept" — "orphan" must not outlive its entry
+  // (tester-zero: clobbered adds left 13 serves fighting over one port).
+  await supervisor.reconcile({ brains: [{ id: "kept" }] });
+  expect(supervisor.status("orphan")).toBe("stopped");
+  expect(supervisor.status("kept")).toBe("running");
+  await supervisor.stop("kept");
+});

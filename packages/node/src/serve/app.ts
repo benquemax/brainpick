@@ -66,16 +66,22 @@ function spaHandler(uiDir: string | null) {
       res.type("html").send(FALLBACK_HTML);
       return;
     }
+    // sendFile always gets `root: uiDir`: without a root, express applies its
+    // dotfile policy to EVERY segment of the absolute path, and an installed
+    // engine can legitimately live under a dotted directory — AppImages mount
+    // at /tmp/.mount_* (tester-zero 2026-07-12: the packaged UI 404'd whole).
+    // With a root, only the path INSIDE the ui dir is policed, which is the
+    // hygiene actually intended.
     const path = decodePath(req.path.replace(/^\/+/, ""));
     if (path !== "") {
       const candidate = resolve(uiDir, path);
       const inside = candidate === uiDir || candidate.startsWith(uiDir + sep);
       if (inside && isFile(candidate)) {
-        res.sendFile(candidate);
+        res.sendFile(path, { root: uiDir });
         return;
       }
     }
-    res.sendFile(resolve(uiDir, "index.html")); // SPA fallback for client routes
+    res.sendFile("index.html", { root: uiDir }); // SPA fallback for client routes
   };
 }
 

@@ -183,6 +183,20 @@ export function advancePlay(
 }
 
 /**
+ * How alive the birth/mod flashes are, given how long ago the scrub last
+ * MOVED (wall-clock seconds). 1 while scrubbing/playing (and for a short hold
+ * after), easing to 0 once the viewer stands still — without this the flash,
+ * being a pure function of scrub position, freezes at full glow when you stop
+ * ON a commit, and a whole-wiki commit whites out the entire brain (found
+ * live, 2026-07-12). Mirrors the shaders' `1.0 - smoothstep(hold, hold +
+ * decay, elapsed)` exactly; pure, the caller owns the clock.
+ */
+export function flashRecency(elapsedSeconds: number, holdSeconds: number, decaySeconds: number): number {
+  const t = Math.min(Math.max((elapsedSeconds - holdSeconds) / decaySeconds, 0), 1);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
  * Parse a shareable moment from a URL query (spec: deep-link a moment):
  *   `?commit=<sha>` selects that commit (prefix match, either direction),
  *   `?t=<iso>`      selects the nearest commit index at/after that instant.

@@ -327,6 +327,12 @@ export const TIME_MACHINE = {
   fadeWindow: 0.4,
   /** Birth/modified flash lasts this many commit-indices — the firing pop as it appears. */
   flashWindow: 0.6,
+  /** Flashes stay live this many wall-clock seconds after the scrub stops moving… */
+  flashHold: 0.35,
+  /** …then ease out over this many more (time/timeline.ts flashRecency): standing ON
+   * a commit settles to true colors instead of freezing every touched node at full
+   * glow — a whole-wiki commit used to white out the entire brain. */
+  flashDecay: 1.2,
   /** Extra scale + additive glow at the peak of a birth flash. */
   birthPop: 0.5,
   birthGlow: 1.3,

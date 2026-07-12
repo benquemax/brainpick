@@ -27,6 +27,7 @@ import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 
+import { composeAgentPrompt } from "./agentPrompt";
 import { verifyDaemonToken } from "./daemonToken";
 import { cloneIfMissing } from "./gitsync";
 import { ensureBrainKey } from "./keys";
@@ -36,6 +37,7 @@ import {
   addBrain,
   brainBundleRoot,
   findBrain,
+  findBrainByRepo,
   isLocalHost,
   isLocalRepo,
   removeBrain,
@@ -160,6 +162,18 @@ export function createApi(options: ApiOptions): Express {
     }
     const brain = validation.brain;
 
+    // Idempotency by repo (tester-zero, 2026-07-12): re-adding the same repo
+    // must NOT mint a new id + port + serve — return the existing brain so a
+    // click-happy client converges instead of multiplying.
+    const already = findBrainByRepo(registry, brain.repo);
+    if (already !== null) {
+      res.status(409).json({
+        error: `${brain.repo} is already registered as brain '${already.id}' (port ${already.port})`,
+        brain: already,
+      });
+      return;
+    }
+
     if (isLocalRepo(brain.repo)) {
       if (!existsSync(brain.repo)) {
         res.status(400).json({ error: `local path does not exist: ${brain.repo}` });
@@ -189,22 +203,49 @@ export function createApi(options: ApiOptions): Express {
     }
 
     const fixList = henxelsFixList(root, env);
-    registryStore.set(addBrain(registry, brain));
+
+    // RE-READ the registry at mutation time (tester-zero, 2026-07-12): the
+    // snapshot from before clone/compile is SECONDS stale — writing through
+    // it let concurrent adds clobber each other's entries while their serve
+    // processes lived on (7 clicks → 1 registry entry + 13 processes). The
+    // get→add→set below has no awaits between, so it is atomic on the event
+    // loop. A racing duplicate of the SAME repo converges to the winner.
+    const fresh = registryStore.get();
+    const racedDuplicate = findBrainByRepo(fresh, brain.repo);
+    if (racedDuplicate !== null) {
+      res.status(409).json({
+        error: `${brain.repo} was registered concurrently as brain '${racedDuplicate.id}'`,
+        brain: racedDuplicate,
+      });
+      return;
+    }
+    registryStore.set(addBrain(fresh, brain));
     if (brain.enabled) supervisor.start(brain);
     ensureLanTokenForBrain(brain, env); // ready before the first status check, not just on-demand
 
-    res.status(201).json({ brain, bundle: bundleSummary(bundle), compiled, fix_list: fixList });
+    res.status(201).json({
+      brain,
+      bundle: bundleSummary(bundle),
+      compiled,
+      fix_list: fixList,
+      // non-null whenever the bundle isn't Brainpick-ready (not OKF, or the
+      // contract has findings): a paste-into-your-coding-agent hand-off.
+      agent_prompt: composeAgentPrompt({ root, bundle: bundleSummary(bundle), fixList }),
+    });
   });
 
   app.delete("/daemon/brains/:id", async (req, res) => {
-    const registry = registryStore.get();
-    const brain = findBrain(registry, req.params["id"]!);
+    const brain = findBrain(registryStore.get(), req.params["id"]!);
     if (brain === null) {
       res.status(404).json({ error: `no such brain: ${req.params["id"]}` });
       return;
     }
     await supervisor.stop(brain.id);
-    registryStore.set(removeBrain(registry, brain.id));
+    // Same stale-snapshot rule: re-read AFTER the await (an add may have
+    // landed while we were stopping) and reconcile so no process outlives
+    // its registry entry.
+    registryStore.set(removeBrain(registryStore.get(), brain.id));
+    await supervisor.reconcile(registryStore.get());
     res.status(204).end();
   });
 

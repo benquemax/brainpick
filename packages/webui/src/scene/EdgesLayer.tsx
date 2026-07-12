@@ -52,6 +52,7 @@ const FRAGMENT = /* glsl */ `
   uniform float uTime;
   uniform float uTimeTravel;  // TIME MACHINE: eased 0→1
   uniform float uScrub;       // animated fractional commit index
+  uniform float uScrubStamp;  // uTime when the scrub last moved (flash recency)
   varying vec3 vColor;
   varying float vT;
   varying float vFire;
@@ -91,9 +92,12 @@ const FRAGMENT = /* glsl */ `
       a *= p;
       float since = uScrub - vBirthIdx;
       if (vBirthIdx >= 0.0 && since >= 0.0 && since < ${f(TIME_MACHINE.flashWindow)}) {
+        // Same recency gate as the node flashes: the travelling pulse rides
+        // scrub MOVEMENT and eases out once the viewer stands on a commit.
+        float recency = 1.0 - smoothstep(${f(TIME_MACHINE.flashHold)}, ${f(TIME_MACHINE.flashHold + TIME_MACHINE.flashDecay)}, uTime - uScrubStamp);
         float age = since / ${f(TIME_MACHINE.flashWindow)};
         float d = abs(vT - age);
-        float pulse = smoothstep(${f(TIME_MACHINE.edgePulseWidth)}, 0.0, d) * (1.0 - age) * uTimeTravel * ${f(TIME_MACHINE.edgePulseGlow)};
+        float pulse = recency * smoothstep(${f(TIME_MACHINE.edgePulseWidth)}, 0.0, d) * (1.0 - age) * uTimeTravel * ${f(TIME_MACHINE.edgePulseGlow)};
         col += vColor * pulse;
         a += pulse;
       }
@@ -192,6 +196,7 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
           uTime: { value: 0 },
           uTimeTravel: { value: 0 },
           uScrub: { value: 0 },
+          uScrubStamp: { value: -1e9 }, // uTime when the scrub last moved (flash recency)
         },
         transparent: true,
         depthWrite: false,
@@ -268,6 +273,7 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
     material.uniforms.uTime!.value = runtime.now();
     material.uniforms.uTimeTravel!.value = runtime.timeTravelAmt;
     material.uniforms.uScrub!.value = runtime.scrub;
+    material.uniforms.uScrubStamp!.value = runtime.scrubStamp;
     const dimTarget = s.dimOthers ? 1 : 0;
     const dim = material.uniforms.uDim!;
     dim.value += (dimTarget - (dim.value as number)) * DIM_EASE;

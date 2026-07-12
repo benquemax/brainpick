@@ -181,8 +181,28 @@ test("POST /daemon/brains compiles a real local bundle and registers it", async 
   expect(result.body.bundle.kind).toBe("okf");
   expect(result.body.compiled.docs).toBe(2);
   expect(result.body.fix_list).toBeNull(); // no henxels.yaml in this fixture
+  expect(result.body.agent_prompt).toBeNull(); // clean OKF bundle — nothing to teach
 
   expect(registryStore.get().brains).toHaveLength(1);
+});
+
+test("POST /daemon/brains hands a not-yet-OKF folder an agent prompt (tester-zero)", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  // A plain folder of markdown — no okf_version, no typed frontmatter.
+  const dir = mkdtempSync(join(tmpdir(), "bp-desktop-plain-folder-"));
+  dirs.push(dir);
+  writeFileSync(join(dir, "notes.md"), "# Notes\n\nJust some notes.\n", "utf8");
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+  const result = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: dir, enabled: false }),
+  });
+  expect(result.status).toBe(201); // still added — the prompt is a hand-off, not a rejection
+  expect(result.body.bundle.kind).toBe("none");
+  expect(result.body.agent_prompt).toContain("okf_version");
+  expect(result.body.agent_prompt).toContain(dir);
 });
 
 test("POST /daemon/brains does not hang forever if `henxels check --all` hangs", async () => {
@@ -448,4 +468,60 @@ test("POST /daemon/keys mints an ssh-ed25519 public key and is idempotent", asyn
     body: JSON.stringify({ id: "a" }),
   });
   expect(second.body.public_key).toBe(first.body.public_key);
+});
+
+test("re-adding the same repo is idempotent: 409 with the EXISTING brain, no new serve", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const bundle = makeBundle();
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+
+  const first = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: bundle }),
+  });
+  expect(first.status).toBe(201);
+
+  // The tester-zero scenario: a click-happy duplicate (with a trailing slash
+  // for good measure) must converge on the existing brain, not multiply.
+  const dup = await call(base, "/daemon/brains", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: `${bundle}/` }),
+  });
+  expect(dup.status).toBe(409);
+  expect(dup.body.brain.id).toBe(first.body.brain.id);
+  expect(String(dup.body.error)).toContain("already registered");
+
+  const list = await call(base, "/daemon/brains", token);
+  expect(list.body.brains.length).toBe(1);
+});
+
+test("concurrent adds of DIFFERENT repos both survive (no lost registry updates)", async () => {
+  const env = isolatedEnv();
+  const token = ensureDaemonToken(env);
+  const a = makeBundle();
+  const b = makeBundle();
+  const { base } = await startApi(env, new Supervisor({ command: () => ({ node: "true", cliPath: "" }) }));
+
+  // Fire both adds in the same tick: before the fix, both handlers captured
+  // the same pre-compile registry snapshot and the second set() clobbered the
+  // first's entry (7 clicks → 1 entry + 13 orphan processes, live on Arch).
+  const [ra, rb] = await Promise.all([
+    call(base, "/daemon/brains", token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo: a }),
+    }),
+    call(base, "/daemon/brains", token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo: b }),
+    }),
+  ]);
+  expect(ra.status).toBe(201);
+  expect(rb.status).toBe(201);
+  const list = await call(base, "/daemon/brains", token);
+  expect(list.body.brains.length).toBe(2);
 });

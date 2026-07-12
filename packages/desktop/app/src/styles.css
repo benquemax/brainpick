@@ -186,8 +186,15 @@ label[for] {
 }
 
 .wizard-error {
-  color: #ff6b7a;
-  font-size: 0.85rem;
+  /* Unmissable (tester-zero: a subtle line read as "nothing happened") —
+   * a failure the user can't see is a failure that gets clicked seven times. */
+  color: #ff8a95;
+  font-size: 0.9rem;
+  background: rgba(255, 107, 122, 0.12);
+  border: 1px solid rgba(255, 107, 122, 0.45);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.5rem 0;
 }
 
 .wizard-actions {

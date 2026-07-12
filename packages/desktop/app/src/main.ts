@@ -26,19 +26,21 @@ function brainCard(brain: BrainRecord): HTMLElement {
   const card = document.createElement("article");
   card.className = "brain-card";
   card.dataset["brainId"] = brain.id;
+  // The web URL lives on the card FACE (tester-zero: "how would I know
+  // where the brain exactly is?" — it was buried behind "MCP snippet",
+  // a button no human looking for a browser link would press).
   card.innerHTML = `
     <header>
       <h2>${brain.id}</h2>
       <span class="status-pill status-pill--${brain.process_status}">${brain.process_status}</span>
     </header>
     <p class="brain-repo">${brain.repo}${brain.bundle_path ? `/${brain.bundle_path}` : ""}</p>
+    <div class="snippet-row">
+      <code class="mcp-snippet web-url-value">…</code>
+      <button type="button" class="copy-web-url">Copy</button>
+      <button type="button" class="open-brain">Open brain</button>
+    </div>
     <div class="brain-details" hidden>
-      <p class="web-url"></p>
-      <div class="snippet-row">
-        <code class="web-url-value"></code>
-        <button type="button" class="copy-web-url">Copy</button>
-        <button type="button" class="open-brain">Open brain</button>
-      </div>
       <p class="mcp-url"></p>
       <div class="snippet-row">
         <code class="mcp-snippet"></code>
@@ -52,32 +54,34 @@ function brainCard(brain: BrainRecord): HTMLElement {
   `;
 
   const details = card.querySelector<HTMLElement>(".brain-details")!;
-  const webUrlLabelEl = card.querySelector<HTMLElement>(".web-url")!;
   const webUrlValueEl = card.querySelector<HTMLElement>(".web-url-value")!;
   const mcpUrlEl = card.querySelector<HTMLElement>(".mcp-url")!;
-  const snippetEl = card.querySelector<HTMLElement>(".mcp-snippet")!;
+  const snippetEl = card.querySelector<HTMLElement>(".mcp-snippet:not(.web-url-value)")!;
   let webUrlLocal = "";
 
+  // Populate eagerly — the whole point is seeing the address without a click.
+  void (async () => {
+    try {
+      const status = await brainStatus(brain.id);
+      const webUrlLan = webUrl(status.mcp_url);
+      webUrlLocal = webUrl(status.mcp_url_local);
+      webUrlValueEl.textContent = webUrlLan !== webUrlLocal ? `${webUrlLan} (local: ${webUrlLocal})` : webUrlLan;
+      mcpUrlEl.textContent =
+        status.mcp_url !== status.mcp_url_local
+          ? `${status.mcp_url} (local: ${status.mcp_url_local})`
+          : status.mcp_url;
+      snippetEl.textContent = status.claude_mcp_add;
+    } catch {
+      webUrlValueEl.textContent = "not answering yet"; // next 15s refresh retries
+    }
+  })();
+
   card.querySelector(".reveal-details")!.addEventListener("click", () => {
-    void (async () => {
-      if (details.hidden) {
-        const status = await brainStatus(brain.id);
-        const webUrlLan = webUrl(status.mcp_url);
-        webUrlLocal = webUrl(status.mcp_url_local);
-        webUrlLabelEl.textContent = "Open in your browser:";
-        webUrlValueEl.textContent = webUrlLan !== webUrlLocal ? `${webUrlLan} (local: ${webUrlLocal})` : webUrlLan;
-        mcpUrlEl.textContent =
-          status.mcp_url !== status.mcp_url_local
-            ? `${status.mcp_url} (local: ${status.mcp_url_local})`
-            : status.mcp_url;
-        snippetEl.textContent = status.claude_mcp_add;
-      }
-      details.hidden = !details.hidden;
-    })();
+    details.hidden = !details.hidden;
   });
 
   card.querySelector(".copy-web-url")!.addEventListener("click", () => {
-    void navigator.clipboard.writeText(webUrlValueEl.textContent ?? "");
+    void navigator.clipboard.writeText(webUrlLocal);
   });
 
   card.querySelector(".open-brain")!.addEventListener("click", () => {

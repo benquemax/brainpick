@@ -128,6 +128,17 @@ export class Supervisor {
     await Promise.all([...this.managed.keys()].map((id) => this.stop(id)));
   }
 
+  /** No process outlives its registry entry (tester-zero, 2026-07-12): stop
+   * every managed brain whose id is no longer registered. Called after
+   * registry mutations so a lost/removed entry can never leave an orphaned
+   * serve fighting over a port. */
+  async reconcile(registry: { brains: Array<{ id: string }> }): Promise<void> {
+    const known = new Set(registry.brains.map((b) => b.id));
+    await Promise.all(
+      [...this.managed.keys()].filter((id) => !known.has(id)).map((id) => this.stop(id)),
+    );
+  }
+
   status(id: string): BrainStatus | undefined {
     return this.managed.get(id)?.status;
   }

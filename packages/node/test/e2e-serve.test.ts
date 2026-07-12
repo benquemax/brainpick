@@ -4,7 +4,7 @@
  * socket is the honest test of a serve layer (the twin of test_e2e_serve.py).
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
@@ -443,6 +443,24 @@ test("fallback page when ui unbuilt", async () => {
   const page = await fetch(base + "/");
   expect(page.status).toBe(200);
   expect(await page.text()).toContain("web UI");
+});
+
+test("ui serves from a dotted install path (AppImages mount at /tmp/.mount_*)", async () => {
+  // tester-zero 2026-07-12: express sendFile WITHOUT a root option applies
+  // its dotfile policy to EVERY segment of the absolute path — a `.mount_*`
+  // segment anywhere above the ui dir 404s the whole UI. Dev checkouts
+  // never have one; a mounted AppImage always does.
+  const dotted = join(tempDir(), ".mount_test", "static");
+  mkdirSync(dotted, { recursive: true });
+  writeFileSync(join(dotted, "index.html"), "<!doctype html><title>dotted</title>", "utf8");
+  mkdirSync(join(dotted, "assets"), { recursive: true });
+  writeFileSync(join(dotted, "assets", "app.js"), "// js", "utf8");
+  const { base } = await serve(await makeApp(copyBundle(), {}, { uiDir: dotted }));
+  for (const path of ["/", "/assets/app.js", "/graph/some-deep-link"]) {
+    const page = await fetch(base + path);
+    expect(page.status, `GET ${path}`).toBe(200);
+    await page.text();
+  }
 });
 
 test("mcp route mounted and sse optional", async () => {
