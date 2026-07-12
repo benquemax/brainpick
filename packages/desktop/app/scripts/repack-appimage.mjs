@@ -125,19 +125,27 @@ function main() {
 
   let tool = process.argv[3] ?? process.env["APPIMAGETOOL"] ?? "";
   if (!tool) {
-    const cache = join(workDir, ".appimagetool");
+    // Cache OUTSIDE the bundle output dir: tauri's bundler wipes that dir on
+    // every build, which forced a fresh download per repack (and one flaky
+    // curl left an UNREPACKED, lib-poisoned AppImage behind — 2026-07-12).
+    const cache = join(homedir(), ".cache", "brainpick");
     tool = join(cache, "appimagetool-x86_64.AppImage");
     if (!existsSync(tool)) {
       console.log("→ downloading appimagetool (continuous)");
       mkdirSync(cache, { recursive: true });
-      sh("curl", ["-fsSL", "-o", tool, APPIMAGETOOL_URL]);
+      sh("curl", ["-fsSL", "--retry", "3", "--retry-delay", "2", "-o", tool, APPIMAGETOOL_URL]);
       chmodSync(tool, 0o755);
     }
   }
 
   const repacked = `${appimage}.repacked`;
   console.log("→ repacking");
-  sh(tool, [extractDir, repacked], {
+  // APPIMAGETOOL_RUNTIME: a local type2 runtime file skips appimagetool's own
+  // network fetch — offline/flaky-network builds keep working (2026-07-12:
+  // one dead GitHub CDN moment left an unrepacked AppImage on the machine).
+  const runtime = process.env["APPIMAGETOOL_RUNTIME"];
+  const args = runtime ? ["--runtime-file", runtime, extractDir, repacked] : [extractDir, repacked];
+  sh(tool, args, {
     env: { ...process.env, ARCH: "x86_64", APPIMAGE_EXTRACT_AND_RUN: "1" },
   });
   renameSync(repacked, appimage);
