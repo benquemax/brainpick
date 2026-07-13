@@ -596,13 +596,26 @@ button {
 
 .doc-version-banner {
   margin-top: 6px;
-  padding: 4px 8px;
+  padding: 5px 8px;
   font-family: var(--mono);
   font-size: 10px;
-  color: rgb(255, 190, 100);
   border: 1px solid rgba(255, 190, 100, 0.28);
   border-radius: 4px;
   background: rgba(255, 190, 100, 0.07);
+}
+
+.doc-version-banner-head {
+  color: rgb(255, 190, 100);
+  letter-spacing: 0.03em;
+}
+
+.doc-version-banner-msg {
+  margin-top: 2px;
+  color: var(--text-dim);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chips {

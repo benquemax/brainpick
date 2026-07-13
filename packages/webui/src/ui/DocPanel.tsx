@@ -215,8 +215,13 @@ export function DocPanel() {
           </div>
         )}
         {timeTravel && currentVersion !== null && (
+          // Not an error (Tom read the first draft — a bare "date · message ·
+          // read-only" strip — as one): say plainly WHAT this state is.
           <div className="doc-version-banner" title={currentVersion.sha}>
-            {currentVersion.date.slice(0, 10)} · {currentVersion.message} · read-only
+            <div className="doc-version-banner-head">
+              ⏱ time machine — version from {currentVersion.date.slice(0, 10)} · read-only
+            </div>
+            <div className="doc-version-banner-msg">“{currentVersion.message}”</div>
           </div>
         )}
         <div className="chips">

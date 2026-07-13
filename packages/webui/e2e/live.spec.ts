@@ -1092,6 +1092,9 @@ test.describe('the Time Machine', () => {
     await page.waitForFunction(() => window.__bp_store.getState().timeTravel === true);
     expect(await page.evaluate(() => window.__bp_store.getState().scrubIndex)).toBe(1);
     await expect(page.locator('.doc-version-label')).toHaveText('v2/2');
+    // The banner must read as a TIME MACHINE state, never as an error (Tom
+    // mistook the first bare "date · message" draft for one).
+    await expect(page.locator('.doc-version-banner')).toContainText('time machine — version from');
     await expect(page.locator('.doc-version-banner')).toContainText('the worlds');
     await expect(page.locator('.doc-version-banner')).toContainText('read-only');
     await expect(page.locator('.doc-body')).toContainText('ancient sun text from bbbbbbb');
