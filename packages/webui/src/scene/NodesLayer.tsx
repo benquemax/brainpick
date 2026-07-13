@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
-import { focusIndex, lensAllowsInteraction, nodeHighlightLevel } from './emphasis';
+import { focusIndex, lensAllowsInteraction, nodeHighlightLevel, selectionRenderId } from './emphasis';
 import { BRAIN, DIM_EASE, glslFloat as f, GPU_BUDGET, NODE_GLOW, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
@@ -352,19 +352,21 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
     // (or, when nothing is hovered, the selected) node is the FOCUS: its neighbours
     // lift so the local neighbourhood reads instantly on hover (scene/emphasis).
     const s = runtime.store.getState();
+    // A clicked ENTITY is a selection too — resolve both kinds to one render id.
+    const selId = selectionRenderId(s.selection, s.entitySelection);
     const stamp = tracked.current.stamp;
     if (
       !stamp ||
-      stamp.selection !== s.selection ||
+      stamp.selection !== selId ||
       stamp.hovered !== s.hovered ||
       stamp.highlight !== s.highlight ||
       stamp.dim !== s.dimOthers
     ) {
-      tracked.current.stamp = { selection: s.selection, hovered: s.hovered, highlight: s.highlight, dim: s.dimOthers };
+      tracked.current.stamp = { selection: selId, hovered: s.hovered, highlight: s.highlight, dim: s.dimOthers };
       const hl = geo.getAttribute('iHighlight') as THREE.InstancedBufferAttribute;
       const hlArr = hl.array as Float32Array;
       const hoveredIdx = s.hovered !== null ? runtime.index.get(s.hovered) ?? -1 : -1;
-      const selectionIdx = s.selection !== null ? runtime.index.get(s.selection) ?? -1 : -1;
+      const selectionIdx = selId !== null ? runtime.index.get(selId) ?? -1 : -1;
       // A lens-hidden hover never becomes the focus (and a selection anchors it).
       const hoveredHidden = s.dimOthers && s.hovered !== null && !s.highlight.has(s.hovered);
       const focus = focusIndex(hoveredIdx, selectionIdx, hoveredHidden);
@@ -372,7 +374,7 @@ export function NodesLayer({ runtime }: { runtime: GraphRuntime }) {
       for (let i = 0; i < runtime.liveCount; i++) {
         const id = runtime.ids[i] as string;
         const isNeighbor = neighborSet !== null && neighborSet.has(i);
-        const isSelection = s.selection === id;
+        const isSelection = selId === id;
         hlArr[i] = nodeHighlightLevel({
           isSelection,
           isHovered: s.hovered === id,

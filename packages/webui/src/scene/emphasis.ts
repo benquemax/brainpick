@@ -10,7 +10,20 @@
  * ("dim others") governs everything: hidden nodes don't respond to hover, don't
  * lift as neighbours, don't get labels, and their edges fade to a whisper.
  */
+import { entityRenderId } from '../graph/entities';
 import { EMPHASIS } from './tuning';
+
+/**
+ * The render-graph id of the CURRENT selection, whichever kind it is: an
+ * entity selection (its own store field) renders as its namespaced entity
+ * node, a doc selection as itself. Every layer that anchors on "the
+ * selection" — emphasis, edges, labels, picking — must resolve through this,
+ * or a clicked entity anchors nothing and its connections only light on
+ * hover (Tom, 2026-07-13).
+ */
+export function selectionRenderId(selection: string | null, entitySelection: string | null): string | null {
+  return entitySelection !== null ? entityRenderId(entitySelection) : selection;
+}
 
 /**
  * The node the local neighbourhood lights around. A selection ANCHORS the

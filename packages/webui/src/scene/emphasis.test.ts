@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EMPHASIS } from './tuning';
-import { edgeLensDim, focusIndex, lensAllowsInteraction, nodeHighlightLevel } from './emphasis';
+import { entityRenderId } from '../graph/entities';
+import { edgeLensDim, focusIndex, lensAllowsInteraction, nodeHighlightLevel, selectionRenderId } from './emphasis';
 
 describe('focusIndex', () => {
   // Tom (2026-07-12): with a node SELECTED, hovering must not steal the
@@ -59,6 +60,22 @@ describe('nodeHighlightLevel', () => {
     expect(EMPHASIS.hovered).toBeGreaterThan(EMPHASIS.search);
     expect(EMPHASIS.search).toBeGreaterThan(EMPHASIS.neighbor);
     expect(EMPHASIS.neighbor).toBeGreaterThan(0);
+  });
+});
+
+describe('selectionRenderId', () => {
+  // Tom (2026-07-13): "when I have clicked an entity, it should show the
+  // connection lines even when it is not hovered" — an entity selection
+  // lives in its own store field, and the focus chain never saw it, so a
+  // selected entity anchored nothing. One resolver for every layer.
+  it('an entity selection resolves to its render node; a doc selection to itself', () => {
+    expect(selectionRenderId('kuu.md', null)).toBe('kuu.md');
+    expect(selectionRenderId(null, 'agents')).toBe(entityRenderId('agents'));
+    expect(selectionRenderId(null, null)).toBeNull();
+  });
+
+  it('an entity selection wins when both are somehow set (it is the one on screen)', () => {
+    expect(selectionRenderId('kuu.md', 'agents')).toBe(entityRenderId('agents'));
   });
 });
 

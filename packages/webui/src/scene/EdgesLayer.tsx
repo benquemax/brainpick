@@ -10,7 +10,7 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
-import { edgeLensDim, focusIndex } from './emphasis';
+import { edgeLensDim, focusIndex, selectionRenderId } from './emphasis';
 import { BRAIN, DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
@@ -257,12 +257,14 @@ export function EdgesLayer({ runtime }: { runtime: GraphRuntime }) {
     const geo = tracked.current.geometry;
     if (!geo) return;
 
-    // Light the FOCUS node's incident edges (the selection anchors; hover explores
-    // only when nothing is selected, and a lens-hidden hover pops nothing — see
-    // scene/emphasis). Only rewritten when the focus changes — not per-frame work.
+    // Light the FOCUS node's incident edges (the selection anchors — a clicked
+    // ENTITY included; hover explores only when nothing is selected, and a
+    // lens-hidden hover pops nothing — see scene/emphasis). Only rewritten when
+    // the focus changes — not per-frame work.
     const st = runtime.store.getState();
+    const selId = selectionRenderId(st.selection, st.entitySelection);
     const hoveredIdx = st.hovered !== null ? runtime.index.get(st.hovered) ?? -1 : -1;
-    const selectionIdx = st.selection !== null ? runtime.index.get(st.selection) ?? -1 : -1;
+    const selectionIdx = selId !== null ? runtime.index.get(selId) ?? -1 : -1;
     const hoveredHidden = st.dimOthers && st.hovered !== null && !st.highlight.has(st.hovered);
     const focus = focusIndex(hoveredIdx, selectionIdx, hoveredHidden);
     if (tracked.current.focus !== focus) {

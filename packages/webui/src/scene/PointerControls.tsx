@@ -13,7 +13,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect } from 'react';
 import * as THREE from 'three';
 import { pickNearest, pickNearest3D, presentAtScrub, type Projected } from './pick';
-import { focusIndex, lensAllowsInteraction } from './emphasis';
+import { focusIndex, lensAllowsInteraction, selectionRenderId } from './emphasis';
 import { dirOfClusterId, isClusterId } from '../state/budget';
 import { bareEntityId, isEntityRenderId } from '../graph/entities';
 import { morphedWorldOf, type GraphRuntime } from './runtime';
@@ -55,8 +55,9 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
       const st = runtime.store.getState();
       const traveling = runtime.timeTravelAmt > 0.5;
       if (!st.dimOthers && !traveling) return undefined;
+      const selId = selectionRenderId(st.selection, st.entitySelection);
       const hoveredIdx = st.hovered !== null ? runtime.index.get(st.hovered) ?? -1 : -1;
-      const selectionIdx = st.selection !== null ? runtime.index.get(st.selection) ?? -1 : -1;
+      const selectionIdx = selId !== null ? runtime.index.get(selId) ?? -1 : -1;
       const hoveredHidden = st.dimOthers && st.hovered !== null && !st.highlight.has(st.hovered);
       const focus = focusIndex(hoveredIdx, selectionIdx, hoveredHidden);
       const neighborSet = st.dimOthers && focus >= 0 ? new Set(runtime.neighbors[focus] ?? []) : null;
@@ -68,7 +69,7 @@ export function PointerControls({ runtime }: { runtime: GraphRuntime }) {
         return lensAllowsInteraction({
           dimOthers: st.dimOthers,
           inHighlight: st.highlight.has(id),
-          isSelection: st.selection === id,
+          isSelection: selId === id,
           isFocusNeighbor: neighborSet !== null && neighborSet.has(i),
         });
       };

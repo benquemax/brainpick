@@ -18,8 +18,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { rgbToCss } from './colors';
-import { focusIndex, lensAllowsInteraction } from './emphasis';
-import { entityRenderId } from '../graph/entities';
+import { focusIndex, lensAllowsInteraction, selectionRenderId } from './emphasis';
 import { isBehindBrainCenter, projectLabelPointMat } from './labelProjection';
 import { labelBudget } from './semanticZoom';
 import { labelAdmits, labelCandidateOrder, LABEL_STICKY_MARGIN } from './labelHysteresis';
@@ -102,7 +101,7 @@ export function LabelsLayer({ runtime, container }: { runtime: GraphRuntime; con
         );
 
     // Selection (doc OR entity) and hover are always labeled, then by degree.
-    const focusId = ui.entitySelection !== null ? entityRenderId(ui.entitySelection) : ui.selection;
+    const focusId = selectionRenderId(ui.selection, ui.entitySelection);
     const forced: number[] = [];
     for (const id of [focusId, ui.hovered]) {
       if (id !== null) {
