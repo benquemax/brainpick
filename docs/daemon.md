@@ -4,7 +4,7 @@ about: thing
 title: The daemon
 description: brainpickd — the service that owns every brain's git sync, supervision, deploy keys, LAN reachability and users behind one small control API; every face (desktop app, browser, CLI) is a thin client of it.
 tags: [desktop, engine]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-07-13T22:30:00Z
 ---
 
 # The daemon
@@ -84,6 +84,14 @@ distinct from any brain's own tokens, generated on first run and shown by
 everything; it resumes supervising every enabled brain already in the
 registry, so a restarted daemon never loses what was running before it went
 down.
+
+On a truly fresh install — when no `brains.toml` exists yet — the daemon
+seeds one **demo brain**: brainpick's own docs wiki, cloned keyless over
+HTTPS from the public repo, so [onboarding](onboarding.md) lands on a real,
+link-rich, spinnable brain with zero setup (principle 10). Writing the
+registry makes this a one-time event — removing the demo (which rewrites the
+file) is never undone. Headless and scripted setups opt out with
+`BRAINPICK_NO_DEMO=1`.
 
 ## Where it fits
 

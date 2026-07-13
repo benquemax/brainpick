@@ -3,10 +3,13 @@ import * as path from 'path';
 
 export const content = `## Status
 
-**Pre-alpha.** The vision is committed in
+**Early.** The full stack is built and the desktop app is downloadable from
+[Releases](https://github.com/benquemax/brainpick/releases) for early testers.
+The vision is committed in
 [\`_vision.md\`](https://github.com/benquemax/brainpick/blob/main/_vision.md);
-the milestones (Ensilento → Kaksoisveto → Hologrammi) live in the parking
-lot. Nothing on PyPI or npm yet — the names are reserved for v0.1.
+the milestones (Ensilento → Kaksoisveto → Hologrammi) landed. The \`brainpick\`
+pip and npm packages are not published yet — the names are reserved for the
+v0.1 release.
 `;
 
 export const validate = async () => {

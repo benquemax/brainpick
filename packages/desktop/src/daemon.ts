@@ -10,7 +10,7 @@ import { createApi } from "./api";
 import { ensureDaemonToken } from "./daemonToken";
 import { cloneIfMissing, pullOnce } from "./gitsync";
 import type { Env } from "./paths";
-import { createRegistryStore, type RegistryStore } from "./registry";
+import { createRegistryStore, seedDemoBrainIfFirstRun, type RegistryStore } from "./registry";
 import { Supervisor } from "./supervisor";
 import { ensureLanTokenForBrain, loadUsers } from "./users";
 
@@ -39,6 +39,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const token = ensureDaemonToken(env);
   loadUsers(env); // bootstraps users.toml (the default passwordless "local" user) if absent
 
+  seedDemoBrainIfFirstRun(env); // first run only: a functional demo brain (brainpick's own docs wiki)
   const registryStore = createRegistryStore(env);
   const supervisor = new Supervisor({ env });
 

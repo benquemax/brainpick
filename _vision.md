@@ -37,7 +37,7 @@ to everyone who needs it:
 | T0 | grep/glob over the files | nothing |
 | T1 | generated `index.md`, link graph, backlinks, tags | nothing (deterministic) |
 | T2 | vector search over chunks | an embedding model |
-| T3 | entity/relation graph (LightRAG behind an adapter) | a small LLM |
+| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing by default; a small LLM for richer extraction |
 
 T1 is always on and rebuilds in under a second. T2 and T3 are optional
 modules; every tier degrades gracefully to the one below. The

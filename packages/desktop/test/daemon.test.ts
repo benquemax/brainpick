@@ -2,7 +2,7 @@
  * users, resumes supervising every enabled brain on startup, starts the git
  * poll loop, and serves the control API — the thing `brainpickd start`
  * actually runs. */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,7 +10,7 @@ import { afterEach, expect, test } from "vitest";
 
 import { startDaemon } from "../src/daemon";
 import { loadUsers } from "../src/users";
-import { addBrain, createRegistryStore } from "../src/registry";
+import { addBrain, clonedRepoDir, createRegistryStore, DEMO_BRAIN, loadRegistry } from "../src/registry";
 import type { Env } from "../src/paths";
 
 const dirs: string[] = [];
@@ -25,7 +25,9 @@ function isolatedEnv(): Env {
   const configDir = mkdtempSync(join(tmpdir(), "bp-desktop-daemon-config-"));
   const dataDir = mkdtempSync(join(tmpdir(), "bp-desktop-daemon-data-"));
   dirs.push(configDir, dataDir);
-  return { BRAINPICK_DAEMON_CONFIG_DIR: configDir, BRAINPICK_DAEMON_DATA_DIR: dataDir };
+  // Hermetic by default: suppress the first-run demo seed so tests never reach
+  // out to clone the public repo. The one seed test opts back in explicitly.
+  return { BRAINPICK_DAEMON_CONFIG_DIR: configDir, BRAINPICK_DAEMON_DATA_DIR: dataDir, BRAINPICK_NO_DEMO: "1" };
 }
 
 function makeBundle(): string {
@@ -57,6 +59,23 @@ test("startDaemon bootstraps users.toml on first run", async () => {
   const users = loadUsers(env);
   expect(users.users).toHaveLength(1);
   expect(users.users[0]!.name).toBe("local");
+});
+
+test("startDaemon seeds the demo brain on a truly fresh install", async () => {
+  const env = { ...isolatedEnv(), BRAINPICK_NO_DEMO: undefined }; // opt back INTO the seed
+  // Pre-stage the clone so the supervise loop never touches the network: a
+  // ready `.git` makes cloneIfMissing skip, and a minimal docs bundle serves.
+  const cloneDir = clonedRepoDir(DEMO_BRAIN, env);
+  mkdirSync(join(cloneDir, ".git"), { recursive: true });
+  mkdirSync(join(cloneDir, "docs"), { recursive: true });
+  writeFileSync(join(cloneDir, "docs", "index.md"), '---\nokf_version: "0.1"\n---\n\n# Demo\n', "utf8");
+
+  const daemon = await startDaemon({ env, port: 0 });
+  stops.push(daemon.stop);
+  // The registry now carries the demo brain (and startup persisted it, so it
+  // is a one-time event — a subsequent removal would stick). Supervising the
+  // brain is covered by the resume test; here we only prove the seed wiring.
+  expect(loadRegistry(env).brains.map((b) => b.id)).toContain(DEMO_BRAIN.id);
 });
 
 test("startDaemon resumes supervising every enabled brain already in the registry", async () => {

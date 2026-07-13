@@ -6,7 +6,7 @@
  * atomic and canonical, so `git diff`-ing a hand edit stays readable. */
 import { generateBundleId } from "brainpick";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
@@ -79,6 +79,31 @@ export function loadRegistry(env: Env = process.env): Registry {
   const raw = (data as Record<string, unknown>)["brain"];
   const brains = Array.isArray(raw) ? raw.filter(isBrainRecord) : [];
   return { brains };
+}
+
+/** The first-run demo: brainpick's own docs wiki, served straight from the
+ * public repo (a keyless HTTPS clone — no deploy key needed) so a fresh
+ * install shows a real, link-rich, entity-bearing brain immediately, git
+ * history and all (the time machine works out of the box). "Onboarding is
+ * magic, not a manual" (principle 10). */
+export const DEMO_BRAIN: BrainRecord = {
+  id: "demo-brainpick-wiki",
+  repo: "https://github.com/benquemax/brainpick.git",
+  bundle_path: "docs",
+  port: DEFAULT_PORT_BASE,
+  enabled: true,
+  host: DEFAULT_HOST,
+};
+
+/** Seed the demo brain ONLY on a truly fresh install — when no `brains.toml`
+ * exists yet. Writing the file makes this a one-time event: a user who
+ * removes the demo (which rewrites the file) is never re-seeded. Opt out with
+ * `BRAINPICK_NO_DEMO` for headless/scripted setups. Returns whether it seeded. */
+export function seedDemoBrainIfFirstRun(env: Env = process.env): boolean {
+  if (env["BRAINPICK_NO_DEMO"]) return false;
+  if (existsSync(registryPath(env))) return false; // an emptied registry is still a file — respect it
+  saveRegistry({ brains: [DEMO_BRAIN] }, env);
+  return true;
 }
 
 /** Atomic write (tmp file + rename) so a crash mid-write never corrupts the

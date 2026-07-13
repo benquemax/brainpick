@@ -11,12 +11,14 @@ import {
   addBrain,
   brainBundleRoot,
   clonedRepoDir,
+  DEMO_BRAIN,
   isLocalHost,
   isLocalRepo,
   loadRegistry,
   registryPath,
   removeBrain,
   saveRegistry,
+  seedDemoBrainIfFirstRun,
   validateBrainInput,
   type Registry,
 } from "../src/registry";
@@ -40,6 +42,48 @@ test("registryPath is brains.toml under the config dir", () => {
 test("loadRegistry is empty when absent", () => {
   const configDir = tempConfigDir();
   expect(loadRegistry({ BRAINPICK_DAEMON_CONFIG_DIR: configDir })).toEqual({ brains: [] });
+});
+
+// -- first-run demo brain (Tom, 2026-07-13: "a default brain — this repo's
+//    wiki — so everyone sees a functional brain from the beginning") ---------
+
+test("seedDemoBrainIfFirstRun seeds the brainpick docs wiki on a truly fresh install", () => {
+  const configDir = tempConfigDir();
+  const env = { BRAINPICK_DAEMON_CONFIG_DIR: configDir };
+  expect(seedDemoBrainIfFirstRun(env)).toBe(true);
+  expect(loadRegistry(env)).toEqual({ brains: [DEMO_BRAIN] });
+  // the demo is a public git URL + a bundle subfolder (clonable keyless)
+  expect(DEMO_BRAIN.repo).toMatch(/^https:\/\/github\.com\/.*brainpick(\.git)?$/);
+  expect(DEMO_BRAIN.bundle_path).toBe("docs");
+  expect(DEMO_BRAIN.enabled).toBe(true);
+});
+
+test("seedDemoBrainIfFirstRun is a ONE-TIME event — a removed demo stays removed", () => {
+  const configDir = tempConfigDir();
+  const env = { BRAINPICK_DAEMON_CONFIG_DIR: configDir };
+  expect(seedDemoBrainIfFirstRun(env)).toBe(true);
+  // the user removes it → the registry file now exists but is empty
+  saveRegistry({ brains: [] }, env);
+  expect(seedDemoBrainIfFirstRun(env)).toBe(false); // a file exists → never re-seed
+  expect(loadRegistry(env)).toEqual({ brains: [] });
+});
+
+test("seedDemoBrainIfFirstRun never touches an existing registry", () => {
+  const configDir = tempConfigDir();
+  const env = { BRAINPICK_DAEMON_CONFIG_DIR: configDir };
+  const mine: Registry = {
+    brains: [{ id: "mine", repo: "/home/x/wiki", bundle_path: "", port: 4750, enabled: true, host: "127.0.0.1" }],
+  };
+  saveRegistry(mine, env);
+  expect(seedDemoBrainIfFirstRun(env)).toBe(false);
+  expect(loadRegistry(env)).toEqual(mine);
+});
+
+test("BRAINPICK_NO_DEMO opts out of the seed (headless/scripted setups)", () => {
+  const configDir = tempConfigDir();
+  const env = { BRAINPICK_DAEMON_CONFIG_DIR: configDir, BRAINPICK_NO_DEMO: "1" };
+  expect(seedDemoBrainIfFirstRun(env)).toBe(false);
+  expect(loadRegistry(env)).toEqual({ brains: [] });
 });
 
 test("save then load round-trips", () => {

@@ -70,42 +70,90 @@ holographic-brain web UI that updates live while agents write).
 | T0 | grep/glob over the files | nothing |
 | T1 | generated `index.md`, link graph, backlinks, tags | nothing (deterministic) |
 | T2 | vector search over chunks | an embedding model |
-| T3 | entity/relation graph (LightRAG behind an adapter) | a small LLM |
+| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing by default; a small LLM for richer extraction |
 
 
-## Quick start (pre-release)
+## Quick start
 
-Nothing is on PyPI or npm yet, but the engines already work from a checkout:
+### 1 · Install the app and see a brain immediately
+
+The fastest path is the desktop app — a single file that runs the brainpick
+service and shows the holographic brain. Grab the installer for your OS from
+the [latest release](https://github.com/benquemax/brainpick/releases):
+
+- **Linux** — `Brainpick_*.AppImage` (`chmod +x`, then run; needs system
+  `webkit2gtk-4.1`, the standard Tauri Linux prerequisite).
+- **macOS** — `Brainpick_*.dmg` (Apple Silicon; first launch: right-click →
+  Open, since the build is unsigned).
+- **Windows** — `Brainpick_*.msi` (SmartScreen → More info → Run anyway).
+
+On first launch it seeds a **demo brain** — this repository's own docs wiki,
+cloned from GitHub — so you land on a real, link-rich, spinnable brain with
+zero setup. Remove it any time; it never comes back.
+
+> Prefer the terminal, a NAS, or a scriptable setup? The same service runs
+> headless as `brainpickd start` (each brain serves its own port; other
+> machines need only a browser). Set `BRAINPICK_NO_DEMO=1` to skip the demo
+> seed.
+
+### 2 · Start a brand-new brain (empty GitHub repo + henxels)
+
+[henxels](https://github.com/benquemax/henxels) scaffolds a governed OKF wiki
+and installs the contract that keeps every future write true to the format:
 
 ```bash
-cd packages/python
-uv run brainpick init --root /path/to/your/okf-bundle    # detect, config, compile
-uv run brainpick serve --root /path/to/bundle --open     # the living graph
-uv run brainpick compile --check-fresh --root /path/to/bundle   # commit gate
+# create an empty repo on GitHub, then:
+git clone git@github.com:you/my-brain.git && cd my-brain
+henxels init --template okf-llm-wiki --wiki-dir docs   # scaffold + govern docs/
+git add -A && git commit -m "scaffold brain" && git push
 ```
 
-Same brain, no Python — the native Node engine:
+Now **Add a brain** in the app (paste the repo URL — a public repo clones as
+is; a private one gets a one-click deploy key), or point a bare engine at it:
+`brainpick serve --root docs --open`.
+
+### 3 · Migrate an existing repo (henxels does the driving)
+
+Any folder of markdown can become a governed brain. `henxels` installs the
+contract and its `check` output *is* your migration checklist — instructive,
+one fix at a time:
 
 ```bash
-npm run build -w packages/node
-node packages/node/dist/cli.js init --root /path/to/bundle
-node packages/node/dist/cli.js serve --root /path/to/bundle --open
+cd your-existing-repo
+henxels init                 # install the contract
+henxels check --all          # the fix-list = exactly what to fix, and why
+# work the list until it is green (an agent can do this — see below)
+brainpick serve --root docs --open
 ```
 
-Once v0.1 ships, first contact becomes:
+Don't want to work the list by hand? Add the folder in the app anyway: for a
+not-yet-OKF bundle the wizard hands you a **paste-ready prompt** that steers
+your coding agent to make it Brainpick-compatible.
+
+### Running the engines from a checkout
+
+The `brainpick` pip/npm packages are not published yet, but both engines
+already work from a clone — Python (the reference) and native Node, no Python
+required:
 
 ```bash
-uvx brainpick init     # or: npx brainpick init — native in both runtimes
-brainpick serve --open # the living graph, zero API keys
+cd packages/python && uv run brainpick serve --root ../../docs --open   # Python
+npm run build -w packages/node && node packages/node/dist/cli.js serve --root docs --open   # Node
 ```
+
+Once they publish, first contact collapses to `uvx brainpick serve --open`
+(or `npx brainpick serve` — pip and npm are native peers).
 
 
 ## Status
 
-**Pre-alpha.** The vision is committed in
+**Early.** The full stack is built and the desktop app is downloadable from
+[Releases](https://github.com/benquemax/brainpick/releases) for early testers.
+The vision is committed in
 [`_vision.md`](https://github.com/benquemax/brainpick/blob/main/_vision.md);
-the milestones (Ensilento → Kaksoisveto → Hologrammi) live in the parking
-lot. Nothing on PyPI or npm yet — the names are reserved for v0.1.
+the milestones (Ensilento → Kaksoisveto → Hologrammi) landed. The `brainpick`
+pip and npm packages are not published yet — the names are reserved for the
+v0.1 release.
 
 
 ## Siblings
