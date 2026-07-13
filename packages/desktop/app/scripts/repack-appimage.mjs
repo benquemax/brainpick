@@ -37,6 +37,7 @@ import {
   readdirSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 const APPIMAGETOOL_URL =
