@@ -2,9 +2,9 @@
 type: article
 about: thing
 title: Time machine
-description: The history dimension — brainpick distills the bundle's git history into a timeline artifact so you can scrub through the brain's past and watch it grow.
+description: The history dimension — brainpick distills the bundle's git history into a timeline artifact so you can scrub the whole brain's past, and every doc carries a version rail through its own commits.
 tags: [ui]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-07-13T21:00:00Z
 ---
 
 # Time machine
@@ -42,3 +42,16 @@ animate change in the present, only now the change is history replaying.
 
 A moment is shareable: a deep link opens the machine at a chosen commit, so a
 point in the brain's story can be handed to another agent or human directly.
+
+## The file-level time machine
+
+Every doc with history carries a **version rail** in its panel — one stop per
+commit that added or modified it, derived entirely from the timeline the UI
+already holds. Stepping the rail drives the whole-brain scrubber to that
+commit, so alongside the old text you see the brain as it was around that
+file's moment; conversely, scrubbing the timeline re-fetches the open doc as
+of the scrub commit. Historical content is read straight from git by the
+engine (`GET /api/docs/{path}?at=<sha>` in the
+[REST API](reference/spec/rest-api.md)) — never from a recompile — and it is
+read-only by construction: a past version never arms the editor, whose
+[guarded writes](guarded-writes.md) belong to the present.

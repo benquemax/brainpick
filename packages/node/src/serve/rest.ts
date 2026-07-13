@@ -15,9 +15,12 @@ import {
 } from "../auth";
 import type { GraphStats } from "../compile/t1";
 import { sha256Hex } from "../core/canonical";
+import { titleOf } from "../core/bundle";
 import { splitFrontmatter } from "../core/frontmatter";
 import { atomicWrite } from "../core/fs";
+import { findRepoRoot } from "../detect";
 import { guardedWrite } from "../mcp";
+import { docAtCommit } from "../timeline";
 import { runSearch } from "../query/router";
 import { SPEC_VERSION, VERSION } from "../version";
 import { bfsNeighborhood, jsonable, suggestPaths, type ServeState } from "./state";
@@ -279,9 +282,48 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
     res.set("ETag", etag).json(state.graph);
   });
 
+  // spec/50 "Doc versions": ?at=<sha> serves the doc AS OF a commit — sha null
+  // (history is read-only, never a base_sha), neighbors empty (the historical
+  // link graph is not reconstructed).
+  const AT_SHA = /^[0-9a-fA-F]{4,40}$/;
+  const docAt = (path: string, at: string, res: Response): void => {
+    if (!AT_SHA.test(at)) {
+      res.status(400).json({ error: "at must be a hex commit sha (4-40 chars) — e.g. ?at=c043533" });
+      return;
+    }
+    const text = docAtCommit(state.root, findRepoRoot(state.root), path, at);
+    if (text === null) {
+      res.status(404).json({
+        error:
+          `'${path}' has no version at commit '${at}' — the bundle has no git history, ` +
+          "the commit is unknown, or the file did not exist then (see /api/timeline)",
+        suggestions: [],
+      });
+      return;
+    }
+    const [frontmatter, body] = splitFrontmatter(text);
+    // The SAME ladder the compiler uses for live records (frontmatter title →
+    // first H1 → prettified stem), so a version's title matches its era.
+    const title = titleOf(frontmatter, body, path);
+    res.json({
+      path,
+      frontmatter: jsonable(frontmatter),
+      title,
+      text: body,
+      sha: null,
+      at,
+      neighbors: { in: [], out: [] },
+    });
+  };
+
   router.get(/^\/api\/docs\/(.*)$/u, (req: Request, res: Response) => {
     // Express 5 decodes regexp captures (Starlette decodes path params too)
     const path = (req.params as Record<string, string>)["0"] ?? "";
+    const at = firstQuery(req.query["at"]);
+    if (at !== undefined && at !== "") {
+      docAt(path, at, res);
+      return;
+    }
     const record = state.recordFor(path);
     if (record === null) {
       res.status(404).json({

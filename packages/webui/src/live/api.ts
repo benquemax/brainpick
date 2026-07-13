@@ -162,9 +162,12 @@ export interface DocFetchError {
 
 export type DocFetchResult = { ok: true; doc: DocResponse } | { ok: false; status: number; body: DocFetchError };
 
-export async function fetchDoc(path: string, signal?: AbortSignal): Promise<DocFetchResult> {
+export async function fetchDoc(path: string, signal?: AbortSignal, at?: string): Promise<DocFetchResult> {
   const encoded = path.split('/').map(encodeURIComponent).join('/');
-  const res = await fetch(`/api/docs/${encoded}`, { signal });
+  // ?at=<sha> (spec/50 "Doc versions"): the doc AS OF a commit — the
+  // file-level Time Machine's content fetch; read-only by construction.
+  const query = at !== undefined ? `?at=${encodeURIComponent(at)}` : '';
+  const res = await fetch(`/api/docs/${encoded}${query}`, { signal });
   if (res.ok) return { ok: true, doc: (await res.json()) as DocResponse };
   let body: DocFetchError = { error: `GET /api/docs/${path} -> ${res.status}` };
   try {

@@ -78,6 +78,35 @@ export function buildTimeline(
   }
 }
 
+/** The doc's text AS OF a commit (spec/50 "Doc versions" — the file-level
+ * Time Machine), read via `git show <sha>:<prefix>/<path>` with the same
+ * repo-root + bundle-prefix scoping buildTimeline uses. Null when there is no
+ * repo, the commit is unknown, or the file did not exist at that commit —
+ * advisory like the timeline itself, never throws. */
+export function docAtCommit(
+  bundleRoot: string,
+  repoRoot: string | null,
+  path: string,
+  at: string,
+): string | null {
+  if (repoRoot === null) return null;
+  try {
+    const bundle = resolve(bundleRoot);
+    const repo = resolve(repoRoot);
+    const prefix = (relative(repo, bundle) || ".").split(sep).join("/");
+    if (prefix.startsWith("..")) return null;
+    const rel = prefix === "" || prefix === "." ? path : `${prefix}/${path}`;
+    return execFileSync("git", ["-c", "core.quotePath=false", "show", `${at}:${rel}`], {
+      cwd: repo,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** The single `git log` (spec/90). Non-zero exit / missing git → null. */
 function runGitLog(repo: string, pathspec: string): string | null {
   try {

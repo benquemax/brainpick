@@ -1049,6 +1049,66 @@ test.describe('the Time Machine', () => {
     expect(await page.evaluate(() => window.__bp_store.getState().mode)).toBe('brain');
     expect(await page.evaluate(() => window.__bp_runtime.morph)).toBeGreaterThan(0.9);
   });
+
+  test('the FILE-LEVEL time machine: the doc version rail drives the scrubber and shows the era', async ({ page }) => {
+    await page.goto(baseURL() + '/');
+    await expect(page.locator('.hud-stats')).toContainText('docs', { timeout: 30_000 });
+    await expect
+      .poll(async () => {
+        await page.evaluate((tl) => window.__bp_store.getState().ingestTimeline(tl), SYNTH_TIMELINE);
+        return page.evaluate(() => window.__bp_store.getState().timeline.commits.length);
+      })
+      .toBe(3);
+
+    // Serve historical content for ?at= (spec/50 "Doc versions") — this server's
+    // bundle copy has no git, so the route is stubbed; the ENGINES' own suites
+    // prove real `git show` content on both implementations.
+    await page.route(
+      (url) => url.pathname === '/api/docs/aurinko.md' && url.searchParams.has('at'),
+      async (route) => {
+        const at = new URL(route.request().url()).searchParams.get('at')!;
+        await route.fulfill({
+          json: {
+            path: 'aurinko.md',
+            frontmatter: { title: 'Aurinko' },
+            title: 'Aurinko',
+            text: `ancient sun text from ${at}`,
+            sha: null,
+            at,
+            neighbors: { in: [], out: [] },
+          },
+        });
+      },
+    );
+
+    // aurinko.md has TWO versions in this history (added @0, modified @1).
+    await page.evaluate(() => window.__bp_store.getState().select('aurinko.md', false));
+    await expect(page.locator('.doc-versions')).toContainText('present · 2 versions');
+    await expect(page.locator('.doc-version-banner')).toHaveCount(0);
+
+    // ◀ from the present enters time travel AT the newest version's commit —
+    // the whole brain jumps to that moment (the rail DRIVES the scrubber).
+    await page.locator('.doc-version-step').first().click();
+    await page.waitForFunction(() => window.__bp_store.getState().timeTravel === true);
+    expect(await page.evaluate(() => window.__bp_store.getState().scrubIndex)).toBe(1);
+    await expect(page.locator('.doc-version-label')).toHaveText('v2/2');
+    await expect(page.locator('.doc-version-banner')).toContainText('the worlds');
+    await expect(page.locator('.doc-version-banner')).toContainText('read-only');
+    await expect(page.locator('.doc-body')).toContainText('ancient sun text from bbbbbbb');
+    await expect(page.locator('.doc-edit')).toHaveCount(0); // history is read-only
+
+    // ◀ again → the older version, scrubber follows.
+    await page.locator('.doc-version-step').first().click();
+    await expect(page.locator('.doc-version-label')).toHaveText('v1/2');
+    expect(await page.evaluate(() => window.__bp_store.getState().scrubIndex)).toBe(0);
+    await expect(page.locator('.doc-body')).toContainText('ancient sun text from aaaaaaa');
+
+    // "present" returns to the live doc and leaves time travel.
+    await page.locator('.doc-version-present').click();
+    await page.waitForFunction(() => window.__bp_store.getState().timeTravel === false);
+    await expect(page.locator('.doc-versions')).toContainText('present · 2 versions');
+    await expect(page.locator('.doc-body')).not.toContainText('ancient sun text');
+  });
 });
 
 test.describe('the WYSIWYG editor (guarded writes, real engine)', () => {

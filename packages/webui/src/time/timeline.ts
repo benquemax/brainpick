@@ -182,6 +182,45 @@ export function advancePlay(
   return { index: next, done: false };
 }
 
+/** One entry of a doc's version rail (spec/50 "Doc versions"). */
+export interface DocVersion {
+  sha: string;
+  date: string;
+  message: string;
+  /** The commit's index on the scrub axis — the rail drives the scrubber with it. */
+  index: number;
+}
+
+/**
+ * The commits that shaped a doc — its version rail, chronological (oldest
+ * first): every commit whose `added` or `modified` includes the path. The
+ * file-level Time Machine derives entirely from the timeline the UI already
+ * holds; only CONTENT needs the server (`GET /api/docs/{path}?at=<sha>`).
+ */
+export function versionsOf(timeline: Timeline, path: string): DocVersion[] {
+  const out: DocVersion[] = [];
+  timeline.commits.forEach((c, index) => {
+    if (c.added.includes(path) || c.modified.includes(path)) {
+      out.push({ sha: c.sha, date: c.date, message: c.message, index });
+    }
+  });
+  return out;
+}
+
+/**
+ * Which of a doc's versions is in effect at a scrub position: the LAST
+ * version whose commit index ≤ scrub — i.e. the content `git show` would
+ * return at the scrub commit. −1 when the doc had no version yet (unborn).
+ */
+export function versionIndexAtScrub(versions: readonly DocVersion[], scrub: number): number {
+  let current = -1;
+  for (let i = 0; i < versions.length; i++) {
+    if (versions[i]!.index <= scrub) current = i;
+    else break;
+  }
+  return current;
+}
+
 /**
  * How alive the birth/mod flashes are, given how long ago the scrub last
  * MOVED (wall-clock seconds). 1 while scrubbing/playing (and for a short hold

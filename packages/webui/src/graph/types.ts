@@ -149,6 +149,9 @@ export interface DocResponse {
   /** Content sha256 — the editor's next `base_sha`. Advisory: present on the mock;
    *  a spec/50 follow-up on the reference engine (see live/api.ts). */
   sha?: string;
+  /** Present only on `?at=` responses (spec/50 "Doc versions"): the commit
+   *  served. History is read-only — `sha` is null on these. */
+  at?: string;
 }
 
 /** Canonical map key for an edge (source+target+kind triple). */

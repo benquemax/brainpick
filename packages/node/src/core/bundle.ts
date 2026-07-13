@@ -54,7 +54,7 @@ export function normalizeTags(value: unknown): string[] {
   return [pyStr(value)];
 }
 
-function titleOf(meta: Record<string, unknown>, body: string, path: string): string {
+export function titleOf(meta: Record<string, unknown>, body: string, path: string): string {
   if (meta["title"] !== null && meta["title"] !== undefined) return pyStr(meta["title"]);
   const m = H1.exec(body);
   if (m) return m[1]!;

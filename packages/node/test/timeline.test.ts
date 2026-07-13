@@ -11,7 +11,7 @@ import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
 
-import { buildTimeline } from "../src/timeline";
+import { buildTimeline, docAtCommit } from "../src/timeline";
 import { cleanup, tempDir } from "./helpers";
 
 afterEach(cleanup);
@@ -176,4 +176,57 @@ test("a repo with no bundle history returns null", () => {
   commit(repo, "Unrelated", C1);
   mkdirSync(join(repo, "docs"), { recursive: true });
   expect(buildTimeline(join(repo, "docs"), repo)).toBeNull();
+});
+
+// --- docAtCommit (spec/50 "Doc versions" — the file-level Time Machine) ---
+
+function head(repo: string): string {
+  return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+}
+
+test("docAtCommit serves each version of a doc", () => {
+  const repo = initRepo();
+  write(repo, "a.md", "---\ntitle: A\n---\n\nversion one\n");
+  commit(repo, "Add a", C1);
+  const sha1 = head(repo);
+  write(repo, "a.md", "---\ntitle: A\n---\n\nversion two\n");
+  commit(repo, "Modify a", C2);
+  const sha2 = head(repo);
+
+  expect(docAtCommit(repo, repo, "a.md", sha1)).toContain("version one");
+  expect(docAtCommit(repo, repo, "a.md", sha2)).toContain("version two");
+});
+
+test("docAtCommit is null when the file did not exist at that commit", () => {
+  const repo = initRepo();
+  write(repo, "a.md", "# A\n");
+  commit(repo, "Add a", C1);
+  const sha1 = head(repo);
+  write(repo, "b.md", "# B\n");
+  commit(repo, "Add b", C2);
+
+  expect(docAtCommit(repo, repo, "b.md", sha1)).toBeNull();
+});
+
+test("docAtCommit is null for an unknown commit or without a repo", () => {
+  const repo = initRepo();
+  write(repo, "a.md", "# A\n");
+  commit(repo, "Add a", C1);
+  expect(docAtCommit(repo, repo, "a.md", "deadbee")).toBeNull();
+
+  const plain = join(tempDir(), "plain2");
+  mkdirSync(plain, { recursive: true });
+  writeFileSync(join(plain, "a.md"), "# A\n", "utf8");
+  expect(docAtCommit(plain, null, "a.md", "deadbee")).toBeNull();
+});
+
+test("docAtCommit resolves a nested bundle prefix", () => {
+  const repo = initRepo();
+  write(repo, "docs/a.md", "nested v1\n");
+  commit(repo, "Add docs/a", C1);
+  const sha1 = head(repo);
+  write(repo, "docs/a.md", "nested v2\n");
+  commit(repo, "Modify docs/a", C2);
+
+  expect(docAtCommit(join(repo, "docs"), repo, "a.md", sha1)).toBe("nested v1\n");
 });

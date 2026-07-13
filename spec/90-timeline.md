@@ -84,6 +84,14 @@ The graph "as of" an instant T is derived without any recompile:
 `GET /api/timeline` returns `timeline.json` (or `{"commits": [], "docs": {},
 "span": null}` when the bundle has no git history). ETag by manifest `seq`.
 
+## Doc versions (spec/50 "Doc versions")
+
+The file-level Time Machine: a doc's versions are the `commits[]` entries
+whose `added`/`modified` include it, and `GET /api/docs/{path}?at=<sha>`
+serves the content as of any of them (read via `git show`, never from a
+recompile). Same advisory standing as the timeline itself: shapes are
+normative, content is git-dependent, a non-repo bundle 404s.
+
 ## Tier
 
 Timeline generation runs within T1 (deterministic given the repo state, but

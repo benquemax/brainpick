@@ -3,11 +3,18 @@
  * the markdown body (rendered client-side) and in/out neighbor lists.
  * Intra-bundle links inside the body navigate the graph instead of the
  * browser.
+ *
+ * FILE-LEVEL TIME MACHINE (Tom, 2026-07-12): a doc with git history grows a
+ * VERSION RAIL. Stepping it drives the whole-brain scrubber to that commit
+ * (the graph shows the brain of that moment), and the panel's CONTENT always
+ * follows the scrubber — one source of truth: while time-travelling, the body
+ * is fetched `?at=<scrub commit>` (spec/50 "Doc versions") and is read-only.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DocResponse } from '../graph/types';
 import { fetchDoc } from '../live/api';
 import { useUI, uiStore } from '../state/store';
+import { commitAt, versionIndexAtScrub, versionsOf } from '../time/timeline';
 import { normalizeNeighbor, resolveDocLink, type NeighborRef } from './docLinks';
 import { renderMarkdown } from './markdown';
 
@@ -46,7 +53,20 @@ export function DocPanel() {
   const selection = useUI((s) => s.selection);
   const node = useUI((s) => (s.selection !== null ? s.nodes.get(s.selection) ?? null : null));
   const writesEnabled = useUI((s) => s.writesEnabled);
+  const timeline = useUI((s) => s.timeline);
+  const timeTravel = useUI((s) => s.timeTravel);
+  // The scrub STATION (rounded) — content only refetches when it crosses a commit.
+  const scrubStation = useUI((s) => (s.timeTravel ? Math.round(s.scrubIndex) : -1));
   const [panel, setPanel] = useState<PanelState | null>(null);
+
+  const versions = useMemo(
+    () => (selection !== null ? versionsOf(timeline, selection) : []),
+    [timeline, selection],
+  );
+  // While travelling: the commit whose content the panel shows (the scrubber's
+  // station), and which of THIS doc's versions is in effect there.
+  const atCommit = timeTravel ? commitAt(timeline, scrubStation) : null;
+  const versionIdx = timeTravel ? versionIndexAtScrub(versions, scrubStation) : -1;
 
   useEffect(() => {
     if (selection === null) {
@@ -54,27 +74,36 @@ export function DocPanel() {
       return;
     }
     const controller = new AbortController();
+    const at = atCommit?.sha;
     setPanel({ path: selection, doc: null, error: null, suggestions: [] });
-    fetchDoc(selection, controller.signal)
-      .then((res) => {
-        if (controller.signal.aborted) return;
-        if (res.ok) setPanel({ path: selection, doc: res.doc, error: null, suggestions: [] });
-        else {
-          setPanel({
-            path: selection,
-            doc: null,
-            error: res.body.error,
-            suggestions: res.body.suggestions ?? [],
-          });
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setPanel({ path: selection, doc: null, error: 'could not load the document', suggestions: [] });
-        }
-      });
-    return () => controller.abort();
-  }, [selection]);
+    // A drag/play sweeps stations quickly — debounce history fetches a touch;
+    // the present (at undefined) loads immediately as before.
+    const delay = at === undefined ? 0 : 200;
+    const timer = setTimeout(() => {
+      fetchDoc(selection, controller.signal, at)
+        .then((res) => {
+          if (controller.signal.aborted) return;
+          if (res.ok) setPanel({ path: selection, doc: res.doc, error: null, suggestions: [] });
+          else {
+            setPanel({
+              path: selection,
+              doc: null,
+              error: res.body.error,
+              suggestions: res.body.suggestions ?? [],
+            });
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setPanel({ path: selection, doc: null, error: 'could not load the document', suggestions: [] });
+          }
+        });
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [selection, atCommit?.sha]);
 
   if (selection === null || panel === null) return null;
   const doc = panel.doc;
@@ -102,13 +131,32 @@ export function DocPanel() {
   const type = (doc?.frontmatter?.type as string | undefined) ?? node?.type ?? null;
   const tags = node?.tags ?? [];
 
+  // Step the doc's OWN versions; the whole-brain scrubber is the single source
+  // of truth, so stepping = driving it. ▶ past the newest returns to present.
+  const stepVersion = (delta: number): void => {
+    const s = uiStore.getState();
+    if (!timeTravel) {
+      if (delta < 0 && versions.length > 0) s.enterTimeTravel(versions[versions.length - 1]!.index);
+      return;
+    }
+    const next = versionIdx + delta;
+    if (next >= versions.length) {
+      s.exitTimeTravel();
+      return;
+    }
+    if (next < 0) return; // already before the first version
+    s.enterTimeTravel(versions[next]!.index);
+  };
+  const currentVersion = versionIdx >= 0 ? versions[versionIdx]! : null;
+
   return (
     <aside className="doc-panel panel">
       <header>
         <div className="doc-title-row">
           <h2>{doc?.title ?? node?.title ?? selection}</h2>
-          {/* Reserved docs (index/log) stay frontmatter-free by contract — not editable here. */}
-          {writesEnabled && node?.reserved !== true && (
+          {/* Reserved docs (index/log) stay frontmatter-free by contract — not
+              editable here. History is read-only too: no edit while travelling. */}
+          {writesEnabled && node?.reserved !== true && !timeTravel && (
             <button
               type="button"
               className="doc-edit"
@@ -126,6 +174,51 @@ export function DocPanel() {
           </button>
         </div>
         <div className="doc-path">{selection}</div>
+        {versions.length > 0 && (
+          <div className="doc-versions" aria-label="version rail">
+            <button
+              type="button"
+              className="doc-version-step"
+              aria-label="older version"
+              title="older version (drives the time machine)"
+              disabled={timeTravel && versionIdx <= 0}
+              onClick={() => stepVersion(-1)}
+            >
+              ◀
+            </button>
+            <span className="doc-version-label">
+              {timeTravel
+                ? versionIdx >= 0
+                  ? `v${versionIdx + 1}/${versions.length}`
+                  : 'before creation'
+                : `present · ${versions.length} version${versions.length === 1 ? '' : 's'}`}
+            </span>
+            <button
+              type="button"
+              className="doc-version-step"
+              aria-label="newer version"
+              title="newer version"
+              disabled={!timeTravel}
+              onClick={() => stepVersion(1)}
+            >
+              ▶
+            </button>
+            {timeTravel && (
+              <button
+                type="button"
+                className="doc-version-present"
+                onClick={() => uiStore.getState().exitTimeTravel()}
+              >
+                present
+              </button>
+            )}
+          </div>
+        )}
+        {timeTravel && currentVersion !== null && (
+          <div className="doc-version-banner" title={currentVersion.sha}>
+            {currentVersion.date.slice(0, 10)} · {currentVersion.message} · read-only
+          </div>
+        )}
         <div className="chips">
           {type !== null && <span className="chip chip-type">{type}</span>}
           {typeof timestamp === 'string' && (

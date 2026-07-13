@@ -10,7 +10,7 @@ Both servers implement this surface. All responses are JSON (except `/` and
 | `GET /api/health` | `{"impl": "python", "name": "brainpick", "spec_version": "0.1", "version": "0.1.0"}` |
 | `GET /api/status` | manifest summary: `seq`, `tiers`, `docs`, `edges`, `ghosts`, `orphans`, `bundle_root` (the server's absolute bundle path — more useful to clients than the manifest's relative `"."`), `watching`, `writes` (bool — `[serve] writes == "guarded"`, so the editor shows its Edit affordance only when writing is possible), `id` (the `[bundle] id` brain identity, spec/80 — `null` when the bundle predates the key), and `ui` (the `[ui]` block — `{"max_nodes_mobile": <int>, "default_mode": "cosmos"\|"brain"}` from config (spec/80), so the client sizes the cosmos and picks its opening view instead of guessing from the GPU tier) |
 | `GET /api/graph?layer=links` | the full `t1/graph.json` payload. `layer=entities` → the entity graph `{nodes, edges}`, each node `{id, name, type, description, degree, source_docs}` and each edge `{src, dst, weight}`; `source_docs` is the sorted, bundle-relative list of docs the entity was extracted from (its provenance, so the UI's entity panel shows sources without N extra calls). `layer=entities` → 404 until T3. ETag = `"<seq>"`, honor `If-None-Match` with 304 |
-| `GET /api/docs/{path}` | `{"path", "frontmatter", "title", "text", "sha", "neighbors": {"in": [...], "out": [...]}}` where neighbor entries are `{"path", "title"}`; `sha` is the sha256 of the raw file bytes (the editor's next `base_sha`), `null` for a doc held only as a deleted record — on miss, 404 with `{"error": "<instruction>", "suggestions": ["<path>", …]}` (≤ 5 fuzzy matches) |
+| `GET /api/docs/{path}` | `{"path", "frontmatter", "title", "text", "sha", "neighbors": {"in": [...], "out": [...]}}` where neighbor entries are `{"path", "title"}`; `sha` is the sha256 of the raw file bytes (the editor's next `base_sha`), `null` for a doc held only as a deleted record — on miss, 404 with `{"error": "<instruction>", "suggestions": ["<path>", …]}` (≤ 5 fuzzy matches). With `?at=<sha>`, the doc AS OF that commit — see "Doc versions" below |
 | `GET /api/search?q=&mode=auto&limit=8` | `{"hits": [{"path", "title", "description", "score", "snippet", "source"}], "used_modes": [...], "degraded_from": null}` |
 | `GET /api/neighbors?id=&depth=1&layer=links` | `{"center", "nodes": [...], "edges": [...]}` — node/edge shapes as in graph.json; `layer=entities` before T3 degrades to links with `"degraded_from": "entities"` (matching MCP semantics — only `/api/graph` 404s) |
 | `GET /api/live` | SSE stream, see `60-live-deltas.md` |
@@ -33,6 +33,35 @@ else is available; response says `"used_modes": ["keyword"]`). Unknown
 match window ≤ 240 chars, or `null`. A hit's `source` names the retriever
 that produced it (`keyword | semantic | graph`; under fusion, the
 highest-contributing one).
+
+## Doc versions (the file-level Time Machine — spec/90's other half)
+
+`GET /api/docs/{path}?at=<sha>` serves the doc AS OF a commit, read straight
+from git (`git show <sha>:<prefix>/<path>`, the same repo-root + bundle-prefix
+scoping and `core.quotePath=false` that build_timeline uses; spec/90). The
+version list itself needs no new surface — `timeline.json`'s `commits[]`
+already names every commit that added/modified a doc.
+
+Response is the live shape with three honesty markers:
+
+- `"sha": null` — a past version must never arm the editor's `base_sha`;
+  history is read-only.
+- `"at": "<sha>"` — echoes the commit served (absent from the live shape).
+- `"neighbors": {"in": [], "out": []}` — the historical link graph is not
+  reconstructed (spec/90 already states edges-at-T are an approximation);
+  empty, never the present-day neighbors.
+
+`frontmatter` and `title` are parsed from the historical bytes with the SAME
+title ladder the compiler applies to live records (frontmatter `title` →
+first `# H1` → prettified stem), so a version's title matches its era.
+Errors, all `{"error": "<instruction>"}`:
+
+- 400 — `at` is not a hex sha prefix (`[0-9a-f]{4,40}`, case-insensitive).
+- 404 — the bundle has no git history, the commit is unknown, or the file
+  did not exist at that commit (`suggestions` is `[]` — fuzzy matches are a
+  present-day concept).
+
+No ETag/304 on `?at` responses (immutable content, negligible traffic).
 
 ## Writing (guarded — the browser editor's path)
 

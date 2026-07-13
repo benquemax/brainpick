@@ -66,7 +66,7 @@ def _normalize_tags(value) -> list[str]:
     return [str(value)]
 
 
-def _title_of(meta: dict, body: str, path: str) -> str:
+def title_of(meta: dict, body: str, path: str) -> str:
     if meta.get("title") is not None:
         return str(meta["title"])
     m = _H1.search(body)
@@ -159,7 +159,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             path=path,
             sha256=sha256_hex(raw_bytes),
             size=len(raw_bytes),
-            title=_title_of(meta, body, path),
+            title=title_of(meta, body, path),
             type=None if meta.get("type") is None else str(meta["type"]),
             about=None if meta.get("about") is None else str(meta["about"]),
             description=None if meta.get("description") is None else str(meta["description"]),

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from brainpick.timeline import build_timeline
+from brainpick.timeline import build_timeline, doc_at_commit
 
 C1 = "2026-07-02T20:41:00+00:00"
 C2 = "2026-07-03T09:12:00+00:00"
@@ -154,3 +154,58 @@ def test_no_bundle_history_returns_none(repo: Path):
     _commit(repo, "Unrelated", C1)
     (repo / "docs").mkdir()
     assert build_timeline(repo / "docs", repo) is None
+
+
+def _head(repo: Path) -> str:
+    out = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=repo, check=True, capture_output=True, text=True,
+    )
+    return out.stdout.strip()
+
+
+# --- doc_at_commit (spec/50 "Doc versions" — the file-level Time Machine) ---
+
+def test_doc_at_commit_serves_each_version(repo: Path):
+    (repo / "a.md").write_text("---\ntitle: A\n---\n\nversion one\n", encoding="utf-8")
+    _commit(repo, "Add a", C1)
+    sha1 = _head(repo)
+    (repo / "a.md").write_text("---\ntitle: A\n---\n\nversion two\n", encoding="utf-8")
+    _commit(repo, "Modify a", C2)
+    sha2 = _head(repo)
+
+    assert "version one" in (doc_at_commit(repo, repo, "a.md", sha1) or "")
+    assert "version two" in (doc_at_commit(repo, repo, "a.md", sha2) or "")
+
+
+def test_doc_at_commit_none_when_file_absent_at_that_commit(repo: Path):
+    (repo / "a.md").write_text("# A\n", encoding="utf-8")
+    _commit(repo, "Add a", C1)
+    sha1 = _head(repo)
+    (repo / "b.md").write_text("# B\n", encoding="utf-8")
+    _commit(repo, "Add b", C2)
+
+    assert doc_at_commit(repo, repo, "b.md", sha1) is None  # b did not exist yet
+
+
+def test_doc_at_commit_none_for_unknown_commit_or_no_repo(repo: Path, tmp_path: Path):
+    (repo / "a.md").write_text("# A\n", encoding="utf-8")
+    _commit(repo, "Add a", C1)
+    assert doc_at_commit(repo, repo, "a.md", "deadbee") is None
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    (plain / "a.md").write_text("# A\n", encoding="utf-8")
+    assert doc_at_commit(plain, None, "a.md", "deadbee") is None
+
+
+def test_doc_at_commit_resolves_a_nested_bundle_prefix(repo: Path):
+    docs = repo / "docs"
+    docs.mkdir()
+    (docs / "a.md").write_text("nested v1\n", encoding="utf-8")
+    _commit(repo, "Add docs/a", C1)
+    sha1 = _head(repo)
+    (docs / "a.md").write_text("nested v2\n", encoding="utf-8")
+    _commit(repo, "Modify docs/a", C2)
+
+    assert doc_at_commit(docs, repo, "a.md", sha1) == "nested v1\n"

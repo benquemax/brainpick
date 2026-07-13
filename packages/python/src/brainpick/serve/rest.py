@@ -17,12 +17,15 @@ from brainpick.auth import (
     session_cookie_header,
     verify_password,
 )
+from brainpick.core.bundle import title_of
 from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
 from brainpick.core.fs import atomic_write
+from brainpick.detect import find_repo_root
 from brainpick.mcp_server import guarded_write
 from brainpick.query.router import run_search
 from brainpick.serve.state import bfs_neighborhood, jsonable, suggest_paths
+from brainpick.timeline import doc_at_commit
 
 # Writing (spec/50): the browser editor's guarded doc-write + image-upload gate.
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", ""}
@@ -103,9 +106,46 @@ async def timeline(request: Request) -> Response:
     return JSONResponse(payload, headers={"ETag": etag})
 
 
+_AT_SHA = re.compile(r"^[0-9a-fA-F]{4,40}$")
+
+
+def _doc_at(state, path: str, at: str) -> JSONResponse:
+    """GET /api/docs/{path}?at=<sha> (spec/50 "Doc versions"): the doc AS OF a
+    commit, read via git — sha null (history is read-only, never a base_sha),
+    neighbors empty (the historical link graph is not reconstructed)."""
+    if not _AT_SHA.match(at):
+        return JSONResponse(
+            {"error": "at must be a hex commit sha (4-40 chars) — e.g. ?at=c043533"},
+            status_code=400,
+        )
+    text = doc_at_commit(state.root, find_repo_root(state.root), path, at)
+    if text is None:
+        return JSONResponse({
+            "error": f"'{path}' has no version at commit '{at}' — the bundle has no git history, "
+                     "the commit is unknown, or the file did not exist then (see /api/timeline)",
+            "suggestions": [],
+        }, status_code=404)
+    frontmatter, body = split_frontmatter(text)
+    # The SAME ladder the compiler uses for live records (frontmatter title ->
+    # first H1 -> prettified stem), so a version's title matches its era.
+    title = title_of(frontmatter, body, path)
+    return JSONResponse({
+        "path": path,
+        "frontmatter": jsonable(frontmatter),
+        "title": title,
+        "text": body,
+        "sha": None,
+        "at": at,
+        "neighbors": {"in": [], "out": []},
+    })
+
+
 async def doc_detail(request: Request) -> JSONResponse:
     state = _state(request)
     path = request.path_params["path"]
+    at = request.query_params.get("at")
+    if at is not None:
+        return _doc_at(state, path, at)
     record = state.record_for(path)
     if record is None:
         return JSONResponse({

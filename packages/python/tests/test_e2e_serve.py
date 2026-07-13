@@ -200,6 +200,60 @@ def test_timeline_empty_then_served(kotiaurinko):
         assert cached.status_code == 304
 
 
+def test_doc_versions_at_commit(kotiaurinko):
+    """spec/50 "Doc versions": ?at=<sha> serves the doc AS OF a commit — sha
+    null (read-only history), at echoed, neighbors empty; instructive 400/404."""
+    def git(*args, date="2026-07-02T20:41:00+00:00"):
+        env = {
+            **os.environ,
+            "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date,
+            "GIT_AUTHOR_NAME": "Tester", "GIT_AUTHOR_EMAIL": "t@e.st",
+            "GIT_COMMITTER_NAME": "Tester", "GIT_COMMITTER_EMAIL": "t@e.st",
+        }
+        return subprocess.run(
+            ["git", *args], cwd=kotiaurinko, check=True,
+            capture_output=True, text=True, env=env,
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.name", "Tester")
+    git("config", "user.email", "t@e.st")
+    kuu = kotiaurinko / "kuu.md"
+    original = kuu.read_text(encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "Founding")
+    sha1 = git("rev-parse", "--short", "HEAD")
+    kuu.write_text(original + "\nA later thought.\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "Amend kuu", date="2026-07-03T09:12:00+00:00")
+
+    with TestClient(make_app(kotiaurinko)) as client:
+        past = client.get(f"/api/docs/kuu.md?at={sha1}")
+        assert past.status_code == 200
+        body = past.json()
+        assert body["at"] == sha1
+        assert body["sha"] is None  # a past version never arms base_sha
+        assert body["neighbors"] == {"in": [], "out": []}
+        assert "A later thought." not in body["text"]  # the OLD version, verbatim
+        assert body["title"] == "Kuu"  # the compiler's title ladder, applied to the era's bytes
+
+        live = client.get("/api/docs/kuu.md").json()
+        assert "A later thought." in live["text"]  # the live path is untouched
+        assert "at" not in live
+
+        assert client.get("/api/docs/kuu.md?at=zzz").status_code == 400  # not a sha
+        missing = client.get("/api/docs/kuu.md?at=deadbee")
+        assert missing.status_code == 404
+        assert missing.json()["suggestions"] == []
+
+
+def test_doc_versions_404_without_git(kotiaurinko):
+    with TestClient(make_app(kotiaurinko)) as client:
+        response = client.get("/api/docs/kuu.md?at=c043533")
+        assert response.status_code == 404
+        assert "git" in response.json()["error"]
+
+
 def test_docs_happy_and_nested(kotiaurinko):
     with TestClient(make_app(kotiaurinko)) as client:
         body = client.get("/api/docs/kuu.md").json()

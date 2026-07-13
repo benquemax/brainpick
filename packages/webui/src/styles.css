@@ -549,6 +549,62 @@ button {
   word-break: break-all;
 }
 
+/* FILE-LEVEL TIME MACHINE: the version rail drives the whole-brain scrubber. */
+.doc-versions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.doc-version-step {
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.doc-version-step:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.doc-version-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.doc-version-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.doc-version-present {
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 190, 100, 0.4);
+  border-radius: 4px;
+  background: transparent;
+  color: rgb(255, 190, 100);
+  cursor: pointer;
+}
+
+.doc-version-banner {
+  margin-top: 6px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgb(255, 190, 100);
+  border: 1px solid rgba(255, 190, 100, 0.28);
+  border-radius: 4px;
+  background: rgba(255, 190, 100, 0.07);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

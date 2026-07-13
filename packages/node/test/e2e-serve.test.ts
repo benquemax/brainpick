@@ -278,6 +278,57 @@ test("docs 404 carries suggestions", async () => {
   expect(missing.body.suggestions.length).toBeLessThanOrEqual(5);
 });
 
+test("doc versions at a commit (spec/50 Doc versions — the file-level Time Machine)", async () => {
+  const root = copyBundle();
+  const gitEnv = {
+    ...process.env,
+    GIT_AUTHOR_DATE: "2026-07-02T20:41:00+00:00",
+    GIT_COMMITTER_DATE: "2026-07-02T20:41:00+00:00",
+    GIT_AUTHOR_NAME: "Tester",
+    GIT_AUTHOR_EMAIL: "t@e.st",
+    GIT_COMMITTER_NAME: "Tester",
+    GIT_COMMITTER_EMAIL: "t@e.st",
+  };
+  const git = (...args: string[]): string =>
+    execFileSync("git", args, { cwd: root, env: gitEnv, encoding: "utf8" }).trim();
+  git("init", "-q");
+  git("config", "user.name", "Tester");
+  git("config", "user.email", "t@e.st");
+  const kuu = join(root, "kuu.md");
+  const original = readFileSync(kuu, "utf8");
+  git("add", "-A");
+  git("commit", "-m", "Founding");
+  const sha1 = git("rev-parse", "--short", "HEAD");
+  writeFileSync(kuu, original + "\nA later thought.\n", "utf8");
+  git("add", "-A");
+  git("commit", "-m", "Amend kuu");
+
+  const { base } = await serve(await makeApp(root));
+  const past = await getJson(`${base}/api/docs/kuu.md?at=${sha1}`);
+  expect(past.status).toBe(200);
+  expect(past.body.at).toBe(sha1);
+  expect(past.body.sha).toBeNull(); // a past version never arms base_sha
+  expect(past.body.neighbors).toEqual({ in: [], out: [] });
+  expect(past.body.text).not.toContain("A later thought."); // the OLD version
+  expect(past.body.title).toBe("Kuu"); // parsed from the historical frontmatter
+
+  const live = await getJson(`${base}/api/docs/kuu.md`);
+  expect(live.body.text).toContain("A later thought."); // the live path untouched
+  expect(live.body).not.toHaveProperty("at");
+
+  expect((await getJson(`${base}/api/docs/kuu.md?at=zzz`)).status).toBe(400); // not a sha
+  const unknown = await getJson(`${base}/api/docs/kuu.md?at=deadbee`);
+  expect(unknown.status).toBe(404);
+  expect(unknown.body.suggestions).toEqual([]);
+});
+
+test("doc versions 404 without git history", async () => {
+  const { base } = await serve(await makeApp(copyBundle()));
+  const response = await getJson(`${base}/api/docs/kuu.md?at=c043533`);
+  expect(response.status).toBe(404);
+  expect(response.body.error).toContain("git");
+});
+
 test("search keyword set", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/search?q=aurinko`);

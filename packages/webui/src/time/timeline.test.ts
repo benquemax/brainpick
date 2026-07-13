@@ -15,6 +15,8 @@ import {
   presentDocsAtIndex,
   presentEdges,
   timeOfIndex,
+  versionIndexAtScrub,
+  versionsOf,
   type Timeline,
 } from './timeline';
 
@@ -183,6 +185,28 @@ describe('commitAt', () => {
     expect(commitAt(timeline, 0.4)?.sha).toBe('aaaaaaa');
     expect(commitAt(timeline, 1.6)?.sha).toBe('ccccccc');
     expect(commitAt(EMPTY_TIMELINE, 0)).toBeNull();
+  });
+});
+
+describe('versionsOf / versionIndexAtScrub (the file-level Time Machine)', () => {
+  it("a doc's versions are the commits that added or modified it, with scrub indices", () => {
+    expect(versionsOf(timeline, 'a.md')).toEqual([
+      { sha: 'aaaaaaa', date: T0, message: 'born', index: 0 },
+      { sha: 'bbbbbbb', date: T1, message: 'grow', index: 1 },
+    ]);
+    expect(versionsOf(timeline, 'b.md')).toEqual([{ sha: 'bbbbbbb', date: T1, message: 'grow', index: 1 }]);
+    expect(versionsOf(timeline, 'nope.md')).toEqual([]);
+    expect(versionsOf(EMPTY_TIMELINE, 'a.md')).toEqual([]);
+  });
+
+  it('the version in effect at a scrub position is the last one at or before it', () => {
+    const versions = versionsOf(timeline, 'a.md');
+    expect(versionIndexAtScrub(versions, 0)).toBe(0); // v1 just landed
+    expect(versionIndexAtScrub(versions, 0.7)).toBe(0); // between commits: still v1
+    expect(versionIndexAtScrub(versions, 1)).toBe(1); // v2 exactly at its commit
+    expect(versionIndexAtScrub(versions, 2)).toBe(1); // later commits don't change the file
+    const late = versionsOf(timeline, 'c.md');
+    expect(versionIndexAtScrub(late, 0)).toBe(-1); // unborn at the first commit
   });
 });
 

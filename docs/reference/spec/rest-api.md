@@ -2,9 +2,9 @@
 type: reference
 about: concept
 title: "Spec: REST API"
-description: "The HTTP surface both servers implement — health, status, graph, docs, search, neighbors, live, timeline, show, guarded writes and asset upload."
+description: "The HTTP surface both servers implement — health, status, graph, docs (live and at any commit), search, neighbors, live, timeline, show, guarded writes and asset upload."
 tags: [spec]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-07-13T21:00:00Z
 ---
 
 # Spec: REST API
@@ -14,9 +14,11 @@ Both servers implement the same JSON REST surface, snake_case, binding
 4xx/5xx status. The endpoints: `/api/health`, `/api/status` (seq, tiers,
 counts, `writes`, and the `ui` block), `/api/graph` (the graph.json payload, or
 the entity graph; ETag by seq), `/api/docs/{path}` (with neighbors and a
-`sha`), `/api/search`, `/api/neighbors`, `/api/live` (SSE), `/api/timeline`,
-`POST /api/show`, `PUT /api/docs/{path}` (guarded write), and
-`POST /api/assets` (image upload).
+`sha`; `?at=<sha>` serves the doc as of a commit via git — read-only, the
+[time machine](../../time-machine.md)'s file-level half), `/api/search`,
+`/api/neighbors`, `/api/live` (SSE), `/api/timeline`, `POST /api/show`,
+`PUT /api/docs/{path}` (guarded write), and `POST /api/assets` (image
+upload).
 
 Search scoring is normative for conformance: BM25 (k1=1.2, b=0.75) over
 `docs.jsonl`, with title weighted 3x, description 2x, text 1x. Auth, when

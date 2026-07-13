@@ -67,6 +67,39 @@ def build_timeline(
         return None
 
 
+def doc_at_commit(
+    bundle_root: str | Path,
+    repo_root: str | Path | None,
+    path: str,
+    at: str,
+) -> str | None:
+    """The doc's text AS OF a commit (spec/50 "Doc versions" — the file-level
+    Time Machine), read via `git show <sha>:<prefix>/<path>` with the same
+    repo-root + bundle-prefix scoping build_timeline uses. None when there is
+    no repo, the commit is unknown, or the file did not exist at that commit —
+    advisory like the timeline itself, never raises."""
+    if repo_root is None:
+        return None
+    try:
+        bundle = Path(bundle_root).resolve()
+        repo = Path(repo_root).resolve()
+        prefix = os.path.relpath(bundle, repo).replace(os.sep, "/")
+        if prefix.startswith(".."):
+            return None
+        rel = path if prefix in ("", ".") else f"{prefix}/{path}"
+        proc = subprocess.run(
+            ["git", "-c", "core.quotePath=false", "show", f"{at}:{rel}"],
+            cwd=str(repo), capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
+        if proc.returncode != 0:
+            return None
+        return proc.stdout
+    except Exception as error:  # advisory: git surprises never break a request
+        logger.debug("timeline: doc_at_commit skipped (%s)", error)
+        return None
+
+
 def _run_git_log(repo: Path, pathspec: str) -> str | None:
     """The single `git log` (spec/90). Non-zero exit / missing git → None."""
     cmd = [
