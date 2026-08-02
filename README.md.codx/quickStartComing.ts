@@ -3,6 +3,13 @@ import * as path from 'path';
 
 export const content = `## Quick start
 
+### 0 · See a brain right now — no install
+
+The [live demo](https://benquemax.github.io/brainpick/) is this repository's
+own docs wiki, baked into a static snapshot and redeployed with every
+release: the real UI, searchable, with the full time machine — served by
+GitHub Pages with no engine behind it.
+
 ### 1 · Install the app and see a brain immediately
 
 The fastest path is the desktop app — a single file that runs the brainpick
@@ -109,6 +116,24 @@ export const validate = async () => {
     if (!cli.includes(flag)) {
       throw new Error(`Quick start documents ${flag} but the CLI source does not define it`);
     }
+  }
+
+  // The live-demo promise must be backed by real machinery: the Pages URL,
+  // the exporter it names, and the release job that redeploys it.
+  if (!content.includes('benquemax.github.io/brainpick')) {
+    throw new Error('Quick start must link the GitHub Pages live demo');
+  }
+  if (!fs.existsSync(path.join(root, 'scripts', 'build-static-site.mjs'))) {
+    throw new Error('The live demo needs scripts/build-static-site.mjs — it is gone');
+  }
+  const releaseWorkflow = fs.readFileSync(
+    path.join(root, '.github', 'workflows', 'release.yml'),
+    'utf-8',
+  );
+  if (!releaseWorkflow.includes('publish-pages') || !releaseWorkflow.includes('build-static-site.mjs')) {
+    throw new Error(
+      '"redeployed with every release" requires release.yml\'s publish-pages job to run build-static-site.mjs',
+    );
   }
 
   // Self-expiring: once the Node engine can serve, the quick start must show

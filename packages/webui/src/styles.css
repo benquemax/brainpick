@@ -191,6 +191,12 @@ button {
   box-shadow: 0 0 8px var(--red);
 }
 
+/* Static export: no live channel by design — calm, steady, not an alarm. */
+.conn-dot.snapshot {
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+}
+
 @keyframes blink {
   50% {
     opacity: 0.35;

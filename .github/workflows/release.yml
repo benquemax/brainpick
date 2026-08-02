@@ -4,6 +4,11 @@ name: release
 # or run manually. The web UI is built ONCE and synced into both packages so
 # pip and npm ship the identical UI. Version lockstep is enforced before either
 # publish, so a half-bumped release cannot ship.
+#
+# publish-pages additionally deploys the static demo brain (this repo's docs
+# wiki, snapshotted by scripts/build-static-site.mjs) to GitHub Pages, so
+# every published version refreshes the hosted demo. One-time repo setup:
+# Settings → Pages → Source = "GitHub Actions".
 on:
   push:
     tags: ["v*"]
@@ -86,3 +91,30 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-pages:
+    name: deploy the static demo brain to GitHub Pages
+    needs: build-webui # version lockstep has passed; the demo tracks the release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/node
+      - name: build the static snapshot of the docs brain
+        run: node scripts/build-static-site.mjs --out _temp/dist/static-site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _temp/dist/static-site
+      - id: deployment
+        uses: actions/deploy-pages@v4

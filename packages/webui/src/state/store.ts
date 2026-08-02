@@ -34,7 +34,9 @@ import { entityRenderId, isEntityRenderId } from '../graph/entities';
 import { entityRenderIdsForDoc } from './entityModel';
 import { EMPTY_TIMELINE, hasHistory, type Timeline } from '../time/timeline';
 
-export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
+/** 'snapshot' is the static-export state (staticMode.ts): no live channel
+ * exists by design, so it is a terminal, honest state — not a failure. */
+export type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline' | 'snapshot';
 
 /** The two faces of one brain: the flat analytic cosmos, or the 3D hologram. */
 export type ViewMode = 'cosmos' | 'brain';
@@ -194,6 +196,8 @@ export interface UIState extends GraphSlice {
   toast: Toast | null;
 
   ingestHello(hello: HelloEvent): void;
+  /** Static-export boot (staticMode.ts): tiers + seq from the baked status. */
+  enterSnapshotMode(tiers: TierMap | null, seq: number): void;
   ingestDelta(delta: GraphDelta, now?: number): void;
   ingestSnapshot(graph: GraphPayload, seq: number, now?: number): void;
   setConnection(state: ConnectionState): void;
@@ -449,6 +453,13 @@ export function createUIStore(): UIStoreApi {
 
       ingestHello(hello) {
         set({ tiers: hello.tiers, serverSeq: hello.seq });
+      },
+
+      enterSnapshotMode(tiers, seq) {
+        // The static boot's stand-in for `hello`: tiers and seq come from the
+        // baked /api/status (there is no SSE to deliver them), and the
+        // connection lands directly in its terminal state.
+        set({ tiers, serverSeq: seq, connection: 'snapshot' });
       },
 
       ingestDelta(delta, now = Date.now()) {

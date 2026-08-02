@@ -4,7 +4,7 @@ about: thing
 title: Time machine
 description: The history dimension — brainpick distills the bundle's git history into a timeline artifact so you can scrub the whole brain's past, and every doc carries a version rail through its own commits.
 tags: [ui]
-timestamp: 2026-07-13T21:00:00Z
+timestamp: 2026-08-02T19:50:00Z
 ---
 
 # Time machine
@@ -55,3 +55,7 @@ engine (`GET /api/docs/{path}?at=<sha>` in the
 [REST API](reference/spec/rest-api.md)) — never from a recompile — and it is
 read-only by construction: a past version never arms the editor, whose
 [guarded writes](guarded-writes.md) belong to the present.
+
+The whole history dimension survives being baked: a
+[static snapshot](static-snapshot.md) carries the timeline and every doc
+version with it, so even the engine-less GitHub Pages demo time-travels.

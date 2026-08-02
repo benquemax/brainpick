@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { fetchGraph, fetchStatus, writesEnabledFromStatus } from './live/api';
+import { IS_STATIC } from './live/staticMode';
 import { LiveConnection } from './live/connection';
 import { EntityLayerController } from './live/entities';
 import { TimelineController } from './live/timeline';
@@ -14,29 +15,47 @@ import './styles.css';
 // the right node budget, DPR cap and bloom setting (no post-hoc reflow).
 uiStore.getState().initGpu(detectGpuTier(readGpuInputs()));
 
-// Initial load: pull the current snapshot immediately (fast first paint);
-// the live connection re-verifies seq via `hello` and resyncs as needed.
-void fetchGraph(false, 0)
-  .then(({ graph, seq }) => {
-    if (uiStore.getState().seq === 0) uiStore.getState().ingestSnapshot(graph, seq);
-  })
-  .catch(() => {
-    /* server not up yet — the SSE reconnect loop keeps trying */
+let connection: LiveConnection | null = null;
+
+if (IS_STATIC) {
+  // Static export (staticMode.ts): no SSE exists, so the baked /api/status
+  // plays `hello` — it must land BEFORE the graph so tiers and seq are real
+  // (a static server's ETag carries no seq, and without a seq the entity
+  // layer and the Time Machine would silently never sync).
+  void fetchStatus().then((status) => {
+    const s = uiStore.getState();
+    s.enterSnapshotMode(status?.tiers ?? null, status?.seq ?? 1);
+    s.setWritesEnabled(writesEnabledFromStatus(status));
+    s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport() });
+    return fetchGraph(false, status?.seq ?? 1).then(({ graph, seq }) => {
+      if (uiStore.getState().seq === 0) uiStore.getState().ingestSnapshot(graph, seq);
+    });
+  });
+} else {
+  // Initial load: pull the current snapshot immediately (fast first paint);
+  // the live connection re-verifies seq via `hello` and resyncs as needed.
+  void fetchGraph(false, 0)
+    .then(({ graph, seq }) => {
+      if (uiStore.getState().seq === 0) uiStore.getState().ingestSnapshot(graph, seq);
+    })
+    .catch(() => {
+      /* server not up yet — the SSE reconnect loop keeps trying */
+    });
+
+  // GET /api/status (spec/50) carries two client policies at boot:
+  //  - writes: whether the in-browser editor's save path is open (Edit / New show).
+  //  - ui: the operator's [ui] block (spec/80) — the mobile node cap (preferred over
+  //    the GPU-tier guess) and the opening view (cosmos / brain), applied here so the
+  //    client stops guessing from the device alone.
+  void fetchStatus().then((status) => {
+    const s = uiStore.getState();
+    s.setWritesEnabled(writesEnabledFromStatus(status));
+    s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport() });
   });
 
-// GET /api/status (spec/50) carries two client policies at boot:
-//  - writes: whether the in-browser editor's save path is open (Edit / New show).
-//  - ui: the operator's [ui] block (spec/80) — the mobile node cap (preferred over
-//    the GPU-tier guess) and the opening view (cosmos / brain), applied here so the
-//    client stops guessing from the device alone.
-void fetchStatus().then((status) => {
-  const s = uiStore.getState();
-  s.setWritesEnabled(writesEnabledFromStatus(status));
-  s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport() });
-});
-
-const connection = new LiveConnection({ store: uiStore, fetchGraph });
-connection.start();
+  connection = new LiveConnection({ store: uiStore, fetchGraph });
+  connection.start();
+}
 
 // The T3 entity layer fetches lazily — only once the entity/overlay layer is
 // picked (links mode stays byte-for-byte the doc graph).
@@ -72,7 +91,7 @@ if (parseDeepLink(initialSearch, uiStore.getState().timeline) === null) {
 
 // PWA: mobile radios drop SSE aggressively — reconnect when we come back.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') connection.pokeVisible();
+  if (document.visibilityState === 'visible') connection?.pokeVisible();
 });
 
 const runtime = new GraphRuntime(uiStore);
@@ -93,7 +112,9 @@ window.__bp_runtime = runtime;
 createRoot(document.getElementById('root') as HTMLElement).render(<App runtime={runtime} />);
 
 // Service worker (vite-plugin-pwa): precached shell + offline graph snapshot.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+// Static exports build without the PWA plugin — a demo page must not install
+// a caching worker (and the virtual module does not exist in that build).
+if (import.meta.env.PROD && !IS_STATIC && 'serviceWorker' in navigator) {
   void import('virtual:pwa-register').then(({ registerSW }) => {
     registerSW({ immediate: true });
   });

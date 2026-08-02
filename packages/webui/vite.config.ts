@@ -9,9 +9,24 @@ import { VitePWA } from 'vite-plugin-pwa';
 // already taken (e.g. a real engine running alongside dev:mock).
 const API_TARGET = process.env.BP_API_TARGET ?? 'http://127.0.0.1:4747';
 
+// Static-snapshot builds (scripts/build-static-site.mjs): a relative base so
+// the export works at any subpath (GitHub Pages serves under /<repo>/), and
+// no PWA — a demo snapshot must not install a caching service worker. The
+// same flag reaches the app as import.meta.env.VITE_STATIC_SNAPSHOT.
+const STATIC_SNAPSHOT = process.env.VITE_STATIC_SNAPSHOT === '1';
+
 export default defineConfig({
+  base: STATIC_SNAPSHOT ? './' : '/',
+  resolve: {
+    alias: STATIC_SNAPSHOT
+      ? // With the plugin off its virtual module vanishes; alias the (never
+        // executed) dynamic import in main.tsx to a no-op so Rollup resolves.
+        { 'virtual:pwa-register': new URL('./src/pwaStub.ts', import.meta.url).pathname }
+      : {},
+  },
   plugins: [
     react(),
+    !STATIC_SNAPSHOT &&
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png'],

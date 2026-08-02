@@ -6,6 +6,17 @@
 import type { DocResponse, GraphPayload, SearchMode, SearchResponse, TierMap } from '../graph/types';
 import type { EntityGraph, GraphLayer, NeighborsResponse } from '../graph/entities';
 import { EMPTY_TIMELINE, type Timeline } from '../time/timeline';
+import {
+  IS_STATIC,
+  STATIC_BASE,
+  loadStaticSearchIndex,
+  loadStaticTimeline,
+  resolveStaticVersionSha,
+  staticDocUrl,
+  staticGraphUrl,
+  staticNeighborsUrl,
+  staticSearch,
+} from './staticMode';
 
 export interface GraphFetchResult {
   graph: GraphPayload;
@@ -43,7 +54,8 @@ export interface StatusResponse {
 
 export async function fetchStatus(): Promise<StatusResponse | null> {
   try {
-    const res = await fetch('/api/status', { headers: { accept: 'application/json' } });
+    const url = IS_STATIC ? `${STATIC_BASE}api/status` : '/api/status';
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
     if (!res.ok) return null;
     return (await res.json()) as StatusResponse;
   } catch {
@@ -76,7 +88,11 @@ function seqFromETag(etag: string | null): number | null {
  * needsSnapshot and loop).
  */
 export async function fetchGraph(bustCache = false, fallbackSeq = 0): Promise<GraphFetchResult> {
-  const url = bustCache ? `/api/graph?layer=links&fresh=${Date.now()}` : '/api/graph?layer=links';
+  const url = IS_STATIC
+    ? staticGraphUrl(STATIC_BASE, 'links')
+    : bustCache
+      ? `/api/graph?layer=links&fresh=${Date.now()}`
+      : '/api/graph?layer=links';
   const res = await fetch(url, { headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error(`GET /api/graph -> ${res.status}`);
   const graph = (await res.json()) as GraphPayload;
@@ -94,9 +110,11 @@ export type EntityGraphFetch =
   | { ok: false; status: number };
 
 export async function fetchEntityGraph(bustCache = false, fallbackSeq = 0): Promise<EntityGraphFetch> {
-  const url = bustCache
-    ? `/api/graph?layer=entities&fresh=${Date.now()}`
-    : '/api/graph?layer=entities';
+  const url = IS_STATIC
+    ? staticGraphUrl(STATIC_BASE, 'entities')
+    : bustCache
+      ? `/api/graph?layer=entities&fresh=${Date.now()}`
+      : '/api/graph?layer=entities';
   const res = await fetch(url, { headers: { accept: 'application/json' } });
   if (!res.ok) return { ok: false, status: res.status };
   const graph = (await res.json()) as EntityGraph;
@@ -118,7 +136,12 @@ export async function fetchNeighbors(
 ): Promise<NeighborsResponse | null> {
   const encoded = encodeURIComponent(id);
   try {
-    const res = await fetch(`/api/neighbors?id=${encoded}&layer=${layer}&depth=${depth}`, { signal });
+    // Static exports bake exactly one neighborhood per doc (layer=entities,
+    // depth=1 — the only shape the UI asks for), so layer/depth collapse.
+    const url = IS_STATIC
+      ? staticNeighborsUrl(STATIC_BASE, id)
+      : `/api/neighbors?id=${encoded}&layer=${layer}&depth=${depth}`;
+    const res = await fetch(url, { signal });
     if (!res.ok) return null;
     return (await res.json()) as NeighborsResponse;
   } catch {
@@ -134,7 +157,11 @@ export async function fetchNeighbors(
  * rather than throwing.
  */
 export async function fetchTimeline(bustCache = false): Promise<Timeline> {
-  const url = bustCache ? `/api/timeline?fresh=${Date.now()}` : '/api/timeline';
+  const url = IS_STATIC
+    ? `${STATIC_BASE}api/timeline`
+    : bustCache
+      ? `/api/timeline?fresh=${Date.now()}`
+      : '/api/timeline';
   try {
     const res = await fetch(url, { headers: { accept: 'application/json' } });
     if (!res.ok) return EMPTY_TIMELINE;
@@ -150,6 +177,12 @@ export async function fetchSearch(
   limit = 12,
   signal?: AbortSignal,
 ): Promise<SearchResponse> {
+  if (IS_STATIC) {
+    // No engine behind a static export — answer from the baked full-text
+    // index, honestly keyword-degraded (staticMode.ts).
+    const index = await loadStaticSearchIndex();
+    return staticSearch(index, query, mode, limit);
+  }
   const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&mode=${mode}&limit=${limit}`, { signal });
   if (!res.ok) throw new Error(`GET /api/search -> ${res.status}`);
   return (await res.json()) as SearchResponse;
@@ -166,8 +199,20 @@ export async function fetchDoc(path: string, signal?: AbortSignal, at?: string):
   const encoded = path.split('/').map(encodeURIComponent).join('/');
   // ?at=<sha> (spec/50 "Doc versions"): the doc AS OF a commit — the
   // file-level Time Machine's content fetch; read-only by construction.
+  // Static exports bake one file per distinct doc VERSION, so the scrubber's
+  // station commit first resolves to the version in effect there.
+  let effectiveAt = at;
+  if (IS_STATIC && at !== undefined) {
+    const timeline = await loadStaticTimeline();
+    const resolved = timeline !== null ? resolveStaticVersionSha(timeline, path, at) : null;
+    if (resolved === null) {
+      return { ok: false, status: 404, body: { error: `${path} does not exist at ${at}` } };
+    }
+    effectiveAt = resolved;
+  }
   const query = at !== undefined ? `?at=${encodeURIComponent(at)}` : '';
-  const res = await fetch(`/api/docs/${encoded}${query}`, { signal });
+  const url = IS_STATIC ? staticDocUrl(STATIC_BASE, path, effectiveAt) : `/api/docs/${encoded}${query}`;
+  const res = await fetch(url, { signal });
   if (res.ok) return { ok: true, doc: (await res.json()) as DocResponse };
   let body: DocFetchError = { error: `GET /api/docs/${path} -> ${res.status}` };
   try {

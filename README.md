@@ -75,6 +75,13 @@ holographic-brain web UI that updates live while agents write).
 
 ## Quick start
 
+### 0 · See a brain right now — no install
+
+The [live demo](https://benquemax.github.io/brainpick/) is this repository's
+own docs wiki, baked into a static snapshot and redeployed with every
+release: the real UI, searchable, with the full time machine — served by
+GitHub Pages with no engine behind it.
+
 ### 1 · Install the app and see a brain immediately
 
 The fastest path is the desktop app — a single file that runs the brainpick

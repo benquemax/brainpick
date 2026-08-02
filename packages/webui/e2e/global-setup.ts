@@ -12,7 +12,16 @@
  * environment).
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -125,6 +134,74 @@ function compileAndStageT3(bundle: string): void {
   writeFileSync(manifestPath, JSON.stringify(manifest), 'utf-8');
 }
 
+/**
+ * The static-export leg: a fifth fixture copy gets a REAL two-commit git
+ * history (so the exporter bakes a timeline and doc versions), is baked by
+ * scripts/build-static-site.mjs via the NODE engine, and is served by the
+ * deliberately dumb e2e/static-server.mjs — GitHub Pages semantics, no
+ * brainpick process behind the page. static.spec.ts runs against it.
+ */
+function buildStaticSite(tmpDir: string): { site: string; bundle: string } {
+  const bundle = path.join(tmpDir, 'kotiaurinko-static');
+  cpSync(fixtureBundle, bundle, { recursive: true });
+
+  const git = (...argv: string[]): void => {
+    const result = spawnSync('git', ['-C', bundle, ...argv], { stdio: 'pipe', encoding: 'utf-8' });
+    if (result.status !== 0) {
+      throw new Error(`git ${argv.join(' ')} failed:\n${result.stdout ?? ''}\n${result.stderr ?? ''}`);
+    }
+  };
+  git('init');
+  git('-c', 'user.email=e2e@brainpick.test', '-c', 'user.name=e2e', 'add', '.');
+  git('-c', 'user.email=e2e@brainpick.test', '-c', 'user.name=e2e', 'commit', '-m', 'the fixture is born');
+  appendFileSync(path.join(bundle, 'aurinko.md'), '\nThe sun grew a sentence for the time machine.\n');
+  git('-c', 'user.email=e2e@brainpick.test', '-c', 'user.name=e2e', 'add', '.');
+  git('-c', 'user.email=e2e@brainpick.test', '-c', 'user.name=e2e', 'commit', '-m', 'the sun changes');
+
+  // The exporter runs the node engine; e2e CI only sets the python one up.
+  const nodeCli = path.join(repoRoot, 'packages', 'node', 'dist', 'cli.js');
+  if (!existsSync(nodeCli)) {
+    const build = spawnSync('npm', ['run', 'build', '-w', 'packages/node'], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+      encoding: 'utf-8',
+    });
+    if (build.status !== 0) {
+      throw new Error(`node engine build failed:\n${build.stdout ?? ''}\n${build.stderr ?? ''}`);
+    }
+  }
+
+  const site = path.join(tmpDir, 'static-site');
+  const bake = spawnSync(
+    'node',
+    [path.join(repoRoot, 'scripts', 'build-static-site.mjs'), '--root', bundle, '--out', site],
+    { cwd: repoRoot, stdio: 'pipe', encoding: 'utf-8' },
+  );
+  if (bake.status !== 0) {
+    throw new Error(`static-site bake failed:\n${bake.stdout ?? ''}\n${bake.stderr ?? ''}`);
+  }
+  return { site, bundle };
+}
+
+function spawnStaticServer(site: string, port: number): Spawned {
+  const script = fileURLToPath(new URL('./static-server.mjs', import.meta.url));
+  const child = spawn('node', [script, site, String(port)], {
+    cwd: webuiDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  });
+  let output = '';
+  const logFile = path.join(engineLogDir, 'static.log');
+  writeFileSync(logFile, '', 'utf-8');
+  const capture = (chunk: Buffer) => {
+    output += chunk.toString();
+    appendFileSync(logFile, chunk);
+  };
+  child.stdout?.on('data', capture);
+  child.stderr?.on('data', capture);
+  return { child, url: `http://127.0.0.1:${port}`, output: () => output };
+}
+
 export default async function globalSetup(): Promise<void> {
   const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'brainpick-e2e-'));
   const bundle = path.join(tmpDir, 'kotiaurinko');
@@ -151,22 +228,36 @@ export default async function globalSetup(): Promise<void> {
   const bundleEdit = path.join(tmpDir, 'kotiaurinko-edit');
   cpSync(fixtureBundle, bundleEdit, { recursive: true });
 
-  const [port, portT2less, portT3, portEdit] = [await freePort(), await freePort(), await freePort(), await freePort()];
+  // The static leg bakes BEFORE the engines spawn (it runs its own transient
+  // engine on a free port — serialized here so ports never collide).
+  const { site } = buildStaticSite(tmpDir);
+
+  const [port, portT2less, portT3, portEdit, portStatic] = [
+    await freePort(),
+    await freePort(),
+    await freePort(),
+    await freePort(),
+    await freePort(),
+  ];
   const primary = spawnServe('primary', bundle, port);
   const t2less = spawnServe('t2less', bundleT2less, portT2less);
   const t3 = spawnServe('t3', bundleT3, portT3);
   const edit = spawnServe('edit', bundleEdit, portEdit);
+  const staticSite = spawnStaticServer(site, portStatic);
 
   try {
     await waitForHealth(`${primary.url}/api/health`, HEALTH_TIMEOUT_MS, primary.output);
     await waitForHealth(`${t2less.url}/api/health`, HEALTH_TIMEOUT_MS, t2less.output);
     await waitForHealth(`${t3.url}/api/health`, HEALTH_TIMEOUT_MS, t3.output);
     await waitForHealth(`${edit.url}/api/health`, HEALTH_TIMEOUT_MS, edit.output);
+    // /api/health is a baked FILE here — proof the snapshot answers by itself.
+    await waitForHealth(`${staticSite.url}/api/health`, HEALTH_TIMEOUT_MS, staticSite.output);
   } catch (error) {
     killGroup(primary.child);
     killGroup(t2less.child);
     killGroup(t3.child);
     killGroup(edit.child);
+    killGroup(staticSite.child);
     rmSync(tmpDir, { recursive: true, force: true });
     throw error;
   }
@@ -175,10 +266,12 @@ export default async function globalSetup(): Promise<void> {
   t2less.child.unref();
   t3.child.unref();
   edit.child.unref();
+  staticSite.child.unref();
   process.env.BP_E2E_URL = primary.url;
   process.env.BP_E2E_URL_T2LESS = t2less.url;
   process.env.BP_E2E_URL_T3 = t3.url;
   process.env.BP_E2E_URL_EDIT = edit.url;
+  process.env.BP_E2E_URL_STATIC = staticSite.url;
   process.env.BP_E2E_BUNDLE = bundle;
   process.env.BP_E2E_BUNDLE_EDIT = bundleEdit;
   process.env.BP_E2E_TMPDIR = tmpDir;
@@ -186,4 +279,5 @@ export default async function globalSetup(): Promise<void> {
   process.env.BP_E2E_PID_T2LESS = String(t2less.child.pid ?? '');
   process.env.BP_E2E_PID_T3 = String(t3.child.pid ?? '');
   process.env.BP_E2E_PID_EDIT = String(edit.child.pid ?? '');
+  process.env.BP_E2E_PID_STATIC = String(staticSite.child.pid ?? '');
 }

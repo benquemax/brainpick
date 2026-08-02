@@ -4,7 +4,7 @@ about: process
 title: Onboarding
 description: One command from zero to a living brain — init detects the bundle and the models, compiles instantly, and hands every agent its config snippet.
 tags: [engine]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-08-02T19:50:00Z
 ---
 
 # Onboarding
@@ -33,4 +33,6 @@ The choreography:
    [holographic brain](holographic-brain.md) with `brainpick serve --open`.
 
 The first wow requires zero API keys: T1 plus the [live deltas](live-deltas.md)
-channel already gives you a living graph. Models only make it deeper.
+channel already gives you a living graph. Models only make it deeper. And the
+wow before the first wow requires zero installs — the hosted
+[static snapshot](static-snapshot.md) demo shows a real brain in one click.
