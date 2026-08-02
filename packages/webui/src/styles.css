@@ -848,6 +848,53 @@ button:focus-visible,
   align-items: flex-end;
 }
 
+/* SHARE lives beside the bottom-centre brain pill — the doc panel owns the
+   right column (z 6 over the HUD's 5), so a right-side share button would be
+   buried exactly when sharing an open doc matters most. */
+.share-cluster {
+  left: 50%;
+  transform: translateX(90px);
+  align-items: flex-start;
+}
+
+.share-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  min-width: 260px;
+}
+
+.share-dim {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.share-url {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(120, 160, 200, 0.25);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 5px 6px;
+}
+
+.share-copy {
+  justify-content: center;
+}
+
 .cluster-frame {
   position: relative;
   padding: 8px 10px 9px;

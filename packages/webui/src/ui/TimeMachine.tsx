@@ -12,10 +12,10 @@
  * Around the scene it lays a calm OSX-Time-Machine depth: a cool time-fog that
  * deepens the further back you travel, and a drifting starfield you fly through.
  */
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { uiStore, useUI } from '../state/store';
 import { TIME_MACHINE } from '../scene/tuning';
-import { commitAt, hasHistory, momentQuery } from '../time/timeline';
+import { commitAt, hasHistory } from '../time/timeline';
 
 /** A compact UTC readout: "2026-07-04 · 14:03". */
 function formatMoment(iso: string): string {
@@ -36,32 +36,15 @@ export function TimeMachine() {
 
   const trackRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
-  const everActive = useRef(false); // so we only clear the URL AFTER a real visit
 
   const commits = timeline.commits;
   const count = commits.length;
   const last = Math.max(1, count - 1); // avoid /0 on a single-commit history
   const history = hasHistory(timeline);
-
-  // Keep the address bar shareable: reflect the current commit as ?commit=<sha>.
   const rounded = Math.round(scrubIndex);
-  useEffect(() => {
-    if (!timeTravel || !history) return;
-    const query = momentQuery(timeline, rounded);
-    if (query) window.history.replaceState(null, '', query + window.location.hash);
-    // rounded (not scrubIndex) so we only rewrite the URL once per commit.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rounded, timeTravel, history]);
 
-  // Clear the deep-link query on the way OUT — but only after a real visit, so a
-  // ?t=/?commit= deep-link on first load survives long enough to be applied.
-  useEffect(() => {
-    if (timeTravelActive) everActive.current = true;
-    else if (everActive.current && !timeTravel && window.location.search) {
-      everActive.current = false;
-      window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-    }
-  }, [timeTravel, timeTravelActive]);
+  // The address bar (?commit=<sha> included) is written by live/urlSync.ts —
+  // the single writer for the whole shareable view state.
 
   if (!history) return null; // no git history → the Time Machine hides (spec/90)
 

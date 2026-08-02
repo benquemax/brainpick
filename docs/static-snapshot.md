@@ -4,7 +4,7 @@ about: thing
 title: Static snapshot
 description: A brain baked into a fully static site — the engine's own API responses as files plus a UI build that searches, walks and time-travels client-side; the GitHub Pages demo path.
 tags: [ui, deploy]
-timestamp: 2026-08-02T19:45:00Z
+timestamp: 2026-08-03T00:30:00Z
 ---
 
 # Static snapshot
@@ -39,6 +39,10 @@ are advertised off, so the editor never appears. The
 [time machine](time-machine.md) travels fully — the timeline and every doc
 version ride along in the bake — while [live deltas](live-deltas.md) are the
 one thing a snapshot, by definition, does not have.
+
+[Shareable views](shareable-views.md) work unchanged on a snapshot — the
+whole scheme is client-side query parameters, so a deep link into the hosted
+demo replicates the sender's exact view with no engine involved.
 
 The `publish-pages` job in the release workflow rebuilds and redeploys the
 demo on every published version, so the hosted brain always shows the

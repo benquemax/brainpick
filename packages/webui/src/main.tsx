@@ -3,6 +3,7 @@ import { App } from './App';
 import { fetchGraph, fetchStatus, writesEnabledFromStatus } from './live/api';
 import { IS_STATIC } from './live/staticMode';
 import { LiveConnection } from './live/connection';
+import { startUrlSync, urlPinsMode } from './live/urlSync';
 import { EntityLayerController } from './live/entities';
 import { TimelineController } from './live/timeline';
 import { detectGpuTier, isMobileViewport, readGpuInputs } from './scene/gpuTier';
@@ -15,6 +16,11 @@ import './styles.css';
 // the right node budget, DPR cap and bloom setting (no post-hoc reflow).
 uiStore.getState().initGpu(detectGpuTier(readGpuInputs()));
 
+// Shareable view URLs: apply a shared link's view to the store, then keep the
+// address bar mirroring the current view (the single query-string writer).
+const modePinned = urlPinsMode(window.location.search);
+startUrlSync({ store: uiStore });
+
 let connection: LiveConnection | null = null;
 
 if (IS_STATIC) {
@@ -26,7 +32,7 @@ if (IS_STATIC) {
     const s = uiStore.getState();
     s.enterSnapshotMode(status?.tiers ?? null, status?.seq ?? 1);
     s.setWritesEnabled(writesEnabledFromStatus(status));
-    s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport() });
+    s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport(), modePinned });
     return fetchGraph(false, status?.seq ?? 1).then(({ graph, seq }) => {
       if (uiStore.getState().seq === 0) uiStore.getState().ingestSnapshot(graph, seq);
     });
@@ -50,7 +56,7 @@ if (IS_STATIC) {
   void fetchStatus().then((status) => {
     const s = uiStore.getState();
     s.setWritesEnabled(writesEnabledFromStatus(status));
-    s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport() });
+    s.applyServerUi(status?.ui ?? null, { isMobile: isMobileViewport(), modePinned });
   });
 
   connection = new LiveConnection({ store: uiStore, fetchGraph });

@@ -4,6 +4,7 @@ import type { GraphRuntime } from './scene/runtime';
 import type { GraphLayer } from './graph/entities';
 import { uiStore, useUI } from './state/store';
 import { CameraCluster } from './ui/CameraCluster';
+import { SharePanel } from './ui/SharePanel';
 import { DocPanel } from './ui/DocPanel';
 import { EntityPanel } from './ui/EntityPanel';
 import { LayerToggle } from './ui/LayerToggle';
@@ -116,6 +117,7 @@ export function App({ runtime }: { runtime: GraphRuntime }) {
       <ModeToggle />
       <TimeMachine />
       <CameraCluster />
+      <SharePanel />
       <ShowCaption />
       <Toast />
       {editor !== null && (

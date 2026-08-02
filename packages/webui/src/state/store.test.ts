@@ -826,6 +826,13 @@ describe('applyServerUi — the operator [ui] policy reaches the store', () => {
     store.getState().applyServerUi({ default_mode: 'cosmos' }, { isMobile: false }); // a second /api/status
     expect(store.getState().mode).toBe('brain'); // not pulled back to cosmos
   });
+
+  it('a ?view= deep link outranks the operator default (modePinned)', () => {
+    const store = createUIStore();
+    store.getState().setMode('brain'); // urlSync applied the shared view
+    store.getState().applyServerUi({ default_mode: 'cosmos' }, { isMobile: false, modePinned: true });
+    expect(store.getState().mode).toBe('brain'); // the link's promise holds
+  });
 });
 
 describe('presentations (brain_show, spec/95)', () => {

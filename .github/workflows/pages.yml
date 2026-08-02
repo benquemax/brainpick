@@ -28,6 +28,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the exporter bakes the timeline + every doc version
+          # (the time machine); a shallow clone would bake a one-commit past.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22

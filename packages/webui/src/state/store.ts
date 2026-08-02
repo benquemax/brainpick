@@ -288,7 +288,7 @@ export interface UIState extends GraphSlice {
    * mobile node cap over the GPU guess (GPU tier stays the secondary safety cap),
    * and honor its opening view on first load. Absent/null → the GPU guess stands.
    */
-  applyServerUi(ui: StatusUi | null, env: { isMobile: boolean }): void;
+  applyServerUi(ui: StatusUi | null, env: { isMobile: boolean; modePinned?: boolean }): void;
   /** Override the render budget (clamped to [1, ceiling]). */
   setNodeBudget(budget: number): void;
   /** "Show more": raise the budget by the tuning factor, up to the ceiling. */
@@ -835,8 +835,15 @@ export function createUIStore(): UIStoreApi {
         // agent presentation that already set the mode (a UI joining a brain
         // presentation must land in the brain, not be pulled back by the static
         // default — the /api/status fetch and the replayed brain.show race).
+        // A ?view= deep link (env.modePinned, live/urlSync.ts) outranks the
+        // default for the same reason: the link promised a specific view.
         const presentationMode = get().presentation?.mode ?? null;
-        if (firstApply && presentationMode === null && (ui?.default_mode === 'brain' || ui?.default_mode === 'cosmos')) {
+        if (
+          firstApply &&
+          env.modePinned !== true &&
+          presentationMode === null &&
+          (ui?.default_mode === 'brain' || ui?.default_mode === 'cosmos')
+        ) {
           get().setMode(ui.default_mode);
         }
       },
