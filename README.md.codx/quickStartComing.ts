@@ -126,13 +126,13 @@ export const validate = async () => {
   if (!fs.existsSync(path.join(root, 'scripts', 'build-static-site.mjs'))) {
     throw new Error('The live demo needs scripts/build-static-site.mjs — it is gone');
   }
-  const releaseWorkflow = fs.readFileSync(
-    path.join(root, '.github', 'workflows', 'release.yml'),
+  const pagesWorkflow = fs.readFileSync(
+    path.join(root, '.github', 'workflows', 'pages.yml'),
     'utf-8',
   );
-  if (!releaseWorkflow.includes('publish-pages') || !releaseWorkflow.includes('build-static-site.mjs')) {
+  if (!pagesWorkflow.includes('tags: ["v*"]') || !pagesWorkflow.includes('build-static-site.mjs')) {
     throw new Error(
-      '"redeployed with every release" requires release.yml\'s publish-pages job to run build-static-site.mjs',
+      '"redeployed with every release" requires pages.yml to run build-static-site.mjs on v* tags',
     );
   }
 

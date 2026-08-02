@@ -1,0 +1,44 @@
+name: pages
+
+# Deploy the static demo brain — this repo's docs wiki, baked by
+# scripts/build-static-site.mjs — to GitHub Pages. Fires on every published
+# version (the same v* tags as release.yml) so the hosted demo always shows
+# the release it ships with, and manually from the Actions tab for a deploy
+# between releases. One-time repo setup: Settings → Pages → Source =
+# "GitHub Actions".
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+# One deploy at a time; a newer run supersedes a queued older one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publish-pages:
+    name: deploy the static demo brain to GitHub Pages
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w packages/node
+      - name: build the static snapshot of the docs brain
+        run: node scripts/build-static-site.mjs --out _temp/dist/static-site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _temp/dist/static-site
+      - id: deployment
+        uses: actions/deploy-pages@v4
