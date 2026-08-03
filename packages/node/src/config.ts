@@ -58,7 +58,16 @@ export interface UiConfig {
 export interface ModulesConfig {
   vectors: string; // auto | on | off — T2 (spec/30)
   graph: string; // on (default, "algorithmic" also accepted) | auto | off — T3 (spec/40)
+  similarity_gaps: string; // auto (on iff T2 fresh) | on | off — the gap-detector (spec/45)
   ui: boolean;
+}
+
+/** [similarity_gaps] — tuning knobs for the gap-detector (spec/45). Shared
+ * bundle policy, not curatorial (dismissals live in
+ * similarity-gaps-allowlist.toml instead). */
+export interface SimilarityGapsConfig {
+  threshold: number; // minimum cosine similarity to report a pair
+  max_pairs: number; // cap on reported pairs, highest score first
 }
 
 export interface EmbeddingConfig {
@@ -89,6 +98,7 @@ export interface Config {
   serve: ServeConfig;
   ui: UiConfig;
   validate: ValidateConfig;
+  similarity_gaps: SimilarityGapsConfig;
 }
 
 export function defaultConfig(): Config {
@@ -96,7 +106,7 @@ export function defaultConfig(): Config {
     spec: "0.1",
     bundle: { root: ".", include: ["**/*.md"], exclude: [], id: "" },
     index: { mode: "section", file: "index.md" },
-    modules: { vectors: "auto", graph: "on", ui: true },
+    modules: { vectors: "auto", graph: "on", similarity_gaps: "auto", ui: true },
     models: {
       embedding: { kind: "", endpoint: "", model: "", dim: 0 },
       extraction: { kind: "", endpoint: "", model: "", api_key_env: "" },
@@ -112,10 +122,11 @@ export function defaultConfig(): Config {
     },
     ui: { max_nodes_mobile: 8000, default_mode: "cosmos" },
     validate: { henxels: "auto" },
+    similarity_gaps: { threshold: 0.75, max_pairs: 50 },
   };
 }
 
-const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate"] as const;
+const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps"] as const;
 // [models.*] tables are nested and handled separately below.
 const KNOWN_TOP = new Set(["spec", "models", ...SECTIONS]);
 
@@ -134,12 +145,21 @@ function coerce(current: SectionValue, value: unknown): SectionValue {
     if (typeof value === "boolean") return value;
     return TRUTHY.has(pyStrOf(value).trim().toLowerCase());
   }
-  if (typeof current === "number") {
+  if (typeof current === "number" && Number.isInteger(current)) {
     // Python int(): numbers truncate, bools are 0/1, strings must be integer literals.
     if (typeof value === "number") return Number.isFinite(value) ? Math.trunc(value) : current;
     if (typeof value === "bigint") return Number(value);
     if (typeof value === "boolean") return value ? 1 : 0;
     if (typeof value === "string" && /^[+-]?\d+$/.test(value.trim())) return parseInt(value.trim(), 10);
+    return current;
+  }
+  if (typeof current === "number") {
+    // Python float(): any finite number or a parseable decimal string.
+    if (typeof value === "number") return Number.isFinite(value) ? value : current;
+    if (typeof value === "bigint") return Number(value);
+    if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
     return current;
   }
   if (Array.isArray(current)) {
@@ -156,9 +176,12 @@ function fromEnv(current: SectionValue, raw: string): SectionValue {
     if (FALSY.has(lowered)) return false;
     return current;
   }
-  if (typeof current === "number") {
+  if (typeof current === "number" && Number.isInteger(current)) {
     if (/^[+-]?\d+$/.test(raw.trim())) return parseInt(raw.trim(), 10);
     return current;
+  }
+  if (typeof current === "number") {
+    return raw.trim() !== "" && Number.isFinite(Number(raw)) ? Number(raw) : current;
   }
   if (Array.isArray(current)) {
     return raw

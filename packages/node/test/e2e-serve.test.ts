@@ -253,6 +253,26 @@ test("timeline empty then served", async () => {
   expect(cached.status).toBe(304);
 });
 
+test("similarity gaps empty then served", async () => {
+  const root = copyBundle();
+  const { base } = await serve(await makeApp(root));
+  // T2 is off for this fixture copy → no artifact → the empty shape
+  const first = await getJson(`${base}/api/similarity-gaps`);
+  expect(first.status).toBe(200);
+  expect(first.headers.get("etag")).toBe('"1"');
+  expect(first.body).toEqual({ pairs: [], threshold: 0.75, max_pairs: 50 });
+
+  const payload = { pairs: [{ a: "a.md", b: "b.md", score: 0.9, status: "open" }],
+                     threshold: 0.75, max_pairs: 50 };
+  writeFileSync(join(root, ".brainpick", "t1", "similarity-gaps.json"), JSON.stringify(payload), "utf8");
+  const served = await getJson(`${base}/api/similarity-gaps`);
+  expect(served.status).toBe(200);
+  expect(served.body).toEqual(payload);
+
+  const cached = await fetch(`${base}/api/similarity-gaps`, { headers: { "If-None-Match": '"1"' } });
+  expect(cached.status).toBe(304);
+});
+
 test("docs happy and nested", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/docs/kuu.md`);

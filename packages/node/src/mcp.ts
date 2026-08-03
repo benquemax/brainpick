@@ -75,6 +75,18 @@ export function tokensOf(obj: unknown): number {
 
 // -- brain_overview ----------------------------------------------------------------
 
+/** spec/45 — always present, 0 when off/absent, never budget-trimmed (same
+ * posture as top_ghosts). */
+function similarityGapsOpenCount(root: string): number {
+  let data: { pairs?: Array<{ status?: string }> };
+  try {
+    data = JSON.parse(readFileSync(join(root, ".brainpick", "t1", "similarity-gaps.json"), "utf8"));
+  } catch {
+    return 0;
+  }
+  return (data.pairs ?? []).filter((p) => p.status === "open").length;
+}
+
 export function overviewPayload(state: ServeState, budgetTokens?: number | null): Record<string, unknown> {
   const budget = budgetTokens || 800;
   const stats = (state.graph.stats ?? {}) as Partial<GraphStats>;
@@ -106,6 +118,7 @@ export function overviewPayload(state: ServeState, budgetTokens?: number | null)
     tiers: state.tiers(),
     tree,
     top_ghosts: topGhosts(state.graph),
+    similarity_gaps_open_count: similarityGapsOpenCount(state.root),
     truncated: false,
     hint: "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.",
   };

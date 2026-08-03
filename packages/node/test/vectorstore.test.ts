@@ -91,4 +91,24 @@ describe.skipIf(!available)("vector store", () => {
     await store.upsert([], new Set([tricky]), 2);
     expect(await store.existingIds()).toEqual(new Set(["b~0"]));
   });
+
+  // -- docVectors (spec/45: one representative vector per document) -------------
+
+  test("docVectors mean-pools chunks per doc", async () => {
+    const store = new VectorStore(join(tempDir(), "lancedb"));
+    await store.replaceAll(
+      [
+        row("a.md#x~0", [1.0, 0.0], "a.md"),
+        row("a.md#x~1", [0.0, 2.0], "a.md"),
+        row("b.md#y~0", [3.0, 3.0], "b.md"),
+      ],
+      2,
+    );
+    expect(await store.docVectors()).toEqual(new Map([["a.md", [0.5, 1.0]], ["b.md", [3.0, 3.0]]]));
+  });
+
+  test("docVectors on missing table returns empty", async () => {
+    const store = new VectorStore(join(tempDir(), "nowhere"));
+    expect(await store.docVectors()).toEqual(new Map());
+  });
 });

@@ -1,5 +1,6 @@
 /** The compile pipeline (spec/10): scan → T1 → T2 → artifacts, hash-incremental,
  * byte-stable on no-ops, delta-emitting on change. */
+import { existsSync, unlinkSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
 import { loadConfig, resolveGraphBackend, type Config } from "../config";
@@ -10,6 +11,7 @@ import { deepEqual, diffGraphs, type GraphDelta } from "../deltas";
 import { findRepoRoot } from "../detect";
 import { buildTimeline } from "../timeline";
 import { SPEC_VERSION, VERSION } from "../version";
+import { runSimilarityGapsStage, similarityGapsGate } from "./similarity-gaps";
 import {
   applyIndexSection,
   applyReportSection,
@@ -59,15 +61,25 @@ function generator(): { impl: string; name: string; version: string } {
   return { impl: "node", name: "brainpick", version: VERSION };
 }
 
+/** The report reads whatever is currently on disk (spec/45) — null (the
+ * section is omitted) when the artifact doesn't exist, its `pairs` list
+ * otherwise, even an empty one. */
+function similarityGapsForReport(bp: string): Array<{ a: string; b: string; score: number }> | null {
+  const text = readTextOrNull(join(bp, "t1", "similarity-gaps.json"));
+  if (text === null) return null;
+  return (JSON.parse(text) as { pairs: Array<{ a: string; b: string; score: number }> }).pairs;
+}
+
 /** Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
  * already live — the bundle root, and the repo root above it when the bundle is
  * a subdir. Never creates the file; writes only when the block actually changed. */
-function refreshReport(root: string, graph: Graph, tiers: Record<string, unknown>): void {
+function refreshReport(root: string, bp: string, graph: Graph, tiers: Record<string, unknown>): void {
   const bundleRoot = resolve(root);
   const candidates = [bundleRoot];
   const repo = findRepoRoot(bundleRoot);
   if (repo !== null && repo !== bundleRoot) candidates.push(repo);
 
+  const similarityGaps = similarityGapsForReport(bp);
   const seen = new Set<string>();
   for (const base of candidates) {
     const agents = join(base, "AGENTS.md");
@@ -76,7 +88,7 @@ function refreshReport(root: string, graph: Graph, tiers: Record<string, unknown
     const existing = readTextOrNull(agents);
     if (existing === null) continue;
     const bundleDisplay = (relative(base, bundleRoot) || ".").split(sep).join("/");
-    const block = renderReportBlock(graph, tiers, bundleDisplay);
+    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps);
     const updated = applyReportSection(existing, block);
     if (updated !== null && updated !== existing) atomicWrite(agents, updated);
   }
@@ -152,6 +164,24 @@ export async function runCompile(
     }
   }
 
+  // Similarity gaps (spec/45): advisory, like timeline.json — rides T2's
+  // freshness, never blocks compile, not tracked as a manifest tier. Skipped
+  // entirely on --only compiles (mirrors writeTimeline's own scope).
+  if (wanted.size === 3) {
+    const [sgEnabled] = similarityGapsGate(cfg, t2Status);
+    if (sgEnabled) {
+      try {
+        await runSimilarityGapsStage(bp, root, graph, records, cfg);
+      } catch (error) {
+        // never let a gap-detector surprise break compile
+        console.warn(`similarity-gaps: skipped (${(error as Error).message})`);
+      }
+    } else {
+      const gapsFile = join(bp, "t1", "similarity-gaps.json");
+      if (existsSync(gapsFile)) unlinkSync(gapsFile); // off/no-longer-fresh — absence is honest
+    }
+  }
+
   // T3 (spec/40): runs last, never blocks T1/T2. The algorithmic default is pure
   // computation, so this engine compiles it natively — the only backend it has.
   const t3Backend = resolveGraphBackend(cfg);
@@ -170,7 +200,7 @@ export async function runCompile(
   const tiers = { t1: "fresh", t2: t2Status, t3: t3Status };
   // The opt-in AGENTS.md brain report rides along on every compile so it stays
   // true even when nothing else changed (e.g. the markers were just installed).
-  refreshReport(root, graph, tiers);
+  refreshReport(root, bp, graph, tiers);
   const artifactsChanged = t1Changed || t2Changed || t3Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {

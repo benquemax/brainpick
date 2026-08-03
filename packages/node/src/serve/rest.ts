@@ -432,6 +432,30 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
     res.set("ETag", etag).json(payload);
   });
 
+  router.get("/api/similarity-gaps", (req: Request, res: Response) => {
+    // The advisory t1/similarity-gaps.json (spec/45), or the empty shape when
+    // T2 is off or the artifact is absent. ETag by manifest seq, like /api/timeline.
+    const etag = `"${state.seq}"`;
+    const ifNoneMatch = req.headers["if-none-match"];
+    if (typeof ifNoneMatch === "string" && ifNoneMatch !== "") {
+      const candidates = new Set(ifNoneMatch.split(",").map((value) => value.trim().replace(/^W\//, "")));
+      if (candidates.has(etag) || candidates.has("*")) {
+        res.status(304).set("ETag", etag).end();
+        return;
+      }
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(
+        readFileSync(join(state.root, ".brainpick", "t1", "similarity-gaps.json"), "utf8"),
+      );
+    } catch {
+      const cfg = state.config.similarity_gaps;
+      payload = { pairs: [], threshold: cfg.threshold, max_pairs: cfg.max_pairs };
+    }
+    res.set("ETag", etag).json(payload);
+  });
+
   // POST /api/show (spec/95): resolve the presentation body and broadcast a
   // brain.show event to every open UI, returning {ok, shown, dropped, seq}. The
   // same resolve + present core brain_show uses; NOT behind [serve] writes.

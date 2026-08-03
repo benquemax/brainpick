@@ -155,4 +155,33 @@ export class VectorStore {
       .limit(k)
       .toArray()) as Array<Record<string, unknown>>;
   }
+
+  /** One representative vector per document (spec/45): the arithmetic mean,
+   * per dimension, over that document's chunk vectors. Plain arrays — bundle
+   * sizes here are small; no need for a numeric array library. */
+  async docVectors(): Promise<Map<string, number[]>> {
+    if (!isDir(this.path) || !(await lancedbAvailable())) return new Map();
+    const table = await this.openTable(await this.connect());
+    if (table === null) return new Map();
+    const rows = await table.query().select(["doc", "vector"]).toArray();
+    const sums = new Map<string, number[]>();
+    const counts = new Map<string, number>();
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const doc = String(row["doc"]);
+      const vector = Array.from(row["vector"] as Iterable<number>, Number);
+      const total = sums.get(doc);
+      if (total === undefined) {
+        sums.set(doc, [...vector]);
+      } else {
+        for (let i = 0; i < vector.length; i++) total[i] += vector[i]!;
+      }
+      counts.set(doc, (counts.get(doc) ?? 0) + 1);
+    }
+    const out = new Map<string, number[]>();
+    for (const [doc, total] of sums) {
+      const count = counts.get(doc)!;
+      out.set(doc, total.map((value) => value / count));
+    }
+    return out;
+  }
 }

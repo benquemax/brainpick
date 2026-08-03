@@ -114,11 +114,24 @@ test("modules and embedding defaults", () => {
   const { cfg } = load(tempDir());
   expect(cfg.modules.vectors).toBe("auto");
   expect(cfg.modules.graph).toBe("on");
+  expect(cfg.modules.similarity_gaps).toBe("auto");
   expect(cfg.modules.ui).toBe(true);
   expect(cfg.models.embedding.kind).toBe("");
   expect(cfg.models.embedding.endpoint).toBe("");
   expect(cfg.models.embedding.model).toBe("");
   expect(cfg.models.embedding.dim).toBe(0);
+  expect(cfg.similarity_gaps.threshold).toBe(0.75);
+  expect(cfg.similarity_gaps.max_pairs).toBe(50);
+});
+
+test("similarity gaps from toml", () => {
+  const root = withToml(
+    '[modules]\nsimilarity_gaps = "off"\n[similarity_gaps]\nthreshold = 0.9\nmax_pairs = 5\n',
+  );
+  const { cfg } = load(root);
+  expect(cfg.modules.similarity_gaps).toBe("off");
+  expect(cfg.similarity_gaps.threshold).toBe(0.9);
+  expect(cfg.similarity_gaps.max_pairs).toBe(5);
 });
 
 test("modules and embedding from toml", () => {

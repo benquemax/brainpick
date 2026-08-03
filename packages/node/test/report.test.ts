@@ -136,6 +136,31 @@ describe("renderReportBlock", () => {
     const stamp = first.slice(REPORT_BEGIN_PREFIX.length, first.indexOf(") -->"));
     expect(stamp).toBe(sha256Hex(body(first)).slice(0, 8));
   });
+
+  test("similarity gaps section omitted when absent", () => {
+    const block = renderReportBlock(graph([]), TIERS); // default similarityGaps=null
+    expect(block.toLowerCase()).not.toContain("similarity gap");
+  });
+
+  test("similarity gaps section present and empty when the artifact is a zero list", () => {
+    const block = renderReportBlock(graph([]), TIERS, ".", []);
+    const lines = block.split("\n");
+    const start = lines.indexOf("- Top similarity gaps:");
+    expect(lines[start + 1]).toBe("  - (none)");
+  });
+
+  test("similarity gaps ranked and truncated to five", () => {
+    const pairs = Array.from({ length: 7 }, (_, i) => ({
+      a: `a${i}.md`, b: `b${i}.md`, score: 0.5 + i / 100, status: "open" as const,
+    }));
+    const block = renderReportBlock(graph([]), TIERS, ".", pairs);
+    const lines = block.split("\n");
+    const start = lines.indexOf("- Top similarity gaps:");
+    const end = lines.findIndex((l, i) => i > start && l.startsWith("- Bundle root:"));
+    const gapLines = lines.slice(start + 1, end).filter((l) => l.startsWith("  - "));
+    expect(gapLines.length).toBe(5);
+    expect(gapLines[0]).toBe("  - a6.md ↔ b6.md — 0.56"); // highest score first
+  });
 });
 
 describe("applyReportSection", () => {

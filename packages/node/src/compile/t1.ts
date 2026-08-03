@@ -287,10 +287,20 @@ export function topGhosts(graph: Graph, limit = 5): GhostCount[] {
  * counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
  * the top-5 ghost queue by reference count, and the bundle root.
  * Deterministic; cross-engine byte-identical. */
+/** Rendering only ever reads a/b/score — a local, minimal shape avoids
+ * coupling this foundational module to compile/similarity-gaps.ts's fuller
+ * SimilarityGapPair (which itself imports GraphEdge/DocRecord from here). */
+interface ReportGapPair {
+  a: string;
+  b: string;
+  score: number;
+}
+
 export function renderReportBlock(
   graph: Graph,
   tiers: Record<string, unknown>,
   bundleRoot = ".",
+  similarityGaps: ReportGapPair[] | null = null,
 ): string {
   const stats = (graph.stats ?? {}) as Partial<GraphStats>;
   const nodes = graph.nodes ?? [];
@@ -329,6 +339,18 @@ export function renderReportBlock(
     for (const g of ghosts) lines.push(`  - ${g.target} — ${g.count} refs`);
   } else {
     lines.push("  - (none)");
+  }
+
+  if (similarityGaps !== null) {
+    lines.push("- Top similarity gaps:");
+    const ranked = [...similarityGaps]
+      .sort((x, y) => y.score - x.score || cmpStr(x.a, y.a) || cmpStr(x.b, y.b))
+      .slice(0, 5);
+    if (ranked.length > 0) {
+      for (const p of ranked) lines.push(`  - ${p.a} ↔ ${p.b} — ${p.score}`);
+    } else {
+      lines.push("  - (none)");
+    }
   }
 
   lines.push(`- Bundle root: ${bundleRoot}`);

@@ -92,6 +92,29 @@ test("overview budget trims tree", async () => {
   expect(treeDocCount(slim)).toBeLessThan(treeDocCount(full));
 });
 
+test("overview similarity_gaps_open_count is zero when the artifact is absent", async () => {
+  const root = copyBundle();
+  const result = overviewPayload(await makeState(root));
+  expect(result["similarity_gaps_open_count"]).toBe(0);
+});
+
+test("overview similarity_gaps_open_count reads the artifact", async () => {
+  const root = copyBundle();
+  const state = await makeState(root); // compiles first (T2 off — no artifact yet)
+  writeFileSync(
+    join(root, ".brainpick", "t1", "similarity-gaps.json"),
+    JSON.stringify({
+      pairs: [
+        { a: "a.md", b: "b.md", score: 0.9, status: "open" },
+        { a: "c.md", b: "d.md", score: 0.8, status: "dismissed" },
+      ],
+      threshold: 0.75, max_pairs: 50,
+    }),
+    "utf8",
+  );
+  expect(overviewPayload(state)["similarity_gaps_open_count"]).toBe(1);
+});
+
 test("search hits have why not bodies", async () => {
   const result = await searchPayload(await makeState(copyBundle()), "aurinko");
   const hits = result["hits"] as Array<Record<string, unknown>>;

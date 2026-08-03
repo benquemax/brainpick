@@ -185,6 +185,20 @@ describe("conformance", () => {
         });
         break;
 
+      case "similarity-gaps":
+        // spec/45: T2 vectors (mock embedder) joined against T1's link graph is
+        // fully deterministic, so — like kg-algorithmic — the artifact is held
+        // to a byte-golden standard, not just a result-set comparison.
+        test(c.id, async () => {
+          const root = copyBundle(c.bundle);
+          writeFileSync(join(root, "brainpick.toml"), MOCK_CONFIG, "utf8");
+          await runCompile(root);
+          const actual = readFileSync(join(root, c.artifact!), "utf8");
+          const expected = readFileSync(join(EXPECTED, c.bundle, c.artifact!), "utf8");
+          expect(actual, `${c.artifact} drifted from golden`).toBe(expected);
+        });
+        break;
+
       case "kg-query":
         // T3 consumer over the staged export — the normative reader only, never
         // an extractor (spec/40). Asserts the returned document SET.
