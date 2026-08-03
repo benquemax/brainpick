@@ -8,7 +8,7 @@ export const content = `## The tiers
 | T0 | grep/glob over the files | nothing |
 | T1 | generated \`index.md\`, link graph, backlinks, tags | nothing (deterministic) |
 | T2 | vector search over chunks | an embedding model |
-| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing by default; a small LLM for richer extraction |
+| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing — derived from links and tags |
 `;
 
 export const validate = async () => {

@@ -4,7 +4,7 @@ about: concept
 title: "Spec reference"
 description: "The normative spec documents both engines honor — manifest, the three tiers, REST, live deltas, MCP, config, timeline and presentations — each summarized here."
 tags: [spec]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Spec reference
@@ -25,6 +25,7 @@ two engines, proven by conformance rather than hope.
 - [Spec: T1 artifacts](reference/spec/t1-artifacts.md)
 - [Spec: T2 vectors](reference/spec/t2-vectors.md)
 - [Spec: T3 knowledge graph](reference/spec/t3-kg.md)
+- [Spec: similarity gaps](reference/spec/similarity-gaps.md)
 
 ## Serving surface
 

@@ -5,8 +5,11 @@
 spec = "0.1"
 
 [modules]
-graph = "algorithmic"  # T3: derive the entity graph from the pages themselves
-                       # (ghosts + tags + co-occurrence; zero LLM — the default).
-                       # "lightrag" opts into LLM extraction via the endpoint in
-                       # brainpick.local.toml; "auto" picks lightrag only when an
-                       # extraction model is configured there.
+graph = "on"           # T3: derive the entity graph from the pages themselves
+                       # (ghosts + tags + co-occurrence; zero LLM — the only
+                       # backend this contract ships; "algorithmic" also accepted).
+similarity_gaps = "auto"  # the gap-detector — on for free once T2 is fresh (it is, here).
+
+[similarity_gaps]
+threshold = 0.75
+max_pairs = 50

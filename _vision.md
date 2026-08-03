@@ -37,7 +37,7 @@ to everyone who needs it:
 | T0 | grep/glob over the files | nothing |
 | T1 | generated `index.md`, link graph, backlinks, tags | nothing (deterministic) |
 | T2 | vector search over chunks | an embedding model |
-| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing by default; a small LLM for richer extraction |
+| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing — derived from links and tags |
 
 T1 is always on and rebuilds in under a second. T2 and T3 are optional
 modules; every tier degrades gracefully to the one below. The
@@ -49,9 +49,8 @@ Everything under `.brainpick/` is a documented, runtime-neutral
 artifact spec, verified by shared conformance fixtures. `pip install
 brainpick` gets the full compiler and server in Python; `npm install
 brainpick` gets a native Node server and compiler with zero Python
-required — same artifacts, same web UI, same MCP tools. Heavy
-compilation (entity extraction) lives in Python; everything written to
-disk can be read by both.
+required — same artifacts, same web UI, same MCP tools, every tier
+compiled natively in both.
 
 ## Who it is for
 

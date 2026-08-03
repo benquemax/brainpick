@@ -31,18 +31,22 @@ capability ladder these rows walk.
 | Stale-write merge proposal (three-way / LLM) | native | native |
 | Auth: tokens, password, sessions | native | native |
 | init / doctor / integrate / the skill / CLI query mirrors | native | native |
-| T3 compile — entity extraction (LightRAG) | M3, Python-only | M3, delegates to sibling |
+| T3 compile — entity derivation (algorithmic) | native | native |
 | T3 query over the neutral export | M3 | M3 |
 
-The asymmetries are principled, not accidental. Entity extraction (T3) is
-anchored to the Python ecosystem, so when it lands the Node engine will
-delegate that one compile step to an installed Python sibling or skip it with
-an instruction — while still querying the resulting artifacts natively. The
-merge-proposal resolver behind [guarded writes](guarded-writes.md) now runs
+The remaining asymmetries are principled, not accidental — T2's in-process
+local embedding path steers to each ecosystem's own native option rather than
+forcing one runtime to shell out to the other. T3 used to be the other
+asymmetric row (LLM extraction anchored to the Python ecosystem, with Node
+delegating that one compile step to an installed Python sibling) until that
+extraction path was removed entirely — see
+[ADR: the similarity gap-detector](reference/adr/similarity-gap-detector.md);
+the algorithmic backend that replaced it is pure computation, so it always ran
+natively in both engines anyway, and now there is nothing left to delegate.
+The merge-proposal resolver behind [guarded writes](guarded-writes.md) runs
 natively in both engines: the Node engine returns the same three-way (and, with
 a configured \`[models.extraction]\` model, LLM) merge proposal on a stale write,
-byte-identical to Python's conflict response. \`brainpick doctor\` in each
-runtime names exactly what the sibling would add.
+byte-identical to Python's conflict response.
 `;
 
 export const validate = async () => {

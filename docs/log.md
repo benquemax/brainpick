@@ -1,5 +1,23 @@
 # Update log
 
+## 2026-08-03
+
+- Removed: LightRAG — the whole opt-in T3 extraction backend, its adapter
+  branch, the Node engine's delegate-to-Python-sibling shim, and the
+  `[graph]` install extra. T3 is algorithmic-only now; the `KGBackend` seam
+  it ran behind stays as a test/mock hook.
+- Added: the similarity gap-detector — T2 vectors joined against T1's link
+  graph to surface semantically-similar, unlinked document pairs, replacing
+  the role LLM extraction used to aim at, at zero model cost and
+  cumulatively. New advisory artifact (`t1/similarity-gaps.json`), `GET
+  /api/similarity-gaps`, a `brain_overview` count, an AGENTS.md digest
+  section, and a warn-level henxel with a versioned
+  `similarity-gaps-allowlist.toml` for reviewed-and-rejected pairs.
+- Changed: `[modules] graph` simplifies to `on | auto | off` (`algorithmic`
+  still accepted); `[models.extraction]` keeps exactly one live consumer,
+  `brain_write`'s merge resolver. This wiki's own `docs/brainpick.toml` now
+  enables the gap-detector for real — T2 was already fresh here.
+
 ## 2026-07-10
 
 - Added: `about` and `type` now flow into `t1/docs.jsonl` and `t1/graph.json` (nullable, byte-parity both engines) so the UI can render the two-axis ontology; the ghost queue — `top_ghosts` in `brain_overview` and a "Top ghosts" section in the AGENTS.md brain report — surfaces up to 5 dead-link targets by distinct reference count, the agents' standing write-next list.

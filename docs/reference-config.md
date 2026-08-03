@@ -4,7 +4,7 @@ about: concept
 title: "Configuration reference"
 description: "Every brainpick.toml key with its default, type and allowed values, derived from config.py and the config spec — plus layering, env overrides and the auth file."
 tags: [config, spec]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Configuration reference
@@ -35,12 +35,18 @@ Pages are named by their dotted TOML path.
 
 - [modules.vectors](reference/config/modules-vectors.md)
 - [modules.graph](reference/config/modules-graph.md)
+- [modules.similarity_gaps](reference/config/modules-similarity-gaps.md)
 - [modules.ui](reference/config/modules-ui.md)
 
 ## models
 
 - [models.embedding](reference/config/models-embedding.md)
 - [models.extraction](reference/config/models-extraction.md)
+
+## similarity_gaps
+
+- [similarity_gaps.threshold](reference/config/similarity-gaps-threshold.md)
+- [similarity_gaps.max_pairs](reference/config/similarity-gaps-max-pairs.md)
 
 ## serve
 

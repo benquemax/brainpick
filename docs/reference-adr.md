@@ -4,7 +4,7 @@ about: concept
 title: "Architecture decision records"
 description: "The founding and major decisions behind brainpick — one Architecture Decision Record per call, each with its context, alternatives and consequences, richly cross-linked."
 tags: [governance]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Architecture decision records
@@ -32,7 +32,8 @@ what it weighed against, and what the choice costs. Each page carries
 
 - [ADR: one spec, two native engines](reference/adr/one-spec-two-engines.md)
 - [ADR: LanceDB as the vector store](reference/adr/lancedb-vector-store.md)
-- [ADR: LightRAG behind the KGBackend adapter](reference/adr/kgbackend-adapter.md)
+- [ADR: the KGBackend adapter](reference/adr/kgbackend-adapter.md)
+- [ADR: the similarity gap-detector](reference/adr/similarity-gap-detector.md)
 - [ADR: layered configuration, shared over local over env](reference/adr/config-layering.md)
 
 ## Writes, concurrency and auth

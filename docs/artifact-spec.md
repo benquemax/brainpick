@@ -4,7 +4,7 @@ about: concept
 title: Artifact spec
 description: Everything under .brainpick/ is a documented, runtime-neutral format — the contract that lets the pip and npm engines read the same compiled brain.
 tags: [tier, spec]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-08-03T00:00:00Z
 ---
 
 # Artifact spec
@@ -36,8 +36,11 @@ The layout by tier (see [the tiers](the-tiers.md)):
   vectors; `t2/embedding.json` fingerprints the embedding model so a model
   change invalidates vectors automatically.
 - `t3/entities.jsonl` and `t3/relations.jsonl` are the normative **neutral
-  export** of the [knowledge graph tier](knowledge-graph-tier.md); the
-  LightRAG working directory next to them is private to the Python engine.
+  export** of the [knowledge graph tier](knowledge-graph-tier.md), derived
+  algorithmically — pure computation, so both engines produce it natively.
+- `t1/similarity-gaps.json` is advisory — the
+  [similarity gap-detector's](similarity-gap-detector.md) output, present
+  only when T2 is fresh.
 
 One artifact is written *into* the bundle rather than under `.brainpick/`:
 the generated `index.md`, fenced between `<!-- brainpick:begin index -->`
