@@ -163,3 +163,18 @@ cases:
     # the entity grounds kuu.md and one hop over the tide→moon relation reaches the
     # moon's docs. The set proves both the export read and the one-hop expansion.
     expect_paths: [aurinko.md, kuu.md, maa.md]
+
+  # class: similarity-gaps (spec/45) — lands in Chunk 2b alongside the Python
+  # implementation and its test function, not here: this repo's conformance
+  # harness claims every class in this file with zero silent skips (both
+  # engines' test_conformance.py/conformance.test.ts docstrings state it), so
+  # a case class with no engine test yet would violate that invariant between
+  # commits. Empirically verified ahead of time (scratch script, not
+  # committed): under kotiaurinko's mock-embedder doc-mean-pooled vectors and
+  # the default 0.75 threshold, three pairs clear it, all unlinked in T1:
+  # aurinko.md/maa.md (0.885 — the highest similarity in the whole bundle,
+  # despite no direct edge; they connect only via kuu.md/planeetat.md as
+  # intermediaries), komeetta.md/planeetat.md (0.812, shared "Aurinko"
+  # vocabulary), and komeetta.md/saaret/laguuni.md (0.798, the mock's
+  # 16-bucket hash tail — same honest caveat as search-semantic-kuu-vuorovesi's
+  # tail). No new fixture bundle needed.

@@ -20,10 +20,17 @@ file = "index.md"
 
 [modules]                       # T1 has no switch
 vectors = "auto"                # auto | on | off   (T2 — M2)
-graph = "algorithmic"           # algorithmic (default) | lightrag | auto | off
-                                # auto = lightrag when [models.extraction] is
-                                # configured, else algorithmic (spec/40)
+graph = "on"                    # on (default, "algorithmic" accepted as a
+                                # synonym) | auto | off — the algorithmic
+                                # backend derives entities from links/tags,
+                                # no model needed (spec/40)
+similarity_gaps = "auto"        # auto (on iff T2 is fresh) | on | off — the
+                                # gap-detector report (spec/45)
 ui = true
+
+[similarity_gaps]
+threshold = 0.75                # minimum cosine similarity to report a pair
+max_pairs = 50                  # cap on reported pairs, highest score first
 
 [ui]                            # presentation policy shipped to the client (spec/50 /api/status)
 max_nodes_mobile = 8000         # node cap the web UI applies on mobile/weak GPUs

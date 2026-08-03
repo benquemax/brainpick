@@ -37,6 +37,7 @@ is the reference implementation) and the diffs are reviewed like code.
 | `20-t1-artifacts.md` | `graph.json`, `docs.jsonl`, generated `index.md` |
 | `30-t2-vectors.md` | chunker, `chunks.jsonl`, embedding record, LanceDB layout, mock embedder |
 | `40-t3-kg.md` | the neutral entity/relation export, id normalization, graph retrieval |
+| `45-similarity-gaps.md` | `similarity-gaps.json` — T2 vectors vs T1 links, the gap-detector and its allowlist |
 | `50-rest-api.md` | the REST surface both servers implement |
 | `60-live-deltas.md` | the SSE delta protocol |
 | `70-mcp-tools.md` | MCP tool names, schemas, budgets |

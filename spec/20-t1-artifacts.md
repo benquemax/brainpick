@@ -134,9 +134,12 @@ counts (docs · links · tags · orphans · ghosts), tier status, top 5 hub
 documents by total degree (`- title (path) — in/out`), orphans list (≤5),
 the top 5 ghost queue by reference count (`- target — count refs`, highest
 first, target path tie-break; counts distinct source docs referencing that
-target — see `top_ghosts` below), and the bundle root. Deterministic;
-cross-engine byte-identical (a conformance golden accompanies the first
-implementation).
+target — see `top_ghosts` below), the top 5 similarity-gap pairs by score
+(`- a ↔ b — score`, highest first, pair tie-break by (`a`, `b`); spec/45) —
+present only when `t1/similarity-gaps.json` exists, omitted entirely (not an
+empty section) when T2 or the module is off — and the bundle root.
+Deterministic; cross-engine byte-identical (a conformance golden accompanies
+the first implementation).
 
 ## Advisory T1 artifacts
 

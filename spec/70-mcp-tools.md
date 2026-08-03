@@ -14,11 +14,14 @@ truncated result says so and how to get the rest).
 
 No required args. → `{"bundle", "counts": {"docs", "edges", "tags",
 "orphans", "ghosts"}, "tiers", "tree": [{"group", "docs": [{"path",
-"title", "description"}]}], "top_ghosts": [{"target", "count"}], "hint"}`.
+"title", "description"}]}], "top_ghosts": [{"target", "count"}],
+"similarity_gaps_open_count", "hint"}`.
 `top_ghosts` is the write-next queue — up to 5 ghost link targets, highest
 reference count first (target path tie-break), always present (`[]` when
 there are none), never subject to budget trimming (bounded size already).
-Default budget 800.
+`similarity_gaps_open_count` (spec/45) is the count of unresolved
+similarity-gap pairs — always present, `0` when T2 or the module is off,
+never budget-trimmed. Default budget 800.
 
 ## brain_search({query, mode?, limit?, budget_tokens?})
 
