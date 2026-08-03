@@ -166,11 +166,11 @@ test("resolveGraphBackend maps every [modules] graph value", () => {
   expect(resolve("")).toBe("algorithmic"); // the default
   expect(resolve("algorithmic")).toBe("algorithmic");
   expect(resolve("off")).toBe("off");
-  expect(resolve("lightrag")).toBe("lightrag");
-  expect(resolve("auto")).toBe("algorithmic"); // no extraction model
-  expect(resolve("auto", "mock")).toBe("lightrag");
-  expect(resolve("on", "mock")).toBe("lightrag"); // legacy on ≈ auto
+  expect(resolve("auto")).toBe("algorithmic"); // Node never extracts — auto/on are always algorithmic
+  expect(resolve("auto", "mock")).toBe("algorithmic");
+  expect(resolve("on", "mock")).toBe("algorithmic");
   expect(resolve("on")).toBe("algorithmic");
+  expect(resolve("lightrag")).toBe("algorithmic"); // removed value → forgiving default
   expect(resolve("sparkling")).toBe("algorithmic"); // unknown → forgiving default
 });
 
@@ -241,13 +241,6 @@ test("an empty derivation is a valid fresh export that loads and serves empty", 
   const kg = loadKg(join(root, ".brainpick"));
   expect(kg).not.toBeNull();
   expect(kg!.entityGraph()).toEqual({ nodes: [], edges: [] });
-});
-
-test("graph = lightrag keeps the read-only presence semantics (Node never extracts)", async () => {
-  const root = copyBundle();
-  writeFileSync(join(root, "brainpick.toml"), '[modules]\ngraph = "lightrag"\n', "utf8");
-  await runCompile(root);
-  expect(manifestOf(root).tiers["t3"]).toBe("off"); // no export staged, none derived
 });
 
 test("graph = off compiles no T3 and reports off", async () => {

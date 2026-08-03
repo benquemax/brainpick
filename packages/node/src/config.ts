@@ -57,7 +57,7 @@ export interface UiConfig {
 
 export interface ModulesConfig {
   vectors: string; // auto | on | off — T2 (spec/30)
-  graph: string; // algorithmic (default) | lightrag | auto | off — T3 (spec/40)
+  graph: string; // on (default, "algorithmic" also accepted) | auto | off — T3 (spec/40)
   ui: boolean;
 }
 
@@ -96,7 +96,7 @@ export function defaultConfig(): Config {
     spec: "0.1",
     bundle: { root: ".", include: ["**/*.md"], exclude: [], id: "" },
     index: { mode: "section", file: "index.md" },
-    modules: { vectors: "auto", graph: "algorithmic", ui: true },
+    modules: { vectors: "auto", graph: "on", ui: true },
     models: {
       embedding: { kind: "", endpoint: "", model: "", dim: 0 },
       extraction: { kind: "", endpoint: "", model: "", api_key_env: "" },
@@ -258,18 +258,15 @@ function applyData(config: Config, data: Record<string, unknown>, label: string,
   }
 }
 
-/** `[modules] graph` → the backend T3 will use: "algorithmic" | "lightrag" |
- * "off" (spec/80). "auto" resolves to lightrag when [models.extraction] is
- * configured, else algorithmic; the legacy "on" behaves like auto; an unknown
- * value falls back to the algorithmic default (forgiving, like unknown keys). */
-export function resolveGraphBackend(config: Config): "off" | "algorithmic" | "lightrag" {
+/** `[modules] graph` → the backend T3 will use natively: "algorithmic" | "off"
+ * (spec/80). Node never extracts (Python's twin resolver has a third
+ * "extract" outcome for its `mock` test hook; nothing here reaches that path
+ * since there was never a real extractor to delegate to). An unknown value
+ * (including the removed "lightrag") falls back to algorithmic (forgiving,
+ * like unknown keys). */
+export function resolveGraphBackend(config: Config): "off" | "algorithmic" {
   const mode = String(config.modules.graph ?? "").trim().toLowerCase();
-  if (mode === "off") return "off";
-  if (mode === "lightrag") return "lightrag";
-  if (mode === "auto" || mode === "on") {
-    return config.models.extraction.kind !== "" ? "lightrag" : "algorithmic";
-  }
-  return "algorithmic";
+  return mode === "off" ? "off" : "algorithmic";
 }
 
 /** Read <root>/brainpick.toml, deep-merge <root>/brainpick.local.toml over it

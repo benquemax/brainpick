@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** brainpick CLI — same verbs, same lines as the Python engine (spec parity). */
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,60 +23,6 @@ function intOption(value: string): number {
   const parsed = parseInt(value, 10);
   if (Number.isNaN(parsed)) throw new Error(`not an integer: ${value}`);
   return parsed;
-}
-
-/** T3 LLM extraction is Python-only (spec/40): the Node engine never runs
- * LightRAG. With `graph = "lightrag"`, `compile --only t3` delegates to an
- * installed Python sibling via uvx, or skips with the exact enabling command.
- * The ALGORITHMIC backend (the default) never reaches this path — it compiles
- * natively. Query over the neutral export stays native in both engines. */
-export interface T3Delegate {
-  /** The uvx argv to run, or null to skip (prerequisites missing). */
-  argv: string[] | null;
-  /** The line the CLI prints — the delegating notice or the enabling instruction. */
-  message: string;
-}
-
-export function planT3Delegate(root: string, hasUv: boolean, hasPython: boolean): T3Delegate {
-  if (!hasUv || !hasPython) {
-    return {
-      argv: null,
-      message:
-        "T3 extraction is Python-only (spec/40) — the Node engine delegates it. " +
-        "Install uv + Python, then: " +
-        `uvx --from 'brainpick[graph]' brainpick compile --only t3 --root ${root}`,
-    };
-  }
-  return {
-    argv: ["uvx", "--from", "brainpick[graph]", "brainpick", "compile", "--only", "t3", "--root", root],
-    message: "delegating T3 extraction to the Python sibling (uvx --from 'brainpick[graph]')",
-  };
-}
-
-/** True when `cmd` resolves on PATH — probed with `--version`, ENOENT means absent. */
-export function commandExists(cmd: string): boolean {
-  try {
-    const probe = spawnSync(cmd, ["--version"], { stdio: "ignore" });
-    return !probe.error;
-  } catch {
-    return false;
-  }
-}
-
-/** Run the T3 delegation for `compile --only t3`: print the plan, and when the
- * sibling is present, spawn it inheriting stdio. Returns the process exit code. */
-function runT3Delegate(root: string): number {
-  const hasUv = commandExists("uvx") || commandExists("uv");
-  const hasPython = commandExists("python3") || commandExists("python");
-  const plan = planT3Delegate(root, hasUv, hasPython);
-  console.log(plan.message);
-  if (plan.argv === null) return 0; // an instructive skip is not a failure
-  const proc = spawnSync(plan.argv[0], plan.argv.slice(1), { stdio: "inherit" });
-  if (proc.error) {
-    console.log(`T3 delegation failed to launch (${proc.error.message}) — is uv installed?`);
-    return 0;
-  }
-  return proc.status ?? 0;
 }
 
 export interface ShowResult {
@@ -185,8 +131,7 @@ program
   .addOption(
     new Option(
       "--only <tier>",
-      "compile a single tier (t2/t3 reuse the compiled docs substrate; t3 with graph=lightrag " +
-        "delegates to the Python sibling)",
+      "compile a single tier (t2/t3 reuse the compiled docs substrate)",
     ).choices(["t1", "t2", "t3"]),
   )
   .option("--watch", "stay running and recompile on changes")
@@ -198,15 +143,6 @@ program
         console.log(verdict.fresh ? "fresh" : verdict.reason);
         process.exitCode = verdict.fresh ? 0 : 1;
         return;
-      }
-      if (opts.only === "t3") {
-        const { resolveGraphBackend } = await import("./config");
-        if (resolveGraphBackend(loadConfig(root)) === "lightrag") {
-          // LLM extraction is Python-only (spec/40) — hand this compile step to the sibling.
-          process.exitCode = runT3Delegate(root);
-          return;
-        }
-        // the algorithmic default (and "off") compiles natively below
       }
       const only = opts.only ? ([opts.only] as Tier[]) : null;
       const result = await runCompile(root, opts.full ?? false, only);

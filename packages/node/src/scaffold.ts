@@ -66,7 +66,7 @@ file = "index.md"
 
 [modules]                         # T1 always compiles; the deeper tiers are switchable
 vectors = "auto"                  # auto | on | off — T2 semantic search (embedding backend required)
-graph = "algorithmic"             # algorithmic (default) | lightrag | auto | off — T3 entity graph
+graph = "on"                       # on (default, "algorithmic" accepted) | auto | off — T3 entity graph
 ui = true
 
 [serve]
