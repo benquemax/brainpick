@@ -185,11 +185,15 @@ def test_backend_wraps_the_derivation_in_the_normative_shape():
     ("", "algorithmic"),                                                    # the default
     ('[modules]\ngraph = "algorithmic"\n', "algorithmic"),
     ('[modules]\ngraph = "off"\n', "off"),
-    ('[modules]\ngraph = "lightrag"\n', "lightrag"),
     ('[modules]\ngraph = "auto"\n', "algorithmic"),                         # no extraction model
-    ('[modules]\ngraph = "auto"\n[models.extraction]\nkind = "mock"\n', "lightrag"),
-    ('[modules]\ngraph = "on"\n[models.extraction]\nkind = "mock"\n', "lightrag"),  # legacy on ≈ auto
+    ('[modules]\ngraph = "auto"\n[models.extraction]\nkind = "mock"\n', "extract"),
+    ('[modules]\ngraph = "on"\n[models.extraction]\nkind = "mock"\n', "extract"),  # legacy on ≈ auto
     ('[modules]\ngraph = "on"\n', "algorithmic"),
+    (   # explicit "algorithmic" is deterministic — ignores [models.extraction]
+        '[modules]\ngraph = "algorithmic"\n[models.extraction]\nkind = "mock"\n',
+        "algorithmic",
+    ),
+    ('[modules]\ngraph = "lightrag"\n', "algorithmic"),                     # removed value → forgiving default
     ('[modules]\ngraph = "sparkling"\n', "algorithmic"),                    # unknown → forgiving default
 ])
 def test_resolve_graph_backend(tmp_path, toml, expected):
@@ -295,13 +299,20 @@ def test_empty_derivation_is_a_valid_fresh_export(tmp_path):
     assert kg.entity_graph() == {"nodes": [], "edges": []}
 
 
-def test_lightrag_without_extraction_config_instructs(kotiaurinko):
-    (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "lightrag"\n', encoding="utf-8")
+def test_extraction_kind_without_mock_has_no_backend_instructs(kotiaurinko):
+    """No real extractor ships — a configured non-mock kind (e.g. pointed at a
+    real chat model) can't produce T3 anymore; the instruction says so plainly
+    instead of naming a pip extra that no longer exists."""
+    (kotiaurinko / "brainpick.toml").write_text(
+        '[modules]\ngraph = "auto"\n[models.extraction]\nkind = "openai-compatible"\n'
+        'endpoint = "http://example.invalid/v1"\nmodel = "q"\n',
+        encoding="utf-8",
+    )
     first = run_compile(kotiaurinko)
     assert manifest_of(kotiaurinko)["tiers"]["t3"] == "off"
-    assert any("models.extraction" in w for w in first.warnings)
+    assert any("no bundled LLM extractor" in w for w in first.warnings)
     second = run_compile(kotiaurinko)
-    assert not any("models.extraction" in w for w in second.warnings)  # said once
+    assert not any("no bundled LLM extractor" in w for w in second.warnings)  # said once
 
 
 def test_only_t3_rederives_from_the_compiled_substrate(kotiaurinko):

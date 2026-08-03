@@ -2,16 +2,19 @@
 
 Backends are private; the neutral export is the product. Two kinds run here:
 
-- **algorithmic** (the default): the graph is DERIVED from the compiled T1
-  records — ghosts and tags (`kgadapt.algorithmic`). Pure and cheap, so every
-  pass rederives from scratch (no chunk state to trust: a tags-only edit moves
-  no chunk yet must move the graph) and its export is byte-golden.
-- **extractors** (lightrag, mock): an LLM writes the graph. This path drives a
-  `KGBackend` over the current chunks and NORMALIZES the neutral result into
-  the spec/40 layout (names become ids via `kg.normalize_entity_id` +
-  `disambiguate_ids`, dangling relations drop, everything sorts canonically),
-  incrementally by chunk: only changed chunks are re-extracted; a deleted
-  chunk, a changed backend fingerprint, or `--full` forces a clean rebuild.
+- **algorithmic** (the default, and the only shipped backend): the graph is
+  DERIVED from the compiled T1 records — ghosts and tags
+  (`kgadapt.algorithmic`). Pure and cheap, so every pass rederives from
+  scratch (no chunk state to trust: a tags-only edit moves no chunk yet must
+  move the graph) and its export is byte-golden.
+- **extract** (the `mock` test hook — no real extractor ships; the
+  `KGBackend` seam stays in case a future one earns its keep): this path
+  drives a `KGBackend` over the current chunks and NORMALIZES the neutral
+  result into the spec/40 layout (names become ids via
+  `kg.normalize_entity_id` + `disambiguate_ids`, dangling relations drop,
+  everything sorts canonically), incrementally by chunk: only changed chunks
+  are re-extracted; a deleted chunk, a changed backend fingerprint, or
+  `--full` forces a clean rebuild.
 
 Either way it never raises — a failure leaves `tiers.t3` stale with an
 instruction, exactly like T2 (spec/00 degradation ladder).
@@ -45,44 +48,37 @@ class T3Result:
     delta: dict | None = None         # graph delta placeholder (T3 currently empty)
 
 
-def _lightrag_importable() -> bool:
-    from brainpick.kgadapt.lightrag_backend import lightrag_available
-
-    return lightrag_available()
-
-
 def t3_gate(config) -> tuple[bool, str | None]:
     """(enabled, instruction) per [modules] graph (spec/80 resolution). The
-    algorithmic default needs nothing; lightrag needs [models.extraction] plus
-    the [graph] extra (`mock` is a test hook that never needs LightRAG). Off
-    yields the one enabling instruction (said once, like T2)."""
+    algorithmic default needs nothing. `resolve_graph_backend` only ever
+    returns "extract" when [models.extraction].kind is already truthy, so the
+    one real question left here is whether that kind is the `mock` test hook
+    (the only extractor that actually exists) or a real-sounding kind with
+    nothing behind it. Off yields the one enabling instruction (said once,
+    like T2)."""
     backend = resolve_graph_backend(config)
     if backend == "off":
         return False, None
     if backend == "algorithmic":
         return True, None  # pure derivation — no model, no endpoint, no extra
-    if not config.models.extraction.kind:
-        return False, (
-            'T3 graph off — [modules] graph = "lightrag" needs [models.extraction]; point it '
-            "at a chat model (e.g. a local qwen) in brainpick.local.toml, or drop the key to "
-            "derive the graph algorithmically"
-        )
     if config.models.extraction.kind == "mock":
         return True, None
-    if not _lightrag_importable():
-        return False, (
-            "T3 graph off — the extractor is missing: pip install 'brainpick[graph]'"
-        )
-    return True, None
+    return False, (
+        "T3 graph off — brainpick has no bundled LLM extractor; only the algorithmic "
+        "backend (default) and the 'mock' test hook are available. Set "
+        "[modules] graph = \"on\", or drop [models.extraction]"
+    )
 
 
 def _extractor_meta(config) -> dict:
     """The kg-meta `extractor` block AND the incrementality fingerprint source.
-    `mock` names itself; every real kind is `lightrag` today (the reference)."""
+    `mock` names itself; any other configured kind is defensively labeled
+    `extract` — unreachable in practice, since t3_gate blocks it before
+    make_kg_backend is ever called."""
     ex = config.models.extraction
     if ex.kind == "mock":
         return {"kind": "mock", "model": ex.model or "mock"}
-    return {"kind": "lightrag", "model": ex.model or ""}
+    return {"kind": ex.kind or "extract", "model": ex.model or ""}
 
 
 def make_kg_backend(
@@ -91,19 +87,13 @@ def make_kg_backend(
 ):
     """The resolved [modules] graph backend. Injection point: tests monkeypatch
     this to a counting fake (mirrors `make_embedder` in T2). The algorithmic
-    backend derives from `records`; extractors ignore them and read chunks."""
+    backend derives from `records`; the mock test hook ignores them and reads
+    chunks. t3_gate guarantees this is never reached with any other kind."""
     if resolve_graph_backend(config) == "algorithmic":
         from brainpick.kgadapt.algorithmic import AlgorithmicKGBackend
 
         return AlgorithmicKGBackend(records or [], contributors)
-    if config.models.extraction.kind == "mock":
-        return MockKGBackend()
-    from brainpick.kgadapt.lightrag_backend import LightRAGBackend
-
-    return LightRAGBackend(
-        bp / "t3" / "lightrag", config.models.extraction,
-        embedding_record=embedding_record, fresh=fresh,
-    )
+    return MockKGBackend()
 
 
 # -- the compile stage ---------------------------------------------------------------
@@ -350,7 +340,7 @@ def _clamp01(value) -> float:
     try:
         number = float(value)
     except (TypeError, ValueError):
-        number = 1.0  # a relation with no weight is still a relation (LightRAG default)
+        number = 1.0  # a relation with no weight is still a relation
     return round(min(1.0, max(0.0, number)), 3)
 
 

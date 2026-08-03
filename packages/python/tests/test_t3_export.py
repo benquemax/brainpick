@@ -134,7 +134,7 @@ def test_weight_clamps_and_keywords_normalize():
     ])
     _, relations = _normalize(raw)
     (rel,) = relations
-    assert rel["weight"] == 1.0  # LightRAG sums to 2.0; the export clamps to [0,1]
+    assert rel["weight"] == 1.0  # an extractor can double-count a relation past 1.0; the export clamps
     assert rel["keywords"] == ["gravity", "orbit"]  # lowercased, deduped, sorted
 
 

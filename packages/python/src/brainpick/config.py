@@ -74,8 +74,8 @@ class UiConfig:
 
 @dataclass
 class ModulesConfig:
-    vectors: str = "auto"        # auto | on | off — T2 (spec/30)
-    graph: str = "algorithmic"   # algorithmic (default) | lightrag | auto | off — T3 (spec/40)
+    vectors: str = "auto"   # auto | on | off — T2 (spec/30)
+    graph: str = "on"       # on (default, "algorithmic" also accepted) | auto | off — T3 (spec/40)
     ui: bool = True
 
 
@@ -221,17 +221,21 @@ def _read_layers(root: Path, defaults: Config) -> dict:
 
 
 def resolve_graph_backend(config: Config) -> str:
-    """`[modules] graph` → the backend T3 will use: "algorithmic" | "lightrag" |
-    "off" (spec/80). "auto" resolves to lightrag when [models.extraction] is
-    configured, else algorithmic; the legacy "on" behaves like auto; an unknown
-    value falls back to the algorithmic default (forgiving, like unknown keys)."""
+    """`[modules] graph` → the backend T3 will use: "algorithmic" | "extract" |
+    "off" (spec/80). "extract" means an extraction backend is configured via
+    [models.extraction] — today that is only the "mock" test hook (no real
+    extractor ships; kept as the KGBackend seam for a future one, spec/40).
+    "auto"/"on" resolve conditionally: "extract" when [models.extraction] is
+    configured, else "algorithmic". Explicit "algorithmic" is deterministic —
+    always algorithmic, ignoring [models.extraction] (a bundle may configure
+    that purely for brain_write's merge resolver, spec/70, with no intent to
+    touch T3). An unknown value (including the removed "lightrag") falls back
+    to the algorithmic default (forgiving, like unknown keys)."""
     mode = str(config.modules.graph or "").strip().lower()
     if mode == "off":
         return "off"
-    if mode == "lightrag":
-        return "lightrag"
     if mode in ("auto", "on"):
-        return "lightrag" if config.models.extraction.kind else "algorithmic"
+        return "extract" if config.models.extraction.kind else "algorithmic"
     return "algorithmic"
 
 

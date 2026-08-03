@@ -71,7 +71,7 @@ file = "index.md"
 
 [modules]                         # T1 always compiles; the deeper tiers are switchable
 vectors = "auto"                  # auto | on | off — T2 semantic search (embedding backend required)
-graph = "algorithmic"             # algorithmic (default) | lightrag | auto | off — T3 entity graph
+graph = "on"                      # on (default, "algorithmic" accepted) | auto | off — T3 entity graph
 ui = true
 
 [serve]
@@ -508,9 +508,9 @@ def run_doctor(
 
     # T3 graph: which backend the config resolves to, its prerequisites, tier state
     # (spec/40) — optional, never ✗. The algorithmic default derives the graph from
-    # ghosts and tags with no model; lightrag (LLM extraction) is the opt-in.
+    # ghosts and tags with no model; no real extractor ships (the `mock` test hook
+    # is the only reachable "extract" outcome).
     from brainpick.config import resolve_graph_backend
-    from brainpick.kgadapt.lightrag_backend import lightrag_available
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -519,12 +519,10 @@ def run_doctor(
     backend = resolve_graph_backend(graph_config)
     t3_state = tiers.get("t3", "off")
     if backend == "off":
-        emit("○", 'graph: off by config — set [modules] graph = "algorithmic" to derive it')
-    elif backend == "lightrag" and not extraction.kind:
-        emit("○", 'graph: [modules] graph = "lightrag" but no [models.extraction] —'
-                  " set a chat model in brainpick.local.toml")
-    elif backend == "lightrag" and extraction.kind != "mock" and not lightrag_available():
-        emit("○", "graph: LightRAG missing — pip install 'brainpick[graph]'")
+        emit("○", 'graph: off by config — set [modules] graph = "on" to derive it')
+    elif backend == "extract" and extraction.kind != "mock":
+        emit("○", "graph: no bundled LLM extractor — "
+                  'set [modules] graph = "on", or drop [models.extraction]')
     elif t3_state == "fresh":
         detail = "derived from ghosts + tags, no model needed" if backend == "algorithmic" \
             else f"{extraction.kind}" + (f" · {extraction.model}" if extraction.model else "")

@@ -70,7 +70,7 @@ holographic-brain web UI that updates live while agents write).
 | T0 | grep/glob over the files | nothing |
 | T1 | generated `index.md`, link graph, backlinks, tags | nothing (deterministic) |
 | T2 | vector search over chunks | an embedding model |
-| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing by default; a small LLM for richer extraction |
+| T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing — derived from links and tags |
 
 
 ## Quick start

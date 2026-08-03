@@ -8,7 +8,7 @@ import pytest
 from brainpick.compile.pipeline import check_fresh, run_compile
 from brainpick.kgadapt.protocol import MockKGBackend
 
-# kind=mock lights T3 without LightRAG (a test hook); graph=auto turns the tier on.
+# kind=mock is a test hook that exercises the extract path with no real model; graph=auto turns the tier on.
 MOCK_T3 = '[models.extraction]\nkind = "mock"\n[modules]\ngraph = "auto"\n'
 
 
@@ -69,7 +69,7 @@ def entities_of(root):
 
 def test_t3_auto_without_extraction_config_derives_algorithmically(kotiaurinko):
     # graph = "auto" but no [models.extraction] → the algorithmic backend, silently
-    # (spec/80: auto = lightrag when extraction is configured, else algorithmic).
+    # (spec/80: auto = "extract" when extraction is configured, else algorithmic).
     (kotiaurinko / "brainpick.toml").write_text('[modules]\ngraph = "auto"\n', encoding="utf-8")
     result = run_compile(kotiaurinko)
     assert manifest_of(kotiaurinko)["tiers"]["t3"] == "fresh"
@@ -93,18 +93,6 @@ def test_t3_off_by_explicit_config_stays_quiet(kotiaurinko):
     result = run_compile(kotiaurinko)
     assert manifest_of(kotiaurinko)["tiers"]["t3"] == "off"
     assert not any("graph" in w or "extraction" in w for w in result.warnings)
-
-
-def test_t3_off_when_lightrag_missing_names_the_extra(kotiaurinko, monkeypatch):
-    monkeypatch.setattr("brainpick.compile.t3._lightrag_importable", lambda: False)
-    (kotiaurinko / "brainpick.toml").write_text(
-        '[modules]\ngraph = "auto"\n[models.extraction]\n'
-        'kind = "openai-compatible"\nendpoint = "http://x:4800/v1"\nmodel = "q"\n',
-        encoding="utf-8",
-    )
-    result = run_compile(kotiaurinko)
-    assert manifest_of(kotiaurinko)["tiers"]["t3"] == "off"
-    assert any("brainpick[graph]" in w for w in result.warnings)
 
 
 # -- the happy compile ---------------------------------------------------------------
