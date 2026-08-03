@@ -96,6 +96,20 @@ henxels:
     min_outbound_links: 1
     why: "Links are the edges of the brain; link text is the target's title."
 
+  - henxel: "Similarity gaps stay resolved: link them, or dismiss reviewed pairs"
+    in: ./docs
+    similarity_gaps_no_unresolved: docs
+    level: warn
+    why: >
+      The second route of the two-route linking strategy (see ADR: the
+      similarity gap-detector): T2 vectors joined against T1's link graph
+      surface pairs that read as similar but carry no edge (spec/45). Unlike
+      every other check in this file, this one reads a COMPILE OUTPUT
+      (docs/.brainpick/t1/similarity-gaps.json), not markdown directly — run
+      `brainpick compile` (T2 on) for this to catch drift accurately; a stale
+      or absent artifact degrades silently, never blocks. Dismiss a
+      reviewed-and-rejected pair in docs/similarity-gaps-allowlist.toml.
+
   - henxel: "OKF reserved files stay frontmatter-free (the bundle root may declare okf_version)"
     in: ["./docs/**/index.md", "./docs/**/log.md"]
     except: ./docs/index.md

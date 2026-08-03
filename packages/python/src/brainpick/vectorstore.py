@@ -129,3 +129,27 @@ class VectorStore:
         if table is None:
             return []
         return table.search(vector).distance_type("cosine").limit(k).to_list()
+
+    def doc_vectors(self) -> dict[str, list[float]]:
+        """One representative vector per document (spec/45): the arithmetic
+        mean, per dimension, over that document's chunk vectors. Pure Python —
+        bundle sizes here are small; no numpy dependency needed for this."""
+        if not self.path.is_dir() or not lancedb_available():
+            return {}
+        table = self._open_table(self._connect())
+        if table is None:
+            return {}
+        data = table.to_arrow()
+        docs = data.column("doc").to_pylist()
+        vectors = data.column("vector").to_pylist()
+        sums: dict[str, list[float]] = {}
+        counts: dict[str, int] = {}
+        for doc, vector in zip(docs, vectors):
+            if doc not in sums:
+                sums[doc] = list(vector)
+            else:
+                total = sums[doc]
+                for i, value in enumerate(vector):
+                    total[i] += value
+            counts[doc] = counts.get(doc, 0) + 1
+        return {doc: [value / counts[doc] for value in total] for doc, total in sums.items()}

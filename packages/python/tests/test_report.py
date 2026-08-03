@@ -123,6 +123,29 @@ def test_render_is_deterministic_and_hash_stamped():
     assert stamp == sha256_hex(_body(first).encode("utf-8"))[:8]
 
 
+def test_similarity_gaps_section_omitted_when_absent():
+    block = render_report_block(_graph([]), TIERS)  # default similarity_gaps=None
+    assert "similarity gap" not in block.lower()
+
+
+def test_similarity_gaps_section_present_and_empty_when_artifact_is_a_zero_list():
+    block = render_report_block(_graph([]), TIERS, similarity_gaps=[])
+    lines = block.splitlines()
+    start = lines.index("- Top similarity gaps:")
+    assert lines[start + 1] == "  - (none)"
+
+
+def test_similarity_gaps_ranked_and_truncated_to_five():
+    pairs = [{"a": f"a{i}.md", "b": f"b{i}.md", "score": 0.5 + i / 100} for i in range(7)]
+    block = render_report_block(_graph([]), TIERS, similarity_gaps=pairs)
+    lines = block.splitlines()
+    start = lines.index("- Top similarity gaps:")
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("- Bundle root:"))
+    gap_lines = [line for line in lines[start + 1:end] if line.startswith("  - ")]
+    assert len(gap_lines) == 5
+    assert gap_lines[0] == "  - a6.md ↔ b6.md — 0.56"  # highest score first
+
+
 def test_apply_only_touches_between_markers():
     block = render_report_block(_graph([_node("a.md", "A", 1, 1)]), TIERS)
     before = (

@@ -267,6 +267,28 @@ def test_doctor_vectors_line_walks_the_states(kotiaurinko, capsys):
     assert "mock" in out
 
 
+def test_doctor_similarity_gaps_line_reads_the_open_count(kotiaurinko, capsys):
+    import json
+
+    from brainpick.compile.pipeline import run_compile
+
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    capsys.readouterr()
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    assert "similarity gaps: off (T2 is off)" in capsys.readouterr().out
+
+    (kotiaurinko / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n',
+                                                encoding="utf-8")
+    run_compile(kotiaurinko)
+    capsys.readouterr()
+    run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS)
+    out = capsys.readouterr().out
+    gaps = json.loads(
+        (kotiaurinko / ".brainpick" / "t1" / "similarity-gaps.json").read_text(encoding="utf-8"))
+    open_count = sum(1 for p in gaps["pairs"] if p["status"] == "open")
+    assert f"similarity gaps: {open_count} open" in out
+
+
 def test_doctor_vectors_line_names_the_missing_extra(kotiaurinko, capsys, monkeypatch):
     monkeypatch.setattr("brainpick.scaffold.lancedb_available", lambda: False)
     run_init(kotiaurinko, env={}, probes=NO_BACKENDS)

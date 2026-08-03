@@ -148,6 +148,19 @@ def test_kg_algorithmic_golden(case, tmp_path):
         assert actual == expected, f"{artifact} drifted from golden"
 
 
+@pytest.mark.parametrize("case", _cases("similarity-gaps"), ids=_case_ids("similarity-gaps"))
+def test_similarity_gaps_golden(case, tmp_path):
+    """spec/45: T2 vectors (mock embedder) joined against T1's link graph is
+    fully deterministic, so — like kg-algorithmic — the artifact is held to a
+    byte-golden standard, not just a result-set comparison."""
+    root = _bundle_copy(tmp_path, case["bundle"])
+    (root / "brainpick.toml").write_text(MOCK_CONFIG, encoding="utf-8")
+    run_compile(root)
+    actual = (root / case["artifact"]).read_text(encoding="utf-8")
+    expected = (EXPECTED / case["bundle"] / case["artifact"]).read_text(encoding="utf-8")
+    assert actual == expected, f"{case['artifact']} drifted from golden"
+
+
 @pytest.mark.parametrize("case", _cases("kg-query"), ids=_case_ids("kg-query"))
 def test_kg_query(case, tmp_path):
     """T3 consumer over the staged export — the normative reader only, never an

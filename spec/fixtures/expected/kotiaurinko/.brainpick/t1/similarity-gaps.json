@@ -1,0 +1,24 @@
+{
+  "max_pairs": 50,
+  "pairs": [
+    {
+      "a": "aurinko.md",
+      "b": "maa.md",
+      "score": 0.885,
+      "status": "open"
+    },
+    {
+      "a": "komeetta.md",
+      "b": "planeetat.md",
+      "score": 0.811,
+      "status": "open"
+    },
+    {
+      "a": "komeetta.md",
+      "b": "saaret/laguuni.md",
+      "score": 0.798,
+      "status": "open"
+    }
+  ],
+  "threshold": 0.75
+}

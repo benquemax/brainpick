@@ -18,6 +18,7 @@ from brainpick.compile.t1 import (
     render_index_block,
     render_report_block,
 )
+from brainpick.compile.similarity_gaps import run_similarity_gaps_stage, similarity_gaps_gate
 from brainpick.compile.t2 import build_chunks, run_t2_stage, t2_gate
 from brainpick.compile.t3 import run_t3_stage, t3_gate
 from brainpick.config import Config, load_config
@@ -60,7 +61,15 @@ def _read_or_none(path: Path) -> str | None:
     return path.read_text(encoding="utf-8") if path.is_file() else None
 
 
-def _refresh_report(root: Path, graph: dict, tiers: dict) -> None:
+def _similarity_gaps_for_report(bp: Path) -> list[dict] | None:
+    """The report reads whatever is currently on disk (spec/45) — None (the
+    section is omitted) when the artifact doesn't exist, its `pairs` list
+    otherwise, even an empty one."""
+    text = _read_or_none(bp / "t1" / "similarity-gaps.json")
+    return None if text is None else json.loads(text)["pairs"]
+
+
+def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict) -> None:
     """Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
     already live — the bundle root, and the repo root above it when the bundle is
     a subdir. Never creates the file; writes only when the block actually changed."""
@@ -71,6 +80,7 @@ def _refresh_report(root: Path, graph: dict, tiers: dict) -> None:
     if repo is not None and repo != root:
         candidates.append(repo)
 
+    similarity_gaps = _similarity_gaps_for_report(bp)
     seen: set[Path] = set()
     for base in candidates:
         agents = base / "AGENTS.md"
@@ -82,7 +92,7 @@ def _refresh_report(root: Path, graph: dict, tiers: dict) -> None:
         if existing is None:
             continue
         bundle_display = os.path.relpath(root, base).replace(os.sep, "/")
-        block = render_report_block(graph, tiers, bundle_display)
+        block = render_report_block(graph, tiers, bundle_display, similarity_gaps)
         updated = apply_report_section(existing, block)
         if updated is not None and updated != existing:
             _atomic_write(agents, updated.encode("utf-8"))
@@ -178,6 +188,21 @@ def run_compile(
         if instruction and old_tiers.get("t2") != "off":
             warnings.append(instruction)  # said once: the next manifest records t2 = off
 
+    # Similarity gaps (spec/45): advisory, like timeline.json — rides T2's
+    # freshness, never blocks compile, not tracked as a manifest tier. Skipped
+    # entirely on --only compiles (mirrors _write_timeline's own scope).
+    if wanted == {"t1", "t2", "t3"}:
+        sg_enabled, _ = similarity_gaps_gate(config, t2_status)
+        if sg_enabled:
+            try:
+                run_similarity_gaps_stage(bp, root, graph, records, config)
+            except Exception as error:  # never let a gap-detector surprise break compile
+                logger.warning("similarity-gaps: skipped (%s)", error)
+        else:
+            gaps_file = bp / "t1" / "similarity-gaps.json"
+            if gaps_file.is_file():
+                gaps_file.unlink()  # off/no-longer-fresh — an absent artifact is the honest state
+
     # T3 (spec/40): extraction runs last and never blocks T1/T2. Gated by
     # [modules] graph; like T2 a failure degrades the tier, never the compile.
     t3_enabled, t3_instruction = t3_gate(config)
@@ -204,7 +229,7 @@ def run_compile(
     tiers = {"t1": "fresh", "t2": t2_status, "t3": t3_status}
     # The opt-in AGENTS.md brain report rides along on every compile so it stays
     # true even when nothing else changed (e.g. the markers were just installed).
-    _refresh_report(root, graph, tiers)
+    _refresh_report(root, bp, graph, tiers)
     artifacts_changed = t1_changed or t2_changed or t3_changed
     unchanged = not artifacts_changed and old_manifest is not None and old_tiers == tiers
     if unchanged and not full:

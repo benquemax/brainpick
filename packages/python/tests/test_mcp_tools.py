@@ -66,6 +66,23 @@ def test_overview_top_ghosts_is_the_write_next_queue(kotiaurinko):
     assert result["top_ghosts"] == [{"target": "olematon.md", "count": 1}]
 
 
+def test_overview_similarity_gaps_open_count_zero_when_artifact_absent(kotiaurinko):
+    result = overview_payload(make_state(kotiaurinko))
+    assert result["similarity_gaps_open_count"] == 0
+
+
+def test_overview_similarity_gaps_open_count_reads_the_artifact(kotiaurinko):
+    state = make_state(kotiaurinko)  # compiles first (T2 off — no artifact yet)
+    (kotiaurinko / ".brainpick" / "t1" / "similarity-gaps.json").write_text(
+        json.dumps({"pairs": [
+            {"a": "a.md", "b": "b.md", "score": 0.9, "status": "open"},
+            {"a": "c.md", "b": "d.md", "score": 0.8, "status": "dismissed"},
+        ], "threshold": 0.75, "max_pairs": 50}),
+        encoding="utf-8",
+    )
+    assert overview_payload(state)["similarity_gaps_open_count"] == 1
+
+
 def test_overview_budget_trims_tree(kotiaurinko):
     state = make_state(kotiaurinko)
     full = overview_payload(state)

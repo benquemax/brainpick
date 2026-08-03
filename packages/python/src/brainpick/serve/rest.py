@@ -106,6 +106,26 @@ async def timeline(request: Request) -> Response:
     return JSONResponse(payload, headers={"ETag": etag})
 
 
+async def similarity_gaps(request: Request) -> Response:
+    """GET /api/similarity-gaps (spec/45): the advisory t1/similarity-gaps.json,
+    or the empty shape when T2 is off or the artifact is absent. ETag by
+    manifest seq, like /api/timeline."""
+    state = _state(request)
+    etag = f'"{state.seq}"'
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match:
+        candidates = {value.strip().removeprefix("W/") for value in if_none_match.split(",")}
+        if etag in candidates or "*" in candidates:
+            return Response(status_code=304, headers={"ETag": etag})
+    path = state.root / ".brainpick" / "t1" / "similarity-gaps.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cfg = state.config.similarity_gaps
+        payload = {"pairs": [], "threshold": cfg.threshold, "max_pairs": cfg.max_pairs}
+    return JSONResponse(payload, headers={"ETag": etag})
+
+
 _AT_SHA = re.compile(r"^[0-9a-fA-F]{4,40}$")
 
 
@@ -483,6 +503,7 @@ def api_routes() -> list[Route]:
         Route("/api/status", status),
         Route("/api/graph", graph),
         Route("/api/timeline", timeline),
+        Route("/api/similarity-gaps", similarity_gaps),
         Route("/api/docs/{path:path}", doc_detail),
         Route("/api/docs/{path:path}", docs_write, methods=["PUT"]),
         Route("/api/assets", assets_upload, methods=["POST"]),

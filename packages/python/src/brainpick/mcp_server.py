@@ -40,6 +40,21 @@ def tokens_of(obj) -> int:
     return len(json.dumps(obj, ensure_ascii=False)) // 4
 
 
+def _similarity_gaps_open_count(root) -> int:
+    """spec/45 — always present, 0 when off/absent, never budget-trimmed
+    (same posture as top_ghosts)."""
+    import json
+
+    path = root / ".brainpick" / "t1" / "similarity-gaps.json"
+    if not path.is_file():
+        return 0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return 0
+    return sum(1 for p in data.get("pairs", []) if p.get("status") == "open")
+
+
 # -- brain_overview ----------------------------------------------------------------
 
 
@@ -67,6 +82,7 @@ def overview_payload(state: ServeState, budget_tokens: int | None = None) -> dic
         "tiers": state.manifest.get("tiers", {}),
         "tree": tree,
         "top_ghosts": top_ghosts(state.graph),
+        "similarity_gaps_open_count": _similarity_gaps_open_count(state.root),
         "truncated": False,
         "hint": "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.",
     }

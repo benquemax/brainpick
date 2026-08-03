@@ -73,3 +73,21 @@ def test_ids_with_quotes_delete_safely(tmp_path):
     store.replace_all([row(tricky, [1.0, 0.0]), row("b~0", [0.0, 1.0])], dim=2)
     store.upsert(rows=[], delete_ids={tricky}, dim=2)
     assert store.existing_ids() == {"b~0"}
+
+
+# -- doc_vectors (spec/45: one representative vector per document) -----------------
+
+
+def test_doc_vectors_mean_pools_chunks_per_doc(tmp_path):
+    store = VectorStore(tmp_path / "lancedb")
+    store.replace_all([
+        row("a.md#x~0", [1.0, 0.0], doc="a.md"),
+        row("a.md#x~1", [0.0, 2.0], doc="a.md"),
+        row("b.md#y~0", [3.0, 3.0], doc="b.md"),
+    ], dim=2)
+    vectors = store.doc_vectors()
+    assert vectors == {"a.md": [0.5, 1.0], "b.md": [3.0, 3.0]}
+
+
+def test_doc_vectors_on_missing_table_returns_empty(tmp_path):
+    assert VectorStore(tmp_path / "nowhere").doc_vectors() == {}

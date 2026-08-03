@@ -531,6 +531,20 @@ def run_doctor(
         emit("○", f"graph: {backend} configured but t3 is {t3_state}",
              f"run: brainpick compile --only t3 --root {root}")
 
+    # Similarity gaps (spec/45): the artifact's own open-pair count, or an
+    # honest "off" — optional, never ✗, since it rides T2's freshness.
+    gaps_path = root / ".brainpick" / "t1" / "similarity-gaps.json"
+    if not gaps_path.is_file():
+        emit("○", "similarity gaps: off (T2 is off)" if t2_state != "fresh" else
+                  "similarity gaps: off by config")
+    else:
+        try:
+            gaps = json.loads(gaps_path.read_text(encoding="utf-8"))
+            open_count = sum(1 for p in gaps.get("pairs", []) if p.get("status") == "open")
+            emit("✓", f"similarity gaps: {open_count} open")
+        except (OSError, ValueError):
+            emit("○", "similarity gaps: artifact unreadable")
+
     # backend probes
     results = probe_backends(env) if probes is None else probes
     for label, backend in results:

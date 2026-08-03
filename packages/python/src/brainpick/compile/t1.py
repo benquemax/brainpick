@@ -198,11 +198,16 @@ def top_ghosts(graph: dict, limit: int = 5) -> list[dict]:
     return [{"target": target, "count": count} for target, count in ranked[:limit]]
 
 
-def render_report_block(graph: dict, tiers: dict, bundle_root: str = ".") -> str:
+def render_report_block(
+    graph: dict, tiers: dict, bundle_root: str = ".",
+    similarity_gaps: list[dict] | None = None,
+) -> str:
     """The AGENTS.md brain report body (spec/20): a graph-before-grep directive,
     counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
-    the top-5 ghost queue by reference count, and the bundle root.
-    Deterministic; cross-engine byte-identical."""
+    the top-5 ghost queue by reference count, the top-5 similarity-gap pairs
+    (spec/45, omitted entirely — not an empty section — when
+    `similarity_gaps` is None, i.e. the artifact doesn't exist), and the
+    bundle root. Deterministic; cross-engine byte-identical."""
     stats = graph.get("stats", {})
     nodes = graph.get("nodes", [])
 
@@ -240,6 +245,14 @@ def render_report_block(graph: dict, tiers: dict, bundle_root: str = ".") -> str
         lines += [f"  - {g['target']} — {g['count']} refs" for g in ghosts]
     else:
         lines.append("  - (none)")
+
+    if similarity_gaps is not None:
+        lines.append("- Top similarity gaps:")
+        ranked = sorted(similarity_gaps, key=lambda p: (-p["score"], p["a"], p["b"]))[:5]
+        if ranked:
+            lines += [f"  - {p['a']} ↔ {p['b']} — {p['score']}" for p in ranked]
+        else:
+            lines.append("  - (none)")
 
     lines.append(f"- Bundle root: {bundle_root}")
 

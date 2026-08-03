@@ -74,9 +74,20 @@ class UiConfig:
 
 @dataclass
 class ModulesConfig:
-    vectors: str = "auto"   # auto | on | off — T2 (spec/30)
-    graph: str = "on"       # on (default, "algorithmic" also accepted) | auto | off — T3 (spec/40)
+    vectors: str = "auto"           # auto | on | off — T2 (spec/30)
+    graph: str = "on"               # on (default, "algorithmic" also accepted) | auto | off — T3 (spec/40)
+    similarity_gaps: str = "auto"   # auto (on iff T2 fresh) | on | off — the gap-detector (spec/45)
     ui: bool = True
+
+
+@dataclass
+class SimilarityGapsConfig:
+    """[similarity_gaps] — tuning knobs for the gap-detector (spec/45). Shared
+    bundle policy, not curatorial (dismissals live in
+    similarity-gaps-allowlist.toml instead)."""
+
+    threshold: float = 0.75  # minimum cosine similarity to report a pair
+    max_pairs: int = 50      # cap on reported pairs, highest score first
 
 
 @dataclass
@@ -114,9 +125,10 @@ class Config:
     serve: ServeConfig = field(default_factory=ServeConfig)
     ui: UiConfig = field(default_factory=UiConfig)
     validate: ValidateConfig = field(default_factory=ValidateConfig)
+    similarity_gaps: SimilarityGapsConfig = field(default_factory=SimilarityGapsConfig)
 
 
-_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate")
+_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps")
 _MODEL_TABLES = ("embedding", "extraction")
 # [models.*] tables are nested and handled separately below.
 _KNOWN_TOP = {"spec", "models", *_SECTIONS}
@@ -131,6 +143,11 @@ def _coerce(current, value):
     if isinstance(current, int):
         try:
             return int(value)
+        except (TypeError, ValueError):
+            return current
+    if isinstance(current, float):
+        try:
+            return float(value)
         except (TypeError, ValueError):
             return current
     if isinstance(current, list):
@@ -151,6 +168,11 @@ def _from_env(current, raw: str):
     if isinstance(current, int):
         try:
             return int(raw)
+        except ValueError:
+            return current
+    if isinstance(current, float):
+        try:
+            return float(raw)
         except ValueError:
             return current
     if isinstance(current, list):

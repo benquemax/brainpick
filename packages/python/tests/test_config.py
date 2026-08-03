@@ -97,11 +97,26 @@ def test_modules_and_embedding_defaults(tmp_path):
     cfg = load_config(tmp_path)
     assert cfg.modules.vectors == "auto"
     assert cfg.modules.graph == "on"
+    assert cfg.modules.similarity_gaps == "auto"
     assert cfg.modules.ui is True
     assert cfg.models.embedding.kind == ""
     assert cfg.models.embedding.endpoint == ""
     assert cfg.models.embedding.model == ""
     assert cfg.models.embedding.dim == 0
+    assert cfg.similarity_gaps.threshold == 0.75
+    assert cfg.similarity_gaps.max_pairs == 50
+
+
+def test_similarity_gaps_from_toml(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        "[modules]\nsimilarity_gaps = \"off\"\n"
+        "[similarity_gaps]\nthreshold = 0.9\nmax_pairs = 5\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.modules.similarity_gaps == "off"
+    assert cfg.similarity_gaps.threshold == 0.9
+    assert cfg.similarity_gaps.max_pairs == 5
 
 
 def test_modules_and_embedding_from_toml(tmp_path):

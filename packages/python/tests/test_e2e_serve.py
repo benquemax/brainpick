@@ -200,6 +200,27 @@ def test_timeline_empty_then_served(kotiaurinko):
         assert cached.status_code == 304
 
 
+def test_similarity_gaps_empty_then_served(kotiaurinko):
+    with TestClient(make_app(kotiaurinko)) as client:
+        # T2 is off for this fixture copy → no artifact → the empty shape
+        first = client.get("/api/similarity-gaps")
+        assert first.status_code == 200
+        assert first.headers["etag"] == '"1"'
+        assert first.json() == {"pairs": [], "threshold": 0.75, "max_pairs": 50}
+
+        payload = {"pairs": [{"a": "a.md", "b": "b.md", "score": 0.9, "status": "open"}],
+                   "threshold": 0.75, "max_pairs": 50}
+        (kotiaurinko / ".brainpick" / "t1" / "similarity-gaps.json").write_text(
+            json.dumps(payload), encoding="utf-8",
+        )
+        served = client.get("/api/similarity-gaps")
+        assert served.status_code == 200
+        assert served.json() == payload
+
+        cached = client.get("/api/similarity-gaps", headers={"If-None-Match": '"1"'})
+        assert cached.status_code == 304
+
+
 def test_doc_versions_at_commit(kotiaurinko):
     """spec/50 "Doc versions": ?at=<sha> serves the doc AS OF a commit — sha
     null (read-only history), at echoed, neighbors empty; instructive 400/404."""

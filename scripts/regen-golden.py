@@ -86,6 +86,24 @@ def regen_report(case: dict) -> None:
         print(f"golden: {dst.relative_to(REPO)}")
 
 
+def regen_similarity_gaps(case: dict) -> None:
+    """t1/similarity-gaps.json (spec/45) needs T2 on to produce anything, so —
+    like the query-class mock-embedder cases — write a mock [models.embedding]
+    config into the copied bundle before compiling. Otherwise the same
+    compile-then-copy-one-artifact recipe as regen_report."""
+    bundle = case["bundle"]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / bundle
+        shutil.copytree(BUNDLES / bundle, root)
+        (root / "brainpick.toml").write_text('[models.embedding]\nkind = "mock"\n', encoding="utf-8")
+        run_compile(root)
+        src = root / case["artifact"]
+        dst = EXPECTED / bundle / case["artifact"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        print(f"golden: {dst.relative_to(REPO)}")
+
+
 def regen_delta(case: dict) -> None:
     bundle, scenario = case["bundle"], case["scenario"]
     steps = yaml.safe_load((SCENARIOS / scenario / "steps.yaml").read_text(encoding="utf-8"))["steps"]
@@ -124,6 +142,8 @@ def main() -> None:
             regen_chunks(case)
         elif case["class"] == "report":
             regen_report(case)
+        elif case["class"] == "similarity-gaps":
+            regen_similarity_gaps(case)
         elif case["class"] == "delta":
             regen_delta(case)
     print("done — review the diffs like code before committing.")

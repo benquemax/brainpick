@@ -28,6 +28,8 @@ def present_overview(payload: dict) -> str:
         f"counts: {_counts_line(payload.get('counts', {}))}",
         "tiers: " + " · ".join(f"{k} {v}" for k, v in payload.get("tiers", {}).items()),
     ]
+    if "similarity_gaps_open_count" in payload:
+        lines.append(f"similarity gaps: {payload['similarity_gaps_open_count']} open")
     for group in payload.get("tree", []):
         lines.append("")
         lines.append(f"{group['group']}/")
