@@ -65,6 +65,20 @@ Don't want to work the list by hand? Add the folder in the app anyway: for a
 not-yet-OKF bundle the wizard hands you a **paste-ready prompt** that steers
 your coding agent to make it Brainpick-compatible.
 
+### 4 · Agents only? Skip the server entirely
+
+An agent host needs no app, no daemon and no \`serve\` — \`brainpick mcp\`
+speaks MCP over stdio and is spawned on demand by the host itself:
+
+\`\`\`bash
+brainpick integrate claude-code   # installs the Agent Skill + prints the \`claude mcp add\` snippet
+# or wire the transport directly:
+claude mcp add brainpick -- brainpick mcp --root docs
+\`\`\`
+
+\`serve\` exists for the humans watching the holographic brain; agents get the
+same six tools serverless.
+
 ### Running the engines from a checkout
 
 The \`brainpick\` pip/npm packages are not published yet, but both engines
