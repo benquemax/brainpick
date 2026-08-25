@@ -15,13 +15,22 @@ export const content = `<!-- markdownlint-disable -->
 
 # brainpick
 
-**A turn-key brain stack for agents.** Knowledge lives as an
+**A turn-key brain stack for AI agents — plain markdown in, a living
+knowledge graph out.** Your agents' knowledge lives as an
 [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
-bundle of plain markdown, [henxels](https://github.com/benquemax/henxels)
-keeps every writer true to the format, and brainpick compiles the bundle into
-tiered, disposable artifacts — a generated index, a link graph, vectors, an
-entity graph — then serves them to agents (MCP + CLI) and to humans (a
-holographic-brain web UI that updates live while agents write).
+bundle of plain markdown files — [henxels](https://github.com/benquemax/henxels)
+keeps every writer true to the format — and brainpick compiles it into
+tiered, disposable artifacts: a generated index, a link graph, semantic
+vectors, an entity graph. Agents consume the compiled brain over
+[MCP](https://modelcontextprotocol.io) and the CLI; everything is
+local-first, deterministic wherever a model isn't needed, and no server is
+ever required.
+
+Humans get a separate, optional face: the **holographic brain**, a web UI
+that renders the same compiled graph and updates live while agents write.
+It is a window into the brain, never a dependency of it — see the
+[live demo](https://benquemax.github.io/brainpick/), this repository's own
+docs compiled and served by brainpick itself.
 `;
 
 export const validate = async () => {

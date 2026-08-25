@@ -3,95 +3,93 @@ import * as path from 'path';
 
 export const content = `## Quick start
 
-### 0 · See a brain right now — no install
+### Give your agent a brain — paste one prompt
 
-The [live demo](https://benquemax.github.io/brainpick/) is this repository's
-own docs wiki, baked into a static snapshot and redeployed with every
-release: the real UI, searchable, with the full time machine — served by
-GitHub Pages with no engine behind it.
+Agentic setup is the primary path: your coding agent installs brainpick,
+compiles the brain, and wires itself to it. Paste this to the agent:
 
-### 1 · Install the app and see a brain immediately
+> Install brainpick (\`uv tool install brainpick\`, or \`pipx install
+> brainpick\`, or \`npm i -g brainpick\` — pip and npm are native peers; the
+> npm one never needs Python). In the repo that holds (or should hold) the
+> markdown knowledge base, run \`brainpick init\` — it detects the bundle
+> (offering henxels' \`okf-llm-wiki\` scaffold if the folder is empty),
+> detects an embedding backend if one is reachable, writes the config, and
+> compiles tier 1. Then run \`brainpick integrate claude-code\` (or
+> \`opencode\`, or \`agents-md\`) to install the Agent Skill and print the
+> MCP snippet — wire it into the harness config. From then on, consult the
+> brain before grepping: \`brain_overview\` first, then \`brain_search\`,
+> \`brain_read\`, \`brain_neighbors\`. Finally commit the bundle and the
+> brainpick config.
 
-The fastest path is the desktop app — a single file that runs the brainpick
-service and shows the holographic brain. Grab the installer for your OS from
-the [latest release](https://github.com/benquemax/brainpick/releases):
+No server appears anywhere in that flow: agents talk to \`brainpick mcp\`
+over stdio, spawned on demand by the harness itself. The read tools also
+exist as plain CLI verbs (\`brainpick search\` · \`read\` · \`neighbors\` ·
+\`overview\`) for shells, scripts, and CI.
 
-- **Linux** — \`Brainpick_*.AppImage\` (\`chmod +x\`, then run; needs system
-  \`webkit2gtk-4.1\`, the standard Tauri Linux prerequisite).
-- **macOS** — \`Brainpick_*.dmg\` (Apple Silicon; first launch: right-click →
-  Open, since the build is unsigned).
-- **Windows** — \`Brainpick_*.msi\` (SmartScreen → More info → Run anyway).
+### Manual install
 
-On first launch it seeds a **demo brain** — this repository's own docs wiki,
-cloned from GitHub — so you land on a real, link-rich, spinnable brain with
-zero setup. Remove it any time; it never comes back.
-
-> Prefer the terminal, a NAS, or a scriptable setup? The same service runs
-> headless as \`brainpickd start\` (each brain serves its own port; other
-> machines need only a browser). Set \`BRAINPICK_NO_DEMO=1\` to skip the demo
-> seed.
-
-### 2 · Start a brand-new brain (empty GitHub repo + henxels)
-
-[henxels](https://github.com/benquemax/henxels) scaffolds a governed OKF wiki
-and installs the contract that keeps every future write true to the format:
+The same journey by hand:
 
 \`\`\`bash
-# create an empty repo on GitHub, then:
-git clone git@github.com:you/my-brain.git && cd my-brain
+uv tool install brainpick        # or: pipx install brainpick · npm i -g brainpick
+brainpick init                   # detect bundle + backends, write config, compile T1
+brainpick integrate claude-code  # Agent Skill + the MCP wiring snippet
+brainpick search "anything"      # the brain answers from the terminal
+\`\`\`
+
+One-shot flavors work too: \`uvx brainpick init\` / \`npx brainpick init\`.
+
+### No wiki yet, or a messy one? henxels drives
+
+A brand-new brain — [henxels](https://github.com/benquemax/henxels)
+scaffolds a governed OKF wiki and installs the contract that keeps every
+future write true to the format:
+
+\`\`\`bash
 henxels init --template okf-llm-wiki --wiki-dir docs   # scaffold + govern docs/
-git add -A && git commit -m "scaffold brain" && git push
 \`\`\`
 
-Now **Add a brain** in the app (paste the repo URL — a public repo clones as
-is; a private one gets a one-click deploy key), or point a bare engine at it:
-\`brainpick serve --root docs --open\`.
+An existing folder of markdown: \`henxels init\` installs the contract and
+\`henxels check --all\` prints your migration checklist — instructive, one
+fix at a time, and an agent can work the list.
 
-### 3 · Migrate an existing repo (henxels does the driving)
+### The GUI — see what your agent sees (optional)
 
-Any folder of markdown can become a governed brain. \`henxels\` installs the
-contract and its \`check\` output *is* your migration checklist — instructive,
-one fix at a time:
+Everything above is the whole product as far as agents are concerned. The
+GUI is for the humans: the **holographic brain** — search, spin, and
+time-travel the same compiled graph the agents walk, updating live with
+every write. Nice to have, never required.
 
-\`\`\`bash
-cd your-existing-repo
-henxels init                 # install the contract
-henxels check --all          # the fix-list = exactly what to fix, and why
-# work the list until it is green (an agent can do this — see below)
-brainpick serve --root docs --open
-\`\`\`
+- **Zero install** — the [live demo](https://benquemax.github.io/brainpick/)
+  is this repo's own docs wiki, baked into a static snapshot and redeployed
+  with every release: the real UI, searchable, with the full time machine,
+  served by GitHub Pages with no engine behind it.
+- **One command** — \`brainpick serve --root docs --open\` opens the UI over
+  any compiled brain.
+- **The desktop app** — grab an installer from the
+  [latest release](https://github.com/benquemax/brainpick/releases): Linux
+  \`Brainpick_*.AppImage\` (\`chmod +x\`, needs system \`webkit2gtk-4.1\`),
+  macOS \`Brainpick_*.dmg\` (right-click → Open; the build is unsigned),
+  Windows \`Brainpick_*.msi\` (SmartScreen → More info → Run anyway). First
+  launch seeds a **demo brain** — remove it any time; it never comes back.
+  **Add a brain** takes a repo URL or a local folder, and for a not-yet-OKF
+  folder hands you a paste-ready prompt for your coding agent. Prefer a
+  terminal or a NAS? The same service runs headless as \`brainpickd start\`;
+  \`BRAINPICK_NO_DEMO=1\` skips the demo seed.
 
-Don't want to work the list by hand? Add the folder in the app anyway: for a
-not-yet-OKF bundle the wizard hands you a **paste-ready prompt** that steers
-your coding agent to make it Brainpick-compatible.
+### Until v0.1 ships: run from a checkout
 
-### 4 · Agents only? Skip the server entirely
-
-An agent host needs no app, no daemon and no \`serve\` — \`brainpick mcp\`
-speaks MCP over stdio and is spawned on demand by the host itself:
-
-\`\`\`bash
-brainpick integrate claude-code   # installs the Agent Skill + prints the \`claude mcp add\` snippet
-# or wire the transport directly:
-claude mcp add brainpick -- brainpick mcp --root docs
-\`\`\`
-
-\`serve\` exists for the humans watching the holographic brain; agents get the
-same six tools serverless.
-
-### Running the engines from a checkout
-
-The \`brainpick\` pip/npm packages are not published yet, but both engines
-already work from a clone — Python (the reference) and native Node, no Python
-required:
+The \`brainpick\` pip/npm packages are not published yet; both engines
+already work from a clone — Python (the reference) and native Node, no
+Python required:
 
 \`\`\`bash
 cd packages/python && uv run brainpick serve --root ../../docs --open   # Python
 npm run build -w packages/node && node packages/node/dist/cli.js serve --root docs --open   # Node
 \`\`\`
 
-Once they publish, first contact collapses to \`uvx brainpick serve --open\`
-(or \`npx brainpick serve\` — pip and npm are native peers).
+Once they publish, first contact collapses to the prompt above — or
+\`uvx brainpick init\` / \`npx brainpick init\` by hand.
 `;
 
 export const validate = async () => {
@@ -121,14 +119,31 @@ export const validate = async () => {
     }
   }
 
-  // The documented engine commands must exist in the actual CLI.
+  // The documented engine commands must exist in the actual CLI — including
+  // the agentic path's verbs (init, integrate, mcp, the query mirrors).
   const cli = fs.readFileSync(
     path.join(root, 'packages', 'python', 'src', 'brainpick', 'cli.py'),
     'utf-8',
   );
-  for (const flag of ['"serve"', '--root', '--open']) {
+  for (const flag of ['"serve"', '--root', '--open', '"init"', '"integrate"', '"mcp"', '"search"']) {
     if (!cli.includes(flag)) {
       throw new Error(`Quick start documents ${flag} but the CLI source does not define it`);
+    }
+  }
+  for (const target of ['claude-code', 'opencode', 'agents-md']) {
+    if (!cli.includes(target)) {
+      throw new Error(`Quick start offers integrate target "${target}" but the CLI does not`);
+    }
+  }
+
+  // The agentic prompt names MCP tools — they must exist in the MCP server.
+  const mcp = fs.readFileSync(
+    path.join(root, 'packages', 'python', 'src', 'brainpick', 'mcp_server.py'),
+    'utf-8',
+  );
+  for (const tool of ['brain_overview', 'brain_search', 'brain_read', 'brain_neighbors']) {
+    if (!mcp.includes(tool)) {
+      throw new Error(`Quick start names MCP tool "${tool}" but mcp_server.py does not define it`);
     }
   }
 
@@ -163,10 +178,10 @@ export const validate = async () => {
 export const errorContent = `
 [Validation Failed] The "Quick start" section is out of date.
 
-The three onboarding paths must name their real tools — the releases page,
-\`henxels init --template okf-llm-wiki\` (new brain) and \`henxels check --all\`
-(migration) — document only engine commands the CLIs actually have (checked
-against packages/python/src/brainpick/cli.py), and keep the uvx/npx one-liners
-in sync with _vision.md. Edit README.md.codx/quickStartComing.ts, then run
+The onboarding paths must name their real tools — the agentic prompt's verbs
+(\`brainpick init\`, \`integrate\`, \`mcp\`, the query mirrors) and the MCP
+tools it names must exist in the engine sources, henxels' scaffold and check
+commands must be shown, and the uvx/npx one-liners stay in sync with
+_vision.md. Edit README.md.codx/quickStartComing.ts, then run
 \`npx codumentation build\`.
 `;
