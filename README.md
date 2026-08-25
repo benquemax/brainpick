@@ -157,20 +157,18 @@ every write. Nice to have, never required.
   terminal or a NAS? The same service runs headless as `brainpickd start`;
   `BRAINPICK_NO_DEMO=1` skips the demo seed.
 
-### Until v0.1 ships: run from a checkout
+### Contributors: run the engines from a checkout
 
-The `brainpick` pip package is not published yet — and the npm publish is
+Both engines work straight from a clone — Python (the reference
+implementation, and the published package) and native Node, no Python
+required. The npm registry publish is
 [deliberately parked](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/pypi-first-release.md)
-until there is npm-side demand; the Node engine is a full native peer and
-works from a clone today, no Python required:
+until there is npm-side demand; the engine itself is a full native peer:
 
 ```bash
 cd packages/python && uv run brainpick serve --root ../../docs --open   # Python
 npm run build -w packages/node && node packages/node/dist/cli.js serve --root docs --open   # Node
 ```
-
-Once it publishes, first contact collapses to the prompt above — or
-`uvx brainpick init` by hand.
 
 
 ## Status
@@ -180,7 +178,8 @@ Once it publishes, first contact collapses to the prompt above — or
 The vision is committed in
 [`_vision.md`](https://github.com/benquemax/brainpick/blob/main/_vision.md);
 the milestones (Ensilento → Kaksoisveto → Hologrammi) landed. The `brainpick`
-pip package is not published yet — v0.1 claims the name. The npm publish is
+pip package is [published on PyPI](https://pypi.org/project/brainpick/) as of
+v0.1. The npm publish is
 [parked by ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/pypi-first-release.md);
 the Node engine ships in-repo as a native peer until npm-side demand shows up.
 

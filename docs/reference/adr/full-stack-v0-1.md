@@ -4,7 +4,7 @@ about: concept
 title: "ADR: ship the full stack in one v0.1 release"
 description: "Why brainpick builds T1 through T3, MCP, CLI and the live UI as one v0.1 release before any publish, rather than shipping a thin slice first."
 tags: [governance]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-08-25T13:00:00Z
 ---
 
 # ADR: ship the full stack in one v0.1 release
@@ -17,8 +17,9 @@ none of that movie scene.
 **Decision.** v0.1 is the full stack in one release: all of [The tiers](../../the-tiers.md)
 (T1 through T3), MCP and CLI, guarded writes, and the [Holographic brain](../../holographic-brain.md)
 plus cosmos PWA — landed across three milestones (Ensilento, Kaksoisveto,
-Hologrammi) before anything publishes to PyPI or npm. The package names are
-reserved, not yet claimed.
+Hologrammi) before anything publishes to PyPI or npm. The v0.1 publish has
+since claimed the PyPI name; the npm side is
+[parked by a later ADR](pypi-first-release.md).
 
 **Alternatives considered.** Publish T1 alone and iterate in the open; ship the
 engine first and the UI later. Rejected — the first wow is the living graph, and

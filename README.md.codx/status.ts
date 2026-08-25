@@ -8,7 +8,8 @@ export const content = `## Status
 The vision is committed in
 [\`_vision.md\`](https://github.com/benquemax/brainpick/blob/main/_vision.md);
 the milestones (Ensilento → Kaksoisveto → Hologrammi) landed. The \`brainpick\`
-pip package is not published yet — v0.1 claims the name. The npm publish is
+pip package is [published on PyPI](https://pypi.org/project/brainpick/) as of
+v0.1. The npm publish is
 [parked by ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/pypi-first-release.md);
 the Node engine ships in-repo as a native peer until npm-side demand shows up.
 `;
