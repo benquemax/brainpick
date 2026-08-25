@@ -9,8 +9,7 @@ Agentic setup is the primary path: your coding agent installs brainpick,
 compiles the brain, and wires itself to it. Paste this to the agent:
 
 > Install brainpick (\`uv tool install brainpick\`, or \`pipx install
-> brainpick\`, or \`npm i -g brainpick\` — pip and npm are native peers; the
-> npm one never needs Python). In the repo that holds (or should hold) the
+> brainpick\`). In the repo that holds (or should hold) the
 > markdown knowledge base, run \`brainpick init\` — it detects the bundle
 > (offering henxels' \`okf-llm-wiki\` scaffold if the folder is empty),
 > detects an embedding backend if one is reachable, writes the config, and
@@ -31,13 +30,13 @@ exist as plain CLI verbs (\`brainpick search\` · \`read\` · \`neighbors\` ·
 The same journey by hand:
 
 \`\`\`bash
-uv tool install brainpick        # or: pipx install brainpick · npm i -g brainpick
+uv tool install brainpick        # or: pipx install brainpick
 brainpick init                   # detect bundle + backends, write config, compile T1
 brainpick integrate claude-code  # Agent Skill + the MCP wiring snippet
 brainpick search "anything"      # the brain answers from the terminal
 \`\`\`
 
-One-shot flavors work too: \`uvx brainpick init\` / \`npx brainpick init\`.
+One-shot flavor works too: \`uvx brainpick init\`.
 
 ### No wiki yet, or a messy one? henxels drives
 
@@ -79,32 +78,43 @@ every write. Nice to have, never required.
 
 ### Until v0.1 ships: run from a checkout
 
-The \`brainpick\` pip/npm packages are not published yet; both engines
-already work from a clone — Python (the reference) and native Node, no
-Python required:
+The \`brainpick\` pip package is not published yet — and the npm publish is
+[deliberately parked](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/pypi-first-release.md)
+until there is npm-side demand; the Node engine is a full native peer and
+works from a clone today, no Python required:
 
 \`\`\`bash
 cd packages/python && uv run brainpick serve --root ../../docs --open   # Python
 npm run build -w packages/node && node packages/node/dist/cli.js serve --root docs --open   # Node
 \`\`\`
 
-Once they publish, first contact collapses to the prompt above — or
-\`uvx brainpick init\` / \`npx brainpick init\` by hand.
+Once it publishes, first contact collapses to the prompt above — or
+\`uvx brainpick init\` by hand.
 `;
 
 export const validate = async () => {
   const root = path.join(__dirname, '..');
   const vision = fs.readFileSync(path.join(root, '_vision.md'), 'utf-8');
 
-  // Both runtimes are native peers (principle 8) — the published one-liners
-  // stay in sync with _vision.md.
-  for (const cmd of ['uvx brainpick', 'npx brainpick']) {
+  // The pip one-liner stays in sync with _vision.md; the npm publish is
+  // parked by ADR, so the quick start must say so instead of promising npx.
+  for (const cmd of ['uvx brainpick']) {
     if (!content.includes(cmd)) {
-      throw new Error(`Quick start must show "${cmd}" — pip and npm are native peers`);
+      throw new Error(`Quick start must show "${cmd}"`);
     }
     if (!vision.includes(cmd)) {
       throw new Error(`Quick start promises "${cmd}" but _vision.md does not mention it`);
     }
+  }
+  const parkedAdr = 'docs/reference/adr/pypi-first-release.md';
+  if (content.includes('npm i -g brainpick') || content.includes('npx brainpick')) {
+    throw new Error(`npm install paths are parked (${parkedAdr}) — unpark the ADR before promising them`);
+  }
+  if (!fs.existsSync(path.join(root, ...parkedAdr.split('/')))) {
+    throw new Error(`Quick start leans on ${parkedAdr} but the ADR does not exist`);
+  }
+  if (!content.includes('reference/adr/pypi-first-release.md')) {
+    throw new Error('Quick start must link the ADR that parks the npm publish');
   }
 
   // The onboarding paths must name their real tools: the releases page (the

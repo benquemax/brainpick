@@ -1,9 +1,10 @@
 name: release
 
-# Publish v0.1+ to PyPI and npm. Triggered by pushing a version tag (v0.1.0)
-# or run manually. The web UI is built ONCE and synced into both packages so
-# pip and npm ship the identical UI. Version lockstep is enforced before either
-# publish, so a half-bumped release cannot ship.
+# Publish v0.1+ to PyPI. Triggered by pushing a version tag (v0.1.0) or run
+# manually. The npm publish is parked (docs/reference/adr/pypi-first-release.md)
+# — restoring it is a git revert plus an NPM_TOKEN secret. Version lockstep is
+# still enforced (the Node engine stays a native peer in the repo), so a
+# half-bumped release cannot ship.
 #
 # The static demo brain deploys from its own workflow (pages.yml) — it fires
 # on the same v* tags, plus manually, without risking a package publish.
@@ -61,31 +62,3 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/python/dist
-
-  publish-npm:
-    name: publish to npm
-    needs: build-webui
-    runs-on: ubuntu-latest
-    environment: release
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
-      - run: npm ci
-      - uses: actions/download-artifact@v4
-        with:
-          name: webui-dist
-          path: packages/webui/dist
-      - name: sync the UI + skill into the package
-        run: |
-          node scripts/sync-ui.mjs
-          node scripts/sync-skill.mjs
-      - run: npm run build -w packages/node
-      - name: publish
-        working-directory: packages/node
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

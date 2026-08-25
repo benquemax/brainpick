@@ -4,7 +4,7 @@ about: concept
 title: "Architecture decision records"
 description: "The founding and major decisions behind brainpick — one Architecture Decision Record per call, each with its context, alternatives and consequences, richly cross-linked."
 tags: [governance]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-08-25T12:00:00Z
 ---
 
 # Architecture decision records
@@ -20,6 +20,7 @@ what it weighed against, and what the choice costs. Each page carries
 ## Scope and philosophy
 
 - [ADR: ship the full stack in one v0.1 release](reference/adr/full-stack-v0-1.md)
+- [ADR: PyPI first, npm parked](reference/adr/pypi-first-release.md)
 - [ADR: small models are first-class citizens](reference/adr/small-models-first-class.md)
 - [ADR: perfect UX and AX are fruits of great DX](reference/adr/dx-first.md)
 - [ADR: the files are the brain and compiled state is disposable](reference/adr/files-are-the-brain.md)

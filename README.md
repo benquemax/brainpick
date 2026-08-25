@@ -90,8 +90,7 @@ Agentic setup is the primary path: your coding agent installs brainpick,
 compiles the brain, and wires itself to it. Paste this to the agent:
 
 > Install brainpick (`uv tool install brainpick`, or `pipx install
-> brainpick`, or `npm i -g brainpick` — pip and npm are native peers; the
-> npm one never needs Python). In the repo that holds (or should hold) the
+> brainpick`). In the repo that holds (or should hold) the
 > markdown knowledge base, run `brainpick init` — it detects the bundle
 > (offering henxels' `okf-llm-wiki` scaffold if the folder is empty),
 > detects an embedding backend if one is reachable, writes the config, and
@@ -112,13 +111,13 @@ exist as plain CLI verbs (`brainpick search` · `read` · `neighbors` ·
 The same journey by hand:
 
 ```bash
-uv tool install brainpick        # or: pipx install brainpick · npm i -g brainpick
+uv tool install brainpick        # or: pipx install brainpick
 brainpick init                   # detect bundle + backends, write config, compile T1
 brainpick integrate claude-code  # Agent Skill + the MCP wiring snippet
 brainpick search "anything"      # the brain answers from the terminal
 ```
 
-One-shot flavors work too: `uvx brainpick init` / `npx brainpick init`.
+One-shot flavor works too: `uvx brainpick init`.
 
 ### No wiki yet, or a messy one? henxels drives
 
@@ -160,17 +159,18 @@ every write. Nice to have, never required.
 
 ### Until v0.1 ships: run from a checkout
 
-The `brainpick` pip/npm packages are not published yet; both engines
-already work from a clone — Python (the reference) and native Node, no
-Python required:
+The `brainpick` pip package is not published yet — and the npm publish is
+[deliberately parked](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/pypi-first-release.md)
+until there is npm-side demand; the Node engine is a full native peer and
+works from a clone today, no Python required:
 
 ```bash
 cd packages/python && uv run brainpick serve --root ../../docs --open   # Python
 npm run build -w packages/node && node packages/node/dist/cli.js serve --root docs --open   # Node
 ```
 
-Once they publish, first contact collapses to the prompt above — or
-`uvx brainpick init` / `npx brainpick init` by hand.
+Once it publishes, first contact collapses to the prompt above — or
+`uvx brainpick init` by hand.
 
 
 ## Status
@@ -180,8 +180,9 @@ Once they publish, first contact collapses to the prompt above — or
 The vision is committed in
 [`_vision.md`](https://github.com/benquemax/brainpick/blob/main/_vision.md);
 the milestones (Ensilento → Kaksoisveto → Hologrammi) landed. The `brainpick`
-pip and npm packages are not published yet — the names are reserved for the
-v0.1 release.
+pip package is not published yet — v0.1 claims the name. The npm publish is
+[parked by ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/pypi-first-release.md);
+the Node engine ships in-repo as a native peer until npm-side demand shows up.
 
 
 ## Siblings
