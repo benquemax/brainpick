@@ -202,3 +202,35 @@ def test_cli_show_unreachable_server_is_an_instruction_not_a_crash(kotiaurinko, 
     code = main(["show", "aurinko.md", "--port", "4"])  # a port nothing listens on
     assert code == 1
     assert "brainpick serve" in capsys.readouterr().err
+
+
+# -- [bundle] root (spec/80): every --root goes through the config's indirection ----
+
+
+def test_cli_honours_bundle_root(kotiaurinko, capsys):
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    (repo / "README.md").write_text("# not part of the bundle\n", encoding="utf-8")
+
+    assert main(["compile", "--root", str(repo)]) == 0
+    assert (kotiaurinko / ".brainpick" / "manifest.json").is_file()
+    assert main(["compile", "--check-fresh", "--root", str(repo)]) == 0
+    capsys.readouterr()
+
+    assert main(["search", "aurinko", "--root", str(repo), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["hits"][0]["path"] == "aurinko.md"     # bundle-relative, not kotiaurinko/aurinko.md
+    assert main(["overview", "--root", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "kuu.md" in out and "README.md" not in out
+
+
+def test_cli_doctor_honours_bundle_root(kotiaurinko, monkeypatch, capsys):
+    monkeypatch.setattr("brainpick.scaffold.probe_backends", lambda env: [])
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    main(["compile", "--root", str(repo)])
+    capsys.readouterr()
+    assert main(["doctor", "--root", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "bundle: OKF" in out and "artifacts: fresh" in out

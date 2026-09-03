@@ -83,3 +83,37 @@ def test_full_recompile_matches_incremental(kotiaurinko):
     incremental = (kotiaurinko / ".brainpick" / "t1" / "graph.json").read_bytes()
     run_compile(kotiaurinko, full=True)
     assert (kotiaurinko / ".brainpick" / "t1" / "graph.json").read_bytes() == incremental
+
+
+# -- [bundle] root (spec/80): config at a repo root, bundle in a subdirectory ---------
+
+
+def bundle_root_layout(kotiaurinko):
+    """A repo whose brainpick.toml points at the fixture bundle one level down,
+    plus a repo-root README that must never be scanned into the brain."""
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    (repo / "README.md").write_text("# not part of the bundle\n", encoding="utf-8")
+    return repo
+
+
+def test_compile_honours_bundle_root(kotiaurinko):
+    repo = bundle_root_layout(kotiaurinko)
+
+    result = run_compile(repo)
+
+    assert result.changed is True
+    manifest = json.loads(read(kotiaurinko / ".brainpick" / "manifest.json"))
+    assert "kuu.md" in manifest["files"]
+    assert "README.md" not in manifest["files"]           # the repo root is not the bundle
+    assert not (repo / ".brainpick").exists()             # artifacts live with the bundle
+    assert not (repo / "index.md").exists()               # so does the generated index
+    assert "brainpick:begin index" in read(kotiaurinko / "index.md")
+
+
+def test_check_fresh_honours_bundle_root(kotiaurinko):
+    repo = bundle_root_layout(kotiaurinko)
+    assert check_fresh(repo).fresh is False               # never compiled
+    run_compile(repo)
+    assert check_fresh(repo).fresh is True
+    assert check_fresh(kotiaurinko).fresh is True          # --root at the bundle itself still works
