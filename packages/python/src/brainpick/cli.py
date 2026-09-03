@@ -31,14 +31,16 @@ def _print_t3_summary(result: CompileResult) -> None:
 
 
 def _cmd_compile(args: argparse.Namespace) -> int:
-    root = Path(args.root).resolve()
+    from brainpick.config import resolve_bundle
+
+    root, config = resolve_bundle(args.root)  # --root may be a repo root above the bundle (spec/80)
     if args.check_fresh:
-        verdict = check_fresh(root)
+        verdict = check_fresh(root, config)
         print("fresh" if verdict.fresh else verdict.reason)
         return 0 if verdict.fresh else 1
 
     only = (args.only,) if args.only else None
-    result = run_compile(root, full=args.full, only=only, sample=args.sample)
+    result = run_compile(root, full=args.full, only=only, config=config, sample=args.sample)
     if result.changed:
         _print_compiled(result)
     else:
@@ -54,7 +56,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         print(f"watching {root} — Ctrl-C stops", flush=True)
         for _changes in watch_sync(root, watch_filter=source_filter(root), step=DEBOUNCE_MS,
                                    raise_interrupt=False):
-            result = run_compile(root, only=only)
+            result = run_compile(root, only=only, config=config)
             if result.changed:
                 _print_compiled(result)
             _print_warnings(result)
@@ -156,20 +158,20 @@ def _emit_uncompiled(instruction: str, as_json: bool) -> int:
     return 0
 
 
-def _note_if_stale(root: Path) -> None:
-    if not check_fresh(root).fresh:
+def _note_if_stale(root: Path, config) -> None:
+    if not check_fresh(root, config).fresh:
         print(f"note: the brain is stale — run: brainpick compile --root {root}", file=sys.stderr)
 
 
 def _query_setup(args: argparse.Namespace):
     """Shared prelude for the four query mirrors: resolve, load, warn if stale."""
-    from brainpick.config import load_config
+    from brainpick.config import resolve_bundle
 
-    root = Path(args.root).resolve()
-    state, instruction = _held_state(root, load_config(root))
+    root, config = resolve_bundle(args.root)
+    state, instruction = _held_state(root, config)
     if state is None:
         return None, _emit_uncompiled(instruction, args.json)
-    _note_if_stale(root)
+    _note_if_stale(root, config)
     return state, 0
 
 
@@ -290,12 +292,11 @@ def _cmd_show(args: argparse.Namespace) -> int:
 
 def _cmd_mcp(args: argparse.Namespace) -> int:
     # stdio is the protocol channel: nothing may print to stdout here
-    from brainpick.config import load_config
+    from brainpick.config import resolve_bundle
     from brainpick.mcp_server import WRITES_OFF_REFUSAL, create_mcp_server
     from brainpick.serve.state import ServeState
 
-    root = Path(args.root).resolve()
-    config = load_config(root)
+    root, config = resolve_bundle(args.root)
     state = ServeState(root, config)
     state.load()
     refusal = WRITES_OFF_REFUSAL if config.serve.writes == "off" else None

@@ -22,7 +22,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from brainpick.compile.pipeline import check_fresh, run_compile
-from brainpick.config import LOCAL_CONFIG_FILE, config_layers, generate_bundle_id, load_config
+from brainpick.config import LOCAL_CONFIG_FILE, config_layers, generate_bundle_id, resolve_bundle
 from brainpick.vectorstore import lancedb_available
 from brainpick.detect import (
     Backend,
@@ -447,7 +447,12 @@ def run_doctor(
             emit("✗", f"config: {config_path.name} is not valid TOML ({error})",
                  f"fix the syntax in {config_path} — the engine skips this layer meanwhile")
 
-    # bundle
+    # bundle — the one the config points at ([bundle] root, spec/80). The config
+    # layers were read from `root` above, so keep that Config instead of re-reading
+    # it from the bundle, where it may not exist.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # config problems already have their own line above
+        root, config = resolve_bundle(root)
     bundle = detect_bundle(root) if root.is_dir() else BundleInfo("none", 0, 0)
     if bundle.kind == "okf":
         emit("✓", f"bundle: OKF ({bundle.docs} docs)")
@@ -458,7 +463,7 @@ def run_doctor(
              f"cd {root} && henxels init --template okf-llm-wiki --wiki-dir .")
 
     # artifacts
-    verdict = check_fresh(root)
+    verdict = check_fresh(root, config)
     if verdict.fresh:
         manifest = json.loads((root / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
         emit("✓", f"artifacts: fresh (seq {manifest['seq']})")
@@ -484,9 +489,7 @@ def run_doctor(
             emit("○", "auth: open — no auth configured (brainpick token create / password set lock it)")
 
     # T2 vectors: extra installed, backend configured, tier state (spec/30) — optional, never ✗
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # config problems already have their own line above
-        embedding = load_config(root).models.embedding
+    embedding = config.models.embedding
     tiers = {}
     manifest_path = root / ".brainpick" / "manifest.json"
     if manifest_path.is_file():
@@ -512,9 +515,7 @@ def run_doctor(
     # is the only reachable "extract" outcome).
     from brainpick.config import resolve_graph_backend
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        graph_config = load_config(root)
+    graph_config = config
     extraction = graph_config.models.extraction
     backend = resolve_graph_backend(graph_config)
     t3_state = tiers.get("t3", "off")

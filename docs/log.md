@@ -1,5 +1,15 @@
 # Update log
 
+## 2026-09-03
+
+- Fixed: `[bundle] root` is now honoured by every command, not only `serve`
+  and the auth commands. `compile`, `compile --check-fresh`, the four query
+  mirrors, `mcp` and `doctor` resolve `--root` through the config's
+  indirection via one shared `resolve_bundle()`, so a repo-root
+  `brainpick.toml` pointing at a subdirectory bundle compiles the bundle
+  (artifacts and the generated index land inside it) instead of scanning the
+  repo root and resolving bundle-absolute links against the wrong folder.
+
 ## 2026-08-03
 
 - Removed: LightRAG — the whole opt-in T3 extraction backend, its adapter
