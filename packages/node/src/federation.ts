@@ -27,6 +27,19 @@ export const DEFAULT_PORT_BASE = 4750; // mirrors the daemon's registry (package
 export const DEFAULT_HOST = "127.0.0.1";
 
 export type Env = Record<string, string | undefined>;
+
+/** One identity for a path everywhere in federation: absolute AND with symlinks
+ * resolved — Python's Path.resolve() semantics, so macOS's /var → /private/var
+ * or a symlinked wiki compares equal whether it came from the registry, --root
+ * or the working directory. A path that does not exist stays lexical. */
+export function canonical(...parts: string[]): string {
+  const lexical = resolve(...parts);
+  try {
+    return realpathSync(lexical);
+  } catch {
+    return lexical;
+  }
+}
 export type RegistryEntry = Record<string, unknown> & {
   id: string;
   repo: string;
@@ -67,7 +80,7 @@ export function slugifyAlias(text: string): string {
 /** The default alias: the git repo's name when the bundle sits in one, else the
  * bundle directory's own name (spec/75). */
 export function aliasFor(root: string): string {
-  const resolved = resolve(root);
+  const resolved = canonical(root);
   const repo = findRepoRoot(resolved);
   return slugifyAlias(basename(repo ?? resolved));
 }
@@ -209,8 +222,8 @@ export function entryRoot(entry: RegistryEntry, env: Env = process.env): string 
       : repo
     : join(dataDir(env), "brains", entry.id);
   const root = entry.bundle_path ? join(base, entry.bundle_path) : base;
-  const resolved = resolve(root);
-  return isDir(resolved) ? realpathSync(resolved) : null; // realpath: macOS /var → /private/var
+  const resolved = canonical(root);
+  return isDir(resolved) ? resolved : null;
 }
 
 /** [repo, bundle_path] for a local bundle — the git repo above it when there is
@@ -233,7 +246,7 @@ export interface RegisterOptions {
 /** Add the bundle at `root` to the registry (or update its entry in place when the
  * same root is already registered). Returns the entry written. */
 export function registerBrain(root: string, path: string = registryPath(), options: RegisterOptions = {}): RegistryEntry {
-  const resolved = resolve(root);
+  const resolved = canonical(root);
   const entries = loadRegistry(path);
   const [repo, bundlePath] = splitRoot(resolved);
   const existingIndex = entries.findIndex((e) => entryRoot(e) === resolved);
@@ -258,7 +271,7 @@ export function registerBrain(root: string, path: string = registryPath(), optio
 }
 
 export function unregisterBrain(root: string, path: string = registryPath()): boolean {
-  const resolved = resolve(root);
+  const resolved = canonical(root);
   const entries = loadRegistry(path);
   const kept = entries.filter((e) => entryRoot(e) !== resolved);
   if (kept.length === entries.length) return false;
@@ -279,12 +292,7 @@ export function isBundleRoot(path: string): boolean {
 
 /** The nearest ancestor-or-self of cwd that is a bundle root (spec/75). */
 export function discoverHere(cwd: string): string | null {
-  let candidate = resolve(cwd);
-  try {
-    candidate = realpathSync(candidate); // the same identity entryRoot reports
-  } catch {
-    /* a cwd that no longer exists: walk the lexical path */
-  }
+  let candidate = canonical(cwd);
   for (;;) {
     if (isBundleRoot(candidate)) return candidate;
     const parent = dirname(candidate);
@@ -309,7 +317,7 @@ export class Brain {
 
   constructor(init: BrainInit) {
     this.alias = init.alias ?? "";
-    this.root = resolve(init.root);
+    this.root = canonical(init.root);
     this.role = init.role ?? null;
     this.here = init.here ?? false;
   }
@@ -458,14 +466,14 @@ export interface ResolveOptions {
 /** The spec/75 assembly: explicit roots win outright; else the registry ∪ here,
  * ordered here → user → the rest; an empty set is the cwd alone. */
 export function resolveBrainSet(roots: string[], options: ResolveOptions = {}): BrainSet {
-  const cwd = resolve(options.cwd ?? process.cwd());
+  const cwd = canonical(options.cwd ?? process.cwd());
   const env = options.env ?? process.env;
   if (roots.length > 0) {
     const hereRoot = discoverHere(cwd);
     return new BrainSet(
       roots.map((arg) => {
         const [alias, path] = parseRootArg(arg);
-        const root = resolve(cwd, path);
+        const root = canonical(cwd, path);
         return new Brain({ alias, root, here: root === hereRoot });
       }),
     );
@@ -510,7 +518,7 @@ export function qualifyPaths<T>(alias: string, obj: T): T {
 /** A short, human root for brain_overview's `brains` — relative to cwd when it
  * sits below it, else the directory name. */
 export function relativeRoot(root: string, cwd: string = process.cwd()): string {
-  const rel = relative(resolve(cwd), root);
+  const rel = relative(canonical(cwd), root);
   if (rel === "") return ".";
   if (rel.startsWith("..") || /^[A-Za-z]:/.test(rel) || rel.startsWith(sep)) return basename(root);
   return rel.split(sep).join("/");
@@ -664,7 +672,7 @@ function registerFromHosts(registry: string, options: RegisterRunOptions, print:
   let registered = 0;
   for (const item of found) {
     const via = item.hosts.join(", ");
-    const root = resolve(item.root);
+    const root = canonical(item.root);
     if (existing.has(root)) {
       print(`  already registered ${root} (${via})`);
       continue;
@@ -720,7 +728,7 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
     print(`registry: ${registry}`);
     return 0;
   }
-  const root = resolve(path);
+  const root = canonical(path);
   if (options.remove) {
     if (unregisterBrain(root, registry)) {
       print(`removed ${root} from ${registry}`);

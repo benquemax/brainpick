@@ -3,7 +3,7 @@
  * The twin of packages/python/tests/test_federation.py. */
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
 
@@ -12,6 +12,8 @@ import {
   BrainSet,
   aliasFor,
   discoverHere,
+  canonical,
+  entryRoot,
   loadRegistry,
   parseScope,
   qualify,
@@ -522,9 +524,9 @@ describe("migrating per-project host entries (spec/75 --from-hosts)", () => {
     expect(text).toContain(gone);
     expect(text).toContain("claude mcp add brainpick --scope user");
     const toml = readFileSync(registry, "utf8");
-    expect(toml).toContain(a);
-    expect(toml).toContain(b);
-    expect(toml).not.toContain(gone);
+    // roots are stored canonical (realpath) — compare identities, not the raw tmpdir spelling
+    expect(loadRegistry(registry).map((e) => entryRoot(e))).toEqual([canonical(a), canonical(b)]);
+    expect(toml).not.toContain(basename(gone));
 
     // idempotent: a second run leaves the registry alone
     lines.length = 0;

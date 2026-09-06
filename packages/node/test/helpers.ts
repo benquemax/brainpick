@@ -1,5 +1,5 @@
 /** Shared test plumbing: fixture copies in disposable temp dirs. */
-import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +15,9 @@ export const SCENARIOS = join(SPEC, "fixtures", "scenarios");
 const created: string[] = [];
 
 export function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "bp-node-"));
+  // realpath, like pytest's tmp_path: macOS's tmpdir is a symlink (/var → /private/var)
+  // and the engine canonicalises every path it is handed
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "bp-node-")));
   created.push(dir);
   return dir;
 }
