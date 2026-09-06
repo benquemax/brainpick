@@ -56,7 +56,7 @@ function writeHosts(home: string, [a, b, gone]: [string, string, string]): void 
     }),
   );
   mkdirSync(join(home, ".codex"));
-  writeFileSync(join(home, ".codex", "config.toml"), `[mcp_servers.brainpick]\ncommand = "brainpick"\nargs = ["mcp", "--root", "${gone}"]\n`);
+  writeFileSync(join(home, ".codex", "config.toml"), `[mcp_servers.brainpick]\ncommand = 'brainpick'\nargs = ['mcp', '--root', '${gone}']\n`);
   mkdirSync(join(home, ".cursor"));
   writeFileSync(
     join(home, ".cursor", "mcp.json"),

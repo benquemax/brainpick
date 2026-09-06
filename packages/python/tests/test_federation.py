@@ -401,7 +401,7 @@ def write_hosts(home, roots):
                 "remote": {"type": "remote", "url": "http://x/sse"}}}), encoding="utf-8")
     (home / ".codex").mkdir()
     (home / ".codex" / "config.toml").write_text(
-        f'[mcp_servers.brainpick]\ncommand = "brainpick"\nargs = ["mcp", "--root", "{gone}"]\n', encoding="utf-8")
+        f"[mcp_servers.brainpick]\ncommand = 'brainpick'\nargs = ['mcp', '--root', '{gone}']\n", encoding="utf-8")
     (home / ".cursor").mkdir()
     (home / ".cursor" / "mcp.json").write_text(json.dumps({
         "mcpServers": {"bp": {"command": "brainpick", "args": ["serve", "--root", str(a)]}}}), encoding="utf-8")

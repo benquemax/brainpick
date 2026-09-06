@@ -7,7 +7,7 @@
  * ServeState and fan out, merge and qualify (alias:path) when the set holds
  * more than one brain. Ports federation.py.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -210,7 +210,7 @@ export function entryRoot(entry: RegistryEntry, env: Env = process.env): string 
     : join(dataDir(env), "brains", entry.id);
   const root = entry.bundle_path ? join(base, entry.bundle_path) : base;
   const resolved = resolve(root);
-  return isDir(resolved) ? resolved : null;
+  return isDir(resolved) ? realpathSync(resolved) : null; // realpath: macOS /var → /private/var
 }
 
 /** [repo, bundle_path] for a local bundle — the git repo above it when there is
@@ -280,6 +280,11 @@ export function isBundleRoot(path: string): boolean {
 /** The nearest ancestor-or-self of cwd that is a bundle root (spec/75). */
 export function discoverHere(cwd: string): string | null {
   let candidate = resolve(cwd);
+  try {
+    candidate = realpathSync(candidate); // the same identity entryRoot reports
+  } catch {
+    /* a cwd that no longer exists: walk the lexical path */
+  }
   for (;;) {
     if (isBundleRoot(candidate)) return candidate;
     const parent = dirname(candidate);
