@@ -246,3 +246,47 @@ def test_mcp_root_is_repeatable_and_defaults_to_the_brain_set(capsys):
     args = build_parser().parse_args(["mcp", "--root", "a", "--root", "me=b"])
     assert args.root == ["a", "me=b"]
     assert build_parser().parse_args(["mcp"]).root == []
+
+
+# -- [bundle] root (spec/80): every --root goes through the config's indirection ----
+
+
+def test_cli_honours_bundle_root(kotiaurinko, capsys):
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    (repo / "README.md").write_text("# not part of the bundle\n", encoding="utf-8")
+
+    assert main(["compile", "--root", str(repo)]) == 0
+    assert (kotiaurinko / ".brainpick" / "manifest.json").is_file()
+    assert main(["compile", "--check-fresh", "--root", str(repo)]) == 0
+    capsys.readouterr()
+
+    assert main(["search", "aurinko", "--root", str(repo), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["hits"][0]["path"] == "aurinko.md"     # bundle-relative, not kotiaurinko/aurinko.md
+    assert main(["overview", "--root", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "kuu.md" in out and "README.md" not in out
+
+
+def test_cli_doctor_honours_bundle_root(kotiaurinko, monkeypatch, capsys):
+    monkeypatch.setattr("brainpick.scaffold.probe_backends", lambda env: [])
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    main(["compile", "--root", str(repo)])
+    capsys.readouterr()
+    assert main(["doctor", "--root", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "bundle: OKF" in out and "artifacts: fresh" in out
+
+
+def test_cli_mcp_root_honours_bundle_root(kotiaurinko):
+    # `mcp --root REPO` where REPO/brainpick.toml points at a subdirectory bundle
+    # resolves to the bundle (spec/80) — also inside the spec/75 brain set.
+    from brainpick.federation import resolve_brain_set
+
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    brain_set = resolve_brain_set([str(repo)], cwd=repo)
+    assert [b.root for b in brain_set.brains] == [kotiaurinko]
+    assert not brain_set.federated

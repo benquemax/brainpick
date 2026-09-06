@@ -261,6 +261,17 @@ def resolve_graph_backend(config: Config) -> str:
     return "algorithmic"
 
 
+def resolve_bundle(root: str | Path, env: Mapping[str, str] | None = None) -> tuple[Path, Config]:
+    """`--root` the way spec/80 means it: load the config layers at `root`, then
+    return the bundle they govern — `root / [bundle] root` — together with the config.
+    The single resolver behind compile, check-fresh, the query mirrors, mcp, serve,
+    doctor and auth, so a repo-root brainpick.toml pointing at a subdirectory bundle
+    means the same thing to every command."""
+    root = Path(root).resolve()
+    config = load_config(root, env)
+    return (root / config.bundle.root).resolve(), config
+
+
 def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Config:
     """<root>/brainpick.toml deep-merged under brainpick.local.toml; absent files
     mean all defaults (zero-config bundles); env (`BRAINPICK_*`) beats both layers."""

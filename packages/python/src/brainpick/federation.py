@@ -401,12 +401,14 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
                       registry_path: str | Path | None = None, env: dict | None = None) -> BrainSet:
     """The spec/75 assembly: explicit roots win outright; else the registry ∪ here,
     ordered here → user → the rest; an empty set is the cwd alone."""
+    from brainpick.config import resolve_bundle
+
     cwd = Path.cwd() if cwd is None else Path(cwd)
     if roots:
         brains = []
         for arg in roots:
             alias, path = _parse_root_arg(arg)
-            root = (cwd / path).resolve()
+            root, _ = resolve_bundle(cwd / path, env)  # --root may be a repo root above the bundle (spec/80)
             brains.append(Brain(alias=alias, root=root, here=(root == discover_here(cwd))))
         return BrainSet(brains)
 

@@ -319,12 +319,10 @@ def ensure_gitignored(root: str | Path) -> Path | None:
 
 
 def _resolve_bundle_root(root: str | Path) -> Path:
-    """--root resolved the way serve resolves it: through [bundle] root (spec/80)."""
-    from brainpick.config import load_config
+    """--root resolved the way every command resolves it: through [bundle] root (spec/80)."""
+    from brainpick.config import resolve_bundle
 
-    root = Path(root).resolve()
-    config = load_config(root)
-    return (root / config.bundle.root).resolve()
+    return resolve_bundle(root)[0]
 
 
 def _note_gitignore(root: Path) -> None:

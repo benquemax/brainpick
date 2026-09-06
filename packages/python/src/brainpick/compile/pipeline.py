@@ -21,7 +21,7 @@ from brainpick.compile.t1 import (
 from brainpick.compile.similarity_gaps import run_similarity_gaps_stage, similarity_gaps_gate
 from brainpick.compile.t2 import build_chunks, run_t2_stage, t2_gate
 from brainpick.compile.t3 import run_t3_stage, t3_gate
-from brainpick.config import Config, load_config
+from brainpick.config import Config, resolve_bundle
 from brainpick.core.bundle import scan
 from brainpick.core.canonical import canonical_json, canonical_jsonl
 from brainpick.core.fs import atomic_write
@@ -133,10 +133,12 @@ def run_compile(
     config: Config | None = None,
     sample: int | None = None,
 ) -> CompileResult:
+    # A caller handing in a config (serve, the watcher) already holds the bundle root;
+    # a bare root is where the config lives, so honour its [bundle] root (spec/80).
+    if config is None:
+        root, config = resolve_bundle(root)
     root = Path(root)
     bp = root / ".brainpick"
-    if config is None:
-        config = load_config(root)
     wanted = set(only) if only else {"t1", "t2", "t3"}
     if wanted == {"t2"}:
         return _compile_t2_only(root, bp, config)
@@ -362,11 +364,13 @@ def _compile_t3_only(
     return CompileResult(True, manifest["seq"], stats, None, warnings, t3_summary)
 
 
-def check_fresh(root: str | Path) -> Freshness:
+def check_fresh(root: str | Path, config: Config | None = None) -> Freshness:
     """The commit gate — deliberately T1-only: it must stay deterministic and
     model-free (spec/10). T2 staleness (vectors lagging the chunks) is reported
     by `status`/`doctor` instead, so a missing embedding backend can never
-    block a commit."""
+    block a commit. `root` follows [bundle] root exactly like `run_compile`."""
+    if config is None:
+        root, config = resolve_bundle(root)
     root = Path(root)
     bp = root / ".brainpick"
     if not (bp / "manifest.json").is_file():
