@@ -195,6 +195,14 @@ def mcp_snippets(bundle: Path) -> str:
     ]
     if _package_project_dir() is not None:
         parts += ["", f"  ○ once published this shrinks to: uvx brainpick mcp --root {bundle}"]
+    parts += [
+        "",
+        "  Several brains? Register each once and drop --root (spec/75):",
+        f"    brainpick register {bundle}          # this one",
+        "    brainpick register ~/brain --user   # your personal brain (scope 'me')",
+        f"    claude mcp add brainpick --scope user -- {' '.join(brainpick_command() + ['mcp'])}",
+        "  One entry fronts every registered brain plus the project you're in.",
+    ]
     return "\n".join(parts)
 
 

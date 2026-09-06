@@ -41,6 +41,7 @@ is the reference implementation) and the diffs are reviewed like code.
 | `50-rest-api.md` | the REST surface both servers implement |
 | `60-live-deltas.md` | the SSE delta protocol |
 | `70-mcp-tools.md` | MCP tool names, schemas, budgets |
+| `75-federation.md` | many brains behind one MCP server — the registry, aliases, qualified paths, scope, merged search |
 | `80-config.md` | `brainpick.toml` |
 | `90-timeline.md` | `timeline.json` (the Time Machine history dimension) |
 | `95-presentations.md` | `brain_show` — agent-driven UI presentations (live spotlight/focus/annotate) |

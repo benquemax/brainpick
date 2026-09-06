@@ -4,7 +4,7 @@ about: thing
 title: The daemon
 description: brainpickd — the service that owns every brain's git sync, supervision, deploy keys, LAN reachability and users behind one small control API; every face (desktop app, browser, CLI) is a thin client of it.
 tags: [desktop, engine]
-timestamp: 2026-07-13T22:30:00Z
+timestamp: 2026-09-06T11:30:00Z
 ---
 
 # The daemon
@@ -28,7 +28,11 @@ the pip and npm engines' own subcommands, and the daemon is neither.
   `enabled`, `host` (default `127.0.0.1` — loopback-only; `0.0.0.0` opts a
   brain into the LAN, mirroring the engine's own `[serve] host`, spec/80).
   Hand-editable, canonically written, forgiving to load (a malformed entry
-  is dropped, never fatal).
+  is dropped, never fatal). The engines read the same file: an agent's
+  `brainpick mcp` fronts every brain listed here ([federation](federation.md)),
+  and [brainpick register](reference/cli/register.md) adds to it from the
+  command line, with two optional keys the daemon ignores — `alias` and
+  `role = "user"`.
 - **The Supervisor** — one `brainpick serve` child process per enabled
   brain (process isolation; the engine itself is unmodified). A crashed
   process restarts on a bounded exponential backoff; a brain that keeps

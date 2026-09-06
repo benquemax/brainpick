@@ -384,3 +384,11 @@ def test_doctor_auth_line_walks_the_states(kotiaurinko, capsys):
     auth_path(kotiaurinko).write_text("broken {", encoding="utf-8")
     assert run_doctor(kotiaurinko, env={}, probes=NO_BACKENDS) == 1
     assert "✗ auth: .brainpick-auth.json is not valid JSON" in capsys.readouterr().out
+
+
+def test_mcp_snippets_teach_federation(tmp_path):
+    from brainpick.scaffold import mcp_snippets
+
+    out = mcp_snippets(tmp_path)
+    assert f"brainpick register {tmp_path}" in out
+    assert "--scope user" in out and "--user" in out

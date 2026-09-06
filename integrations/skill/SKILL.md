@@ -44,6 +44,23 @@ is not compiled, run `brainpick compile --root <bundle>` first.
 Wire the MCP server into your host with `brainpick mcp` — e.g.
 `claude mcp add brainpick -- uvx brainpick mcp --root <bundle>`.
 
+## Several brains at once (federation)
+
+One server can front many brains: `brainpick register <bundle>` once per brain
+(`--user` for your personal one), then a single user-scope entry with no
+`--root` — `claude mcp add brainpick --scope user -- uvx brainpick mcp`. Every
+registered brain plus the project you are in answers. When the server is
+federated:
+
+- `brain_overview` lists `brains` (alias, role, `here`); its `scope` picks the tree.
+- `brain_search` searches every brain by default and tags each hit with its `brain`;
+  `scope` narrows it — `here`, `me`, or `alias,alias`.
+- Every path is `alias:path` — pass it back verbatim to `brain_read`, `brain_neighbors`,
+  `brain_write`. A bare doc resolves across brains; several matches come back as a
+  disambiguation.
+- `brain_write` with a bare target writes to the project you are in; qualify it to
+  write elsewhere. It never guesses.
+
 ## Writing knowledge back (brain_write)
 
 Only write when asked to record knowledge. Follow the wiki's conventions or the

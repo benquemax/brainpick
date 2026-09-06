@@ -231,3 +231,66 @@ def test_mcp_write_conflict_roundtrip(kotiaurinko):
     assert "rewritten" in (kotiaurinko / "kuu.md").read_text(encoding="utf-8")
     manifest = json.loads((kotiaurinko / ".brainpick" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["seq"] == 2
+
+
+# -- federation (spec/75): two brains behind one stdio server ---------------------------
+
+
+async def _federated_scenario(aurinko, kirja, registry):
+    import os
+
+    env = {**os.environ, "BRAINPICK_REGISTRY": str(registry)}
+    # no --root: the registry decides — the "one MCP entry for every brain" setup
+    params = StdioServerParameters(command=sys.executable, args=["-m", "brainpick", "mcp"],
+                                   cwd=str(aurinko), env=env)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            init = await session.initialize()
+            assert "2 brains" in (init.instructions or "")
+
+            overview = await _call(session, "brain_overview", {})
+            assert [b["alias"] for b in overview["brains"]] == ["aurinko", "kirja"]
+            assert overview["brains"][0]["here"] is True
+            assert overview["brains"][1]["role"] == "user"
+            assert overview["bundle"] == "aurinko"
+
+            search = await _call(session, "brain_search", {"query": "kuu", "mode": "keyword"})
+            assert {h["brain"] for h in search["hits"]} == {"aurinko", "kirja"}
+            assert search["searched"] == ["aurinko", "kirja"]
+
+            scoped = await _call(session, "brain_search", {"query": "kuu", "scope": "me"})
+            assert {h["brain"] for h in scoped["hits"]} == {"kirja"}
+
+            read_result = await _call(session, "brain_read", {"doc": "kirja:kahvi.md"})
+            assert read_result["path"] == "kirja:kahvi.md" and read_result["brain"] == "kirja"
+
+            neighbors = await _call(session, "brain_neighbors", {"doc": "aurinko:maa.md"})
+            assert neighbors["center"] == "aurinko:maa.md"
+            assert all(n["path"].startswith("aurinko:") for n in neighbors["nodes"])
+
+            written = await _call(session, "brain_write", {"doc": "uusi-kivi", "content": NEW_DOC})
+            assert written["ok"] is True and written["path"] == "aurinko:uusi-kivi.md"  # here
+
+            elsewhere = await _call(session, "brain_write",
+                                    {"doc": "kirja:uusi-kivi", "content": NEW_DOC})
+            assert elsewhere["ok"] is True and elsewhere["brain"] == "kirja"
+
+
+def test_mcp_stdio_federated(tmp_path):
+    import shutil
+
+    from brainpick.federation import register_brain
+
+    from conftest import FIXTURE_BUNDLES
+
+    aurinko = tmp_path / "aurinko"
+    kirja = tmp_path / "kirja"
+    shutil.copytree(FIXTURE_BUNDLES / "kotiaurinko", aurinko)
+    shutil.copytree(FIXTURE_BUNDLES / "kotikirja", kirja)
+    (aurinko / "brainpick.toml").write_text("", encoding="utf-8")  # a bundle root marker
+    registry = tmp_path / "brains.toml"
+    register_brain(aurinko, registry, alias="aurinko")
+    register_brain(kirja, registry, alias="kirja", user=True)
+
+    _run_scenario(_federated_scenario(aurinko, kirja, registry))
+    assert (aurinko / "uusi-kivi.md").is_file() and (kirja / "uusi-kivi.md").is_file()

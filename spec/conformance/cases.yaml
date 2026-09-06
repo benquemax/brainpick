@@ -91,6 +91,36 @@ cases:
     expect_paths: [aurinko.md, komeetta.md, kuu.md, maa.md, planeetat.md,
                    saaret/atolli.md, saaret/laguuni.md, yksinainen.md]
 
+  # class: federated-query (spec/75) — compile each listed fixture bundle as its
+  # own brain (alias → bundle), run brain_search over the SET under `scope`, and
+  # assert the top-k set of QUALIFIED paths (alias:path; order-insensitive,
+  # scores ignored). Federation touches no artifact — this class proves the
+  # fan-out, the merge and the qualification, not compilation.
+  - id: federated-keyword-kuu-all
+    class: federated-query
+    brains: {aurinko: kotiaurinko, kirja: kotikirja}
+    query: "kuu"
+    mode: keyword
+    scope: all
+    limit: 8
+    # Reviewed: "kuu" names the moon in BOTH brains — kotiaurinko's kuu/maa/aurinko
+    # say it in body or title, kotikirja's notebook says it in title and body. A
+    # single-brain engine returns one side only and fails; an engine that forgets
+    # to qualify returns bare paths and fails.
+    expect_paths: [aurinko:kuu.md, aurinko:maa.md, aurinko:aurinko.md,
+                   kirja:kuu-muistio.md, kirja:kahvi.md]
+
+  - id: federated-keyword-kuu-scoped
+    class: federated-query
+    brains: {aurinko: kotiaurinko, kirja: kotikirja}
+    query: "kuu"
+    mode: keyword
+    scope: kirja
+    limit: 8
+    # Reviewed: scope narrows the fan-out to the named alias — the same query over
+    # kotikirja alone; kotiaurinko's moon pages must NOT appear.
+    expect_paths: [kirja:kuu-muistio.md, kirja:kahvi.md]
+
   # class: delta — apply scripted mutations to a compiled fixture, recompile
   # after each step, and compare emitted graph.delta payloads against the
   # scenario's expected-deltas.jsonl (seq-relative).

@@ -201,6 +201,14 @@ export function mcpSnippets(bundle: string): string {
   if (packageProjectDir() !== null) {
     parts.push("", `  ○ once published this shrinks to: npx brainpick mcp --root ${bundle}`);
   }
+  parts.push(
+    "",
+    "  Several brains? Register each once and drop --root (spec/75):",
+    `    brainpick register ${bundle}          # this one`,
+    "    brainpick register ~/brain --user   # your personal brain (scope 'me')",
+    `    claude mcp add brainpick --scope user -- ${[...brainpickCommand(), "mcp"].join(" ")}`,
+    "  One entry fronts every registered brain plus the project you're in.",
+  );
   return parts.join("\n");
 }
 

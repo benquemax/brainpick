@@ -123,6 +123,21 @@ def test_query(case, tmp_path):
     assert {h["path"] for h in hits} == set(case["expect_paths"])
 
 
+@pytest.mark.parametrize("case", _cases("federated-query"), ids=_case_ids("federated-query"))
+def test_federated_query(case, tmp_path):
+    """spec/75: each listed bundle is its own brain; brain_search fans out, merges and
+    qualifies — the SET of alias:path hits is what both engines must agree on."""
+    from brainpick.federation import Brain, BrainSet
+    from brainpick.mcp_server import search_payload
+
+    brains = [Brain(alias=alias, root=_bundle_copy(tmp_path, bundle))
+              for alias, bundle in case["brains"].items()]
+    body = search_payload(BrainSet(brains), case["query"], mode=case["mode"],
+                          limit=case["limit"], scope=case.get("scope", "all"))
+    assert {h["path"] for h in body["hits"]} == set(case["expect_paths"])
+    assert all(":" in h["path"] and h["brain"] == h["path"].split(":", 1)[0] for h in body["hits"])
+
+
 @pytest.mark.parametrize("case", _cases("report"), ids=_case_ids("report"))
 def test_report_golden(case, tmp_path):
     root = _bundle_copy(tmp_path, case["bundle"])

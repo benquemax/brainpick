@@ -4,7 +4,7 @@ about: concept
 title: Agent integrations
 description: How brainpick meets agents where they live — a shipped Agent Skill, one-command integrations for each harness, four CLI query mirrors, and an AGENTS.md brain report that teaches graph-before-grep.
 tags: [agents]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-06T11:30:00Z
 ---
 
 # Agent integrations
@@ -47,7 +47,10 @@ editing settings for you:
 
 Every target takes `--dry-run` to preview without writing, and detects the repo root
 so the skill lands beside the code, not inside the bundle. It reuses the same MCP
-snippets [onboarding](onboarding.md) hands out.
+snippets [onboarding](onboarding.md) hands out — which also teach the one-entry
+shape: register each brain once with [brainpick register](reference/cli/register.md),
+add a single user-scope `brainpick mcp` entry, and every registered brain plus
+the project the agent works in answers through it ([federation](federation.md)).
 
 ## The CLI query mirrors
 

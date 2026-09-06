@@ -18,6 +18,8 @@ import type { DocRecord, GraphStats } from "./compile/t1";
 import { ALWAYS_EXCLUDED_DIRS, posixDirname, posixNormpath } from "./core/bundle";
 import { cmpStr, sha256Hex } from "./core/canonical";
 import { splitFrontmatter } from "./core/frontmatter";
+import { BrainSet, parseScope, qualify, qualifyPaths, relativeRoot, splitQualified } from "./federation";
+import type { Brain } from "./federation";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
 import { needsShellForScript, which } from "./detect";
@@ -87,7 +89,7 @@ function similarityGapsOpenCount(root: string): number {
   return (data.pairs ?? []).filter((p) => p.status === "open").length;
 }
 
-export function overviewPayload(state: ServeState, budgetTokens?: number | null): Record<string, unknown> {
+function singleOverview(state: ServeState, budgetTokens?: number | null): Record<string, unknown> {
   const budget = budgetTokens || 800;
   const stats = (state.graph.stats ?? {}) as Partial<GraphStats>;
   const counts: Record<string, number> = {};
@@ -151,7 +153,7 @@ function why(hit: SearchHit, query: string): string {
   return hit.snippet ? `body mentions '${query}'` : "keyword match";
 }
 
-export async function searchPayload(
+async function singleSearch(
   state: ServeState,
   query: string,
   mode: unknown = "auto",
@@ -262,7 +264,7 @@ function headToLastSpace(content: string, allowed: number): string {
   return cut === -1 ? head : head.slice(0, cut);
 }
 
-export function readPayload(
+function singleRead(
   state: ServeState,
   doc: string,
   sections?: readonly string[] | null,
@@ -338,7 +340,7 @@ function nodeKey(node: Record<string, unknown>): string {
   return (node["path"] ?? node["id"]) as string;
 }
 
-export function neighborsPayload(
+function singleNeighbors(
   state: ServeState,
   doc: string,
   depth: unknown = 1,
@@ -685,7 +687,7 @@ export async function guardedWrite(
   return ["ok", payload];
 }
 
-export async function writePayload(
+async function singleWrite(
   state: ServeState,
   doc: string,
   content: string,
@@ -737,7 +739,7 @@ export function showHint(presentation: Record<string, unknown>, dropped: string[
 /** brain_show's MCP result (spec/95): resolve + broadcast a presentation, then
  * report {ok, shown, dropped, seq, hint}. Never writes — not behind [serve]
  * writes, only the normal auth. Forgiving: unresolved nodes are dropped, listed. */
-export function showPayload(
+function singleShow(
   state: ServeState,
   nodes?: string[] | null,
   focus?: string | null,
@@ -761,6 +763,382 @@ export function showPayload(
   };
 }
 
+// -- federation (spec/75): route, fan out, merge, qualify ------------------------------
+//
+// Every public payload builder takes a ServeState (one brain — the pre-federation
+// shapes, byte-for-byte, synchronously) OR a BrainSet (a promise: brains load
+// lazily). A single-brain set behaves as its state, except that qualified
+// `alias:path` docs are still accepted; a federated set fans out / routes and
+// qualifies every path it returns.
+
+type Payload = Record<string, unknown>;
+
+function stripAlias(set: BrainSet, doc: string): string {
+  const [alias, rel] = splitQualified(doc);
+  return alias !== null && set.byAlias(alias) !== null ? rel : doc;
+}
+
+function brainsListing(set: BrainSet): Payload[] {
+  return set.brains.map((brain) => {
+    const manifest = set.manifestOf(brain);
+    return {
+      alias: brain.alias,
+      role: brain.role,
+      here: brain.here,
+      root: relativeRoot(brain.root),
+      docs: Object.keys((manifest["files"] ?? {}) as Record<string, unknown>).length, // = counts.docs
+      tiers: manifest["tiers"] ?? {},
+    };
+  });
+}
+
+function aliasList(set: BrainSet): string {
+  return set.brains.map((b) => b.alias).join(", ");
+}
+
+export function overviewPayload(state: ServeState, budgetTokens?: number | null, scope?: string | null): Payload;
+export function overviewPayload(set: BrainSet, budgetTokens?: number | null, scope?: string | null): Promise<Payload>;
+export function overviewPayload(
+  target: ServeState | BrainSet,
+  budgetTokens?: number | null,
+  scope?: string | null,
+): Payload | Promise<Payload> {
+  if (!(target instanceof BrainSet)) return singleOverview(target, budgetTokens);
+  return federatedOverview(target, budgetTokens, scope);
+}
+
+async function federatedOverview(set: BrainSet, budgetTokens?: number | null, scope?: string | null): Promise<Payload> {
+  if (!set.federated) return singleOverview(await set.stateFor(set.brains[0]!), budgetTokens);
+  const [chosen, dropped] = parseScope(set, scope);
+  const focus = scope && chosen.length > 0 && chosen.length < set.brains.length ? chosen[0]! : set.focus;
+  const single = qualifyPaths(focus.alias, singleOverview(await set.stateFor(focus), budgetTokens));
+  const note = dropped.length > 0 ? `unknown scope '${dropped.join(", ")}' ignored. ` : "";
+  let hint =
+    note +
+    `${set.brains.length} brains (${aliasList(set)}) — tree shows '${focus.alias}'; ` +
+    "brain_search searches all of them (scope narrows: here, me, or aliases); paths are alias:path.";
+  if (single["truncated"]) hint += " Tree trimmed to fit budget_tokens.";
+  const ghosts = (single["top_ghosts"] as Array<Record<string, unknown>>).map((g) => ({
+    ...g,
+    target: qualify(focus.alias, String(g["target"])),
+  }));
+  return { brains: brainsListing(set), ...single, bundle: focus.alias, top_ghosts: ghosts, hint };
+}
+
+export function searchPayload(
+  state: ServeState,
+  query: string,
+  mode?: unknown,
+  limit?: unknown,
+  budgetTokens?: number | null,
+  scope?: string | null,
+): Promise<Payload>;
+export function searchPayload(
+  set: BrainSet,
+  query: string,
+  mode?: unknown,
+  limit?: unknown,
+  budgetTokens?: number | null,
+  scope?: string | null,
+): Promise<Payload>;
+export async function searchPayload(
+  target: ServeState | BrainSet,
+  query: string,
+  mode: unknown = "auto",
+  limit: unknown = 8,
+  budgetTokens?: number | null,
+  scope?: string | null,
+): Promise<Payload> {
+  if (!(target instanceof BrainSet)) return singleSearch(target, query, mode, limit, budgetTokens);
+  if (!target.federated) return singleSearch(await target.stateFor(target.brains[0]!), query, mode, limit, budgetTokens);
+
+  const budget = budgetTokens || 1200;
+  let bounded: number;
+  if (typeof limit === "number" && Number.isFinite(limit)) bounded = Math.max(1, Math.min(Math.trunc(limit), 50));
+  else if (typeof limit === "string" && /^[+-]?\d+$/.test(limit.trim())) {
+    bounded = Math.max(1, Math.min(parseInt(limit.trim(), 10), 50));
+  } else bounded = 8;
+  const [chosen, dropped] = parseScope(target, scope);
+
+  const merged: Array<{ key: [number, number, string]; hit: Payload }> = [];
+  const used: string[] = [];
+  let degraded: unknown = null;
+  let modeNote = "";
+  const contributing: string[] = [];
+  for (let order = 0; order < chosen.length; order++) {
+    const brain = chosen[order]!;
+    const body = await singleSearch(await target.stateFor(brain), query, mode, bounded, 1e9);
+    const hint = String(body["hint"]);
+    if (hint.startsWith("unknown mode")) modeNote = hint.split(". ", 1)[0] + ". ";
+    for (const m of body["used_modes"] as string[]) if (!used.includes(m)) used.push(m);
+    degraded = degraded ?? body["degraded_from"];
+    const hits = body["hits"] as Array<Record<string, unknown>>;
+    if (hits.length > 0) contributing.push(brain.alias);
+    for (const hit of hits) {
+      merged.push({
+        key: [-Number(hit["score"]), order, String(hit["path"])],
+        hit: {
+          path: qualify(brain.alias, String(hit["path"])),
+          brain: brain.alias,
+          title: hit["title"],
+          description: hit["description"],
+          score: hit["score"],
+          why: hit["why"],
+        },
+      });
+    }
+  }
+  merged.sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || cmpStr(a.key[2], b.key[2]));
+  const all = merged.map((m) => m.hit).slice(0, bounded);
+  const hits = [...all];
+  const result: Payload = {
+    hits,
+    searched: chosen.map((b) => b.alias),
+    contributing,
+    used_modes: ["keyword", "semantic", "graph", "title"].filter((m) => used.includes(m)),
+    degraded_from: degraded ?? null,
+    truncated: false,
+    hint: "",
+  };
+  while (tokensOf(result) > budget && hits.length > 1) {
+    hits.pop();
+    result["truncated"] = true;
+  }
+  const notes = modeNote + (dropped.length > 0 ? `unknown scope '${dropped.join(", ")}' ignored. ` : "");
+  let hint: string;
+  if (result["truncated"]) hint = `${all.length - hits.length} hits trimmed — raise budget_tokens or sharpen the query.`;
+  else if (hits.length > 0) hint = `brain_read '${hits[0]!["path"]}' opens the best hit (paths are alias:path).`;
+  else hint = `no hits in ${chosen.map((b) => b.alias).join(", ")} — brain_overview lists every brain.`;
+  result["hint"] = notes + hint;
+  return result;
+}
+
+/** [brain, rel path] or an error payload for read/neighbors. */
+async function route(set: BrainSet, doc: string, verb: string): Promise<[Brain, string] | Payload> {
+  const resolution = await set.resolve(doc);
+  if (resolution.outcome === "ok") return [resolution.brain, resolution.payload.path];
+  if (resolution.outcome === "unknown_brain") {
+    const [alias] = splitQualified(doc);
+    return {
+      error: `no brain called '${alias}' — brains here: ${resolution.payload.join(", ")}`,
+      hint: "brain_overview lists every brain and its alias.",
+    };
+  }
+  if (resolution.outcome === "ambiguous") {
+    return {
+      disambiguation: resolution.payload,
+      hint: `several docs match across brains — call ${verb} again with one alias:path.`,
+    };
+  }
+  return {
+    error: `nothing in any brain matches '${doc}'`,
+    suggestions: resolution.payload,
+    hint: "try brain_search (it searches every brain), or brain_overview for the brain list.",
+  };
+}
+
+export function readPayload(
+  state: ServeState,
+  doc: string,
+  sections?: readonly string[] | null,
+  budgetTokens?: number | null,
+): Payload;
+export function readPayload(
+  set: BrainSet,
+  doc: string,
+  sections?: readonly string[] | null,
+  budgetTokens?: number | null,
+): Promise<Payload>;
+export function readPayload(
+  target: ServeState | BrainSet,
+  doc: string,
+  sections?: readonly string[] | null,
+  budgetTokens?: number | null,
+): Payload | Promise<Payload> {
+  if (!(target instanceof BrainSet)) return singleRead(target, doc, sections, budgetTokens);
+  return federatedRead(target, doc, sections, budgetTokens);
+}
+
+async function federatedRead(
+  set: BrainSet,
+  doc: string,
+  sections?: readonly string[] | null,
+  budgetTokens?: number | null,
+): Promise<Payload> {
+  if (!set.federated) return singleRead(await set.stateFor(set.brains[0]!), stripAlias(set, doc), sections, budgetTokens);
+  const routed = await route(set, doc, "brain_read");
+  if (!Array.isArray(routed)) return routed;
+  const [brain, rel] = routed;
+  const result = qualifyPaths(brain.alias, singleRead(await set.stateFor(brain), rel, sections, budgetTokens));
+  result["brain"] = brain.alias;
+  if (!result["truncated"]) result["hint"] = `brain_neighbors '${result["path"]}' walks the links around this doc.`;
+  return result;
+}
+
+export function neighborsPayload(
+  state: ServeState,
+  doc: string,
+  depth?: unknown,
+  layer?: unknown,
+  budgetTokens?: number | null,
+): Payload;
+export function neighborsPayload(
+  set: BrainSet,
+  doc: string,
+  depth?: unknown,
+  layer?: unknown,
+  budgetTokens?: number | null,
+): Promise<Payload>;
+export function neighborsPayload(
+  target: ServeState | BrainSet,
+  doc: string,
+  depth: unknown = 1,
+  layer: unknown = "links",
+  budgetTokens?: number | null,
+): Payload | Promise<Payload> {
+  if (!(target instanceof BrainSet)) return singleNeighbors(target, doc, depth, layer, budgetTokens);
+  return federatedNeighbors(target, doc, depth, layer, budgetTokens);
+}
+
+async function federatedNeighbors(
+  set: BrainSet,
+  doc: string,
+  depth: unknown,
+  layer: unknown,
+  budgetTokens?: number | null,
+): Promise<Payload> {
+  if (!set.federated) {
+    return singleNeighbors(await set.stateFor(set.brains[0]!), stripAlias(set, doc), depth, layer, budgetTokens);
+  }
+  const routed = await route(set, doc, "brain_neighbors");
+  if (!Array.isArray(routed)) return routed;
+  const [brain, rel] = routed;
+  const result = qualifyPaths(brain.alias, singleNeighbors(await set.stateFor(brain), rel, depth, layer, budgetTokens));
+  result["brain"] = brain.alias;
+  result["hint"] = String(result["hint"]).replace(`'${rel}'`, `'${qualify(brain.alias, rel)}'`);
+  return result;
+}
+
+export async function writePayload(
+  target: ServeState | BrainSet,
+  doc: string,
+  content: string,
+  mode: unknown = "create",
+  options: WritePayloadOptions = {},
+): Promise<Payload> {
+  if (!(target instanceof BrainSet)) return singleWrite(target, doc, content, mode, options);
+  if (!target.federated) {
+    return singleWrite(await target.stateFor(target.brains[0]!), stripAlias(target, doc), content, mode, options);
+  }
+  const [alias, rel] = splitQualified(doc);
+  let brain: Brain | null;
+  if (alias === null) {
+    brain = target.here;
+    if (brain === null) {
+      return {
+        ok: false,
+        instruction: `qualify the target — brain_write writes to one brain: use alias:path with one of ${aliasList(target)}`,
+      };
+    }
+  } else {
+    brain = target.byAlias(alias);
+    if (brain === null) return { ok: false, instruction: `no brain called '${alias}' — brains here: ${aliasList(target)}` };
+  }
+  const result = await singleWrite(await target.stateFor(brain), rel, content, mode, options);
+  if (result["ok"]) {
+    result["path"] = qualify(brain.alias, String(result["path"]));
+    result["brain"] = brain.alias;
+    result["hint"] = `brain_read '${result["path"]}' to verify — connected UIs already got the delta.`;
+  }
+  return result;
+}
+
+export function showPayload(
+  state: ServeState,
+  nodes?: string[] | null,
+  focus?: string | null,
+  mode?: string | null,
+  annotation?: string | null,
+  clear?: boolean,
+): Payload;
+export function showPayload(
+  set: BrainSet,
+  nodes?: string[] | null,
+  focus?: string | null,
+  mode?: string | null,
+  annotation?: string | null,
+  clear?: boolean,
+): Promise<Payload>;
+export function showPayload(
+  target: ServeState | BrainSet,
+  nodes?: string[] | null,
+  focus?: string | null,
+  mode?: string | null,
+  annotation?: string | null,
+  clear = false,
+): Payload | Promise<Payload> {
+  if (!(target instanceof BrainSet)) return singleShow(target, nodes, focus, mode, annotation, clear);
+  return federatedShow(target, nodes, focus, mode, annotation, clear);
+}
+
+async function federatedShow(
+  set: BrainSet,
+  nodes?: string[] | null,
+  focus?: string | null,
+  mode?: string | null,
+  annotation?: string | null,
+  clear = false,
+): Promise<Payload> {
+  if (!set.federated) {
+    const only = await set.stateFor(set.brains[0]!);
+    const stripped = nodes ? nodes.map((n) => stripAlias(set, n)) : nodes;
+    return singleShow(only, stripped, focus ? stripAlias(set, focus) : focus, mode, annotation, clear);
+  }
+  // A presentation is one UI: the brain of the first resolved node (else here, else
+  // the first brain) hosts it; nodes from other brains are dropped and listed.
+  let brain: Brain | null = null;
+  for (const token of [...(nodes ?? []), ...(focus ? [focus] : [])]) {
+    const resolution = await set.resolve(token);
+    if (resolution.outcome === "ok") {
+      brain = resolution.brain;
+      break;
+    }
+  }
+  brain = brain ?? set.focus;
+  const kept: string[] = [];
+  const foreign: string[] = [];
+  for (const token of nodes ?? []) {
+    const [alias, rel] = splitQualified(token);
+    if (alias === null || alias === brain.alias) kept.push(rel);
+    else foreign.push(token);
+  }
+  const focusRel = focus ? splitQualified(focus)[1] : focus;
+  const result = singleShow(await set.stateFor(brain), nodes != null ? kept : nodes, focusRel, mode, annotation, clear);
+  result["dropped"] = [...foreign, ...(result["dropped"] as string[])];
+  result["brain"] = brain.alias;
+  if (foreign.length > 0) {
+    result["hint"] = `${result["hint"]} (a presentation shows one brain — '${brain.alias}'; other brains' nodes dropped)`;
+  }
+  return result;
+}
+
+function instructionsFor(target: ServeState | BrainSet): string {
+  const base =
+    "A compiled knowledge bundle (an agent's brain). Start with brain_overview, " +
+    "find docs with brain_search, open them with brain_read, walk links with " +
+    "brain_neighbors, and add knowledge with brain_write.";
+  if (!(target instanceof BrainSet) || !target.federated) return base;
+  const aliases = target.brains
+    .map((b) => b.alias + (b.here ? " (here)" : b.role === "user" ? " (me)" : ""))
+    .join(", ");
+  return (
+    `${target.brains.length} brains behind one server: ${aliases}. brain_search searches ` +
+    "all of them by default (scope narrows to here, me, or aliases); every path is " +
+    "alias:path and brain_read/brain_neighbors/brain_write take it. " +
+    base
+  );
+}
+
 // -- the McpServer wrapper -------------------------------------------------------------
 
 function textResult(payload: Record<string, unknown>) {
@@ -769,28 +1147,26 @@ function textResult(payload: Record<string, unknown>) {
 
 /** One McpServer over a shared ServeState. Stdio holds a single instance;
  * the streamable-HTTP mount calls this factory per request (stateless). */
-export function createMcpServer(state: ServeState, writeRefusal: string | null = null): McpServer {
-  const server = new McpServer(
-    { name: "brainpick", version: VERSION },
-    {
-      instructions:
-        "A compiled knowledge bundle (an agent's brain). Start with brain_overview, " +
-        "find docs with brain_search, open them with brain_read, walk links with " +
-        "brain_neighbors, and add knowledge with brain_write.",
-    },
-  );
+export function createMcpServer(state: ServeState | BrainSet, writeRefusal: string | null = null): McpServer {
+  const server = new McpServer({ name: "brainpick", version: VERSION }, { instructions: instructionsFor(state) });
 
   const budgetTokens = z.number().int().optional();
+  const scope = z.string().optional();
+  // a single-brain server keeps its synchronous, pre-federation payloads; a
+  // BrainSet answers through the routing layer above (spec/75)
+  const target = state as ServeState & BrainSet;
 
   server.registerTool(
     "brain_overview",
     {
       description:
         "One screen of the whole brain: doc/edge counts, tier status, and every doc " +
-        "grouped by folder with its one-line description. Call this first to orient.",
-      inputSchema: { budget_tokens: budgetTokens },
+        "grouped by folder with its one-line description. Call this first to orient. " +
+        "With several brains behind this server, `brains` lists them and scope " +
+        "(all|here|me|alias,alias) picks which one the tree shows.",
+      inputSchema: { scope, budget_tokens: budgetTokens },
     },
-    async ({ budget_tokens }) => textResult(overviewPayload(state, budget_tokens ?? null)),
+    async ({ scope: s, budget_tokens }) => textResult(await overviewPayload(target, budget_tokens ?? null, s ?? null)),
   );
 
   server.registerTool(
@@ -798,16 +1174,19 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
     {
       description:
         "Find docs by keyword. Returns paths, titles, and descriptions — never full " +
-        "bodies. Follow up with brain_read on the best hit's path.",
+        "bodies. Follow up with brain_read on the best hit's path. With several brains " +
+        "behind this server every brain is searched and hits are merged (paths become " +
+        "alias:path); scope = all (default) | here | me | a comma-separated alias list.",
       inputSchema: {
         query: z.string(),
         mode: z.string().optional(),
         limit: z.number().int().optional(),
+        scope,
         budget_tokens: budgetTokens,
       },
     },
-    async ({ query, mode, limit, budget_tokens }) =>
-      textResult(await searchPayload(state, query, mode ?? "auto", limit ?? 8, budget_tokens ?? null)),
+    async ({ query, mode, limit, scope: s, budget_tokens }) =>
+      textResult(await searchPayload(target, query, mode ?? "auto", limit ?? 8, budget_tokens ?? null, s ?? null)),
   );
 
   server.registerTool(
@@ -824,7 +1203,7 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
       },
     },
     async ({ doc, sections, budget_tokens }) =>
-      textResult(readPayload(state, doc, sections ?? null, budget_tokens ?? null)),
+      textResult(await readPayload(target, doc, sections ?? null, budget_tokens ?? null)),
   );
 
   server.registerTool(
@@ -841,7 +1220,7 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
       },
     },
     async ({ doc, depth, layer, budget_tokens }) =>
-      textResult(neighborsPayload(state, doc, depth ?? 1, layer ?? "links", budget_tokens ?? null)),
+      textResult(await neighborsPayload(target, doc, depth ?? 1, layer ?? "links", budget_tokens ?? null)),
   );
 
   server.registerTool(
@@ -864,7 +1243,7 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
     },
     async ({ doc, content, mode, base_sha, budget_tokens }) =>
       textResult(
-        await writePayload(state, doc, content, mode ?? "create", {
+        await writePayload(target, doc, content, mode ?? "create", {
           baseSha: base_sha ?? null,
           budgetTokens: budget_tokens ?? null,
           refusal: writeRefusal,
@@ -893,7 +1272,7 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
     },
     async ({ nodes, focus, mode, annotation, clear }) =>
       textResult(
-        showPayload(state, nodes ?? null, focus ?? null, mode ?? null, annotation ?? null, clear ?? false),
+        await showPayload(target, nodes ?? null, focus ?? null, mode ?? null, annotation ?? null, clear ?? false),
       ),
   );
 
@@ -902,7 +1281,8 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
     "brain://index",
     { description: "The generated index block — the bundle's table of contents." },
     async (uri) => {
-      const path = join(state.root, "index.md");
+      const focusState = state instanceof BrainSet ? await state.stateFor(state.focus) : state;
+      const path = join(focusState.root, "index.md");
       let text: string;
       try {
         text = readFileSync(path, "utf8");
@@ -923,12 +1303,20 @@ export function createMcpServer(state: ServeState, writeRefusal: string | null =
     // single-segment {path} — parity with the Python engine's parked
     // {+path} limitation (nested docs read via the brain_read tool)
     new ResourceTemplate("brain://doc/{path}", { list: undefined }),
-    { description: "Raw document content by bundle-relative path." },
+    { description: "Raw document content by bundle-relative path (alias:path across brains)." },
     async (uri, variables) => {
-      const path = String(variables["path"] ?? "");
-      const record = state.recordFor(path);
+      let path = String(variables["path"] ?? "");
+      let held: ServeState;
+      if (state instanceof BrainSet) {
+        const [alias, rel] = splitQualified(path);
+        const brain = alias !== null ? state.byAlias(alias) : state.focus;
+        if (brain === null) throw new Error(`no brain called '${alias}'`);
+        held = await state.stateFor(brain);
+        path = rel;
+      } else held = state;
+      const record = held.recordFor(path);
       if (record === null) throw new Error(`no doc at '${path}'`);
-      const filePath = join(state.root, path);
+      const filePath = join(held.root, path);
       let text: string;
       try {
         text = readFileSync(filePath, "utf8");

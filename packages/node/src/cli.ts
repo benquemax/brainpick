@@ -228,19 +228,31 @@ program
 program
   .command("mcp")
   .description("speak MCP over stdio (for agent hosts)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
-  .action(async (opts: { root: string }) => {
+  .option(
+    "--root <[ALIAS=]DIR>",
+    "bundle root — repeat to front several brains; default: every registered brain plus the current directory's (spec/75)",
+    (value: string, previous: string[]) => [...previous, value],
+    [] as string[],
+  )
+  .action(async (opts: { root: string[] }) => {
     // stdio is the protocol channel: nothing may print to stdout here
     const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
     const { createMcpServer, WRITES_OFF_REFUSAL } = await import("./mcp");
-    const { ServeState } = await import("./serve/state");
+    const { resolveBrainSet } = await import("./federation");
 
-    const root = resolve(opts.root);
-    const config = loadConfig(root);
-    const state = new ServeState(root, config);
-    await state.load();
-    const refusal = config.serve.writes === "off" ? WRITES_OFF_REFUSAL : null;
-    const server = createMcpServer(state, refusal);
+    // spec/75: explicit --root(s) win; else the registry ∪ the cwd's own bundle; a
+    // lone brain serves exactly as before (the plain single-brain payloads).
+    const brainSet = resolveBrainSet(opts.root);
+    let refusal: string | null;
+    let target;
+    if (brainSet.federated) {
+      target = brainSet;
+      refusal = brainSet.brains.every((b) => loadConfig(b.root).serve.writes === "off") ? WRITES_OFF_REFUSAL : null;
+    } else {
+      target = await brainSet.stateFor(brainSet.brains[0]!);
+      refusal = target.config.serve.writes === "off" ? WRITES_OFF_REFUSAL : null;
+    }
+    const server = createMcpServer(target, refusal);
     await server.connect(new StdioServerTransport());
     await new Promise<void>((stop) => {
       server.server.onclose = () => stop();
@@ -351,6 +363,18 @@ program
   .action(async (target: string, opts: { root: string; dryRun?: boolean }) => {
     const { runIntegrate } = await import("./integrate");
     process.exitCode = await runIntegrate(target, opts.root, { dryRun: opts.dryRun ?? false });
+  });
+
+program
+  .command("register")
+  .description("add a brain to the federation registry (or list/remove)")
+  .argument("[path]", "bundle root to register (omit to list the registry)")
+  .option("--alias <alias>", "the brain's address in tool payloads")
+  .option("--user", "mark it as your personal brain (scope 'me')")
+  .option("--remove", "drop PATH from the registry")
+  .action(async (path: string | undefined, opts: { alias?: string; user?: boolean; remove?: boolean }) => {
+    const { runRegister } = await import("./federation");
+    process.exitCode = runRegister(path ?? null, { alias: opts.alias ?? null, user: opts.user, remove: opts.remove });
   });
 
 const token = program.command("token").description("manage bearer tokens for agents (spec/80 auth)");

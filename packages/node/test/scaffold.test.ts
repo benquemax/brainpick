@@ -9,7 +9,7 @@ import { afterEach, expect, test } from "vitest";
 
 import { runCompile } from "../src/compile/pipeline";
 import { loadConfig } from "../src/config";
-import { runDoctor, runInit } from "../src/scaffold";
+import { mcpSnippets, runDoctor, runInit } from "../src/scaffold";
 import { PACKAGE_ROOT } from "../src/version";
 import type { Backend, ProbeResult } from "../src/detect";
 import { cleanup, copyBundle, tempDir } from "./helpers";
@@ -379,4 +379,12 @@ test("doctor auth line walks the states", async () => {
   const broken = capture();
   expect(await runDoctor(root, { env: {}, probes: NO_BACKENDS, print: broken.print })).toBe(1);
   expect(broken.text()).toContain("✗ auth: .brainpick-auth.json is not valid JSON");
+});
+
+test("mcp snippets teach federation (spec/75)", () => {
+  const bundle = tempDir();
+  const text = mcpSnippets(bundle);
+  expect(text).toContain(`brainpick register ${bundle}`);
+  expect(text).toContain("--scope user");
+  expect(text).toContain("--user");
 });

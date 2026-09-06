@@ -4,7 +4,7 @@ about: concept
 title: "CLI reference"
 description: "Every brainpick subcommand and its flags, derived from the argparse CLI — compile and serve, the read mirrors, writes, presentations, onboarding and auth."
 tags: [cli, spec]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-06T11:30:00Z
 ---
 
 # CLI reference
@@ -18,7 +18,8 @@ the read tools in the terminal, present live, onboard, and manage auth.
 
 - [brainpick compile](reference/cli/compile.md) — compile the bundle into `.brainpick/` artifacts.
 - [brainpick serve](reference/cli/serve.md) — serve REST, live deltas, the web UI and MCP in one process.
-- [brainpick mcp](reference/cli/mcp.md) — speak MCP over stdio for agent hosts.
+- [brainpick mcp](reference/cli/mcp.md) — speak MCP over stdio for agent hosts — one brain, or every registered one.
+- [brainpick register](reference/cli/register.md) — add a brain to the federation registry (or list, or remove).
 
 ## Query the brain (the read mirrors)
 

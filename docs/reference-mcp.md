@@ -4,7 +4,7 @@ about: concept
 title: "MCP tool reference"
 description: "The six MCP tools brainpick exposes — overview, search, read, neighbors, write, show — one page each, with their arguments, returns and small-model ergonomics."
 tags: [mcp, agents]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-06T11:30:00Z
 ---
 
 # MCP tool reference
@@ -18,7 +18,7 @@ documents one tool; the concept is [MCP tools](mcp-tools.md).
 ## The read tools
 
 - [brain_overview](reference/mcp/brain-overview.md) — orientation: counts, tiers, the index tree.
-- [brain_search](reference/mcp/brain-search.md) — titles and descriptions with a match reason.
+- [brain_search](reference/mcp/brain-search.md) — titles and descriptions with a match reason — across every brain under [federation](federation.md).
 - [brain_read](reference/mcp/brain-read.md) — one doc, forgivingly resolved, budget-shaped.
 - [brain_neighbors](reference/mcp/brain-neighbors.md) — adjacency on links, entities, or both.
 

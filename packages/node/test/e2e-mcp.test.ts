@@ -11,7 +11,8 @@ import { afterEach, beforeAll, expect, test } from "vitest";
 import { runCompile } from "../src/compile/pipeline";
 import { sha256Hex } from "../src/core/canonical";
 import { PACKAGE_ROOT } from "../src/version";
-import { cleanup, copyBundle, needsShellForNpm, npmCommand, stageT3Export } from "./helpers";
+import { registerBrain } from "../src/federation";
+import { cleanup, copyBundle, needsShellForNpm, npmCommand, stageT3Export, tempDir } from "./helpers";
 
 const CLI = join(PACKAGE_ROOT, "dist", "cli.js");
 
@@ -197,4 +198,62 @@ test("mcp t3 entity queries", { timeout: 120_000 }, async () => {
     expect(orbits.degraded_from).toBeNull();
     expect(orbits.hits.every((h: { why: string }) => h.why.includes("entity graph"))).toBe(true);
   });
+});
+
+// -- federation (spec/75): two brains behind one stdio server, no --root ---------------
+
+test("mcp stdio federated", { timeout: 120_000 }, async () => {
+  const aurinko = copyBundle("kotiaurinko");
+  const kirja = copyBundle("kotikirja");
+  writeFileSync(join(aurinko, "brainpick.toml"), ""); // a bundle root marker
+  const registry = join(tempDir(), "brains.toml");
+  registerBrain(aurinko, registry, { alias: "aurinko" });
+  registerBrain(kirja, registry, { alias: "kirja", user: true });
+
+  // no --root: the registry decides — the "one MCP entry for every brain" setup
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [CLI, "mcp"],
+    cwd: aurinko,
+    env: { ...process.env, BRAINPICK_REGISTRY: registry },
+    stderr: "ignore",
+  });
+  const client = new Client({ name: "brainpick-e2e", version: "0.0.0" });
+  await client.connect(transport);
+  try {
+    expect(client.getInstructions() ?? "").toContain("2 brains");
+
+    const overview = await call(client, "brain_overview", {});
+    expect(overview.brains.map((b: { alias: string }) => b.alias)).toEqual(["aurinko", "kirja"]);
+    expect(overview.brains[0].here).toBe(true);
+    expect(overview.brains[1].role).toBe("user");
+    expect(overview.bundle).toBe("aurinko");
+
+    const search = await call(client, "brain_search", { query: "kuu", mode: "keyword" });
+    expect(new Set(search.hits.map((h: { brain: string }) => h.brain))).toEqual(new Set(["aurinko", "kirja"]));
+    expect(search.searched).toEqual(["aurinko", "kirja"]);
+
+    const scoped = await call(client, "brain_search", { query: "kuu", scope: "me" });
+    expect(new Set(scoped.hits.map((h: { brain: string }) => h.brain))).toEqual(new Set(["kirja"]));
+
+    const read = await call(client, "brain_read", { doc: "kirja:kahvi.md" });
+    expect(read.path).toBe("kirja:kahvi.md");
+    expect(read.brain).toBe("kirja");
+
+    const neighbors = await call(client, "brain_neighbors", { doc: "aurinko:maa.md" });
+    expect(neighbors.center).toBe("aurinko:maa.md");
+    expect(neighbors.nodes.every((n: { path: string }) => n.path.startsWith("aurinko:"))).toBe(true);
+
+    const written = await call(client, "brain_write", { doc: "uusi-kivi", content: NEW_DOC });
+    expect(written.ok).toBe(true);
+    expect(written.path).toBe("aurinko:uusi-kivi.md"); // here
+
+    const elsewhere = await call(client, "brain_write", { doc: "kirja:uusi-kivi", content: NEW_DOC });
+    expect(elsewhere.ok).toBe(true);
+    expect(elsewhere.brain).toBe("kirja");
+  } finally {
+    await client.close();
+  }
+  expect(existsSync(join(aurinko, "uusi-kivi.md"))).toBe(true);
+  expect(existsSync(join(kirja, "uusi-kivi.md"))).toBe(true);
 });

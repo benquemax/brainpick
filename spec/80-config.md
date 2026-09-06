@@ -59,7 +59,7 @@ A random opaque identifier minted by `brainpick init` (recommended shape:
 `brainpick.toml` — it is SHARED config, not machine-local, because the
 identity travels with the bundle wherever it is cloned or served. Consumers
 treat it as an address (multi-brain serving, the desktop app's brain
-registry, future MCP routing like `/mcp/{brainId}`), never as a credential —
+registry, the federation registry's `id` — spec/75), never as a credential —
 it grants no access on its own. Absent on bundles that predate this key.
 `brainpick init` mints one in every config it CREATES; on a bundle whose
 `brainpick.toml` already exists without an id, init OFFERS a paste-able

@@ -16,6 +16,14 @@ from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER, top_ghosts
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
 from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
+from brainpick.federation import (
+    BrainSet,
+    parse_scope,
+    qualify,
+    qualify_paths,
+    relative_root,
+    split_qualified,
+)
 from brainpick.llm import make_chat
 from brainpick.merge import find_base, resolve
 from brainpick.query.router import KNOWN_MODES, run_search
@@ -58,7 +66,7 @@ def _similarity_gaps_open_count(root) -> int:
 # -- brain_overview ----------------------------------------------------------------
 
 
-def overview_payload(state: ServeState, budget_tokens: int | None = None) -> dict:
+def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dict:
     budget = budget_tokens or 800
     stats = state.graph.get("stats", {})
     counts = {key: stats.get(key, 0) for key in ("docs", "edges", "tags", "orphans", "ghosts")}
@@ -111,7 +119,7 @@ def _why(hit: dict, query: str) -> str:
     return f"body mentions '{query}'" if hit.get("snippet") else "keyword match"
 
 
-def search_payload(state: ServeState, query: str, mode: str = "auto", limit: int = 8,
+def _single_search(state: ServeState, query: str, mode: str = "auto", limit: int = 8,
                    budget_tokens: int | None = None) -> dict:
     budget = budget_tokens or 1200
     requested = str(mode or "auto")
@@ -182,7 +190,7 @@ def _extract_sections(body: str, wanted: list[str]) -> str:
     return "\n".join(kept).strip() + ("\n" if kept else "")
 
 
-def read_payload(state: ServeState, doc: str, sections: list[str] | None = None,
+def _single_read(state: ServeState, doc: str, sections: list[str] | None = None,
                  budget_tokens: int | None = None) -> dict:
     budget = budget_tokens or 2000
     outcome, payload = resolve_doc(state.records, doc)
@@ -241,7 +249,7 @@ def _node_key(node: dict) -> str:
     return node.get("path") or node["id"]  # link nodes key on path, entity nodes on id
 
 
-def neighbors_payload(state: ServeState, doc: str, depth: int = 1, layer: str = "links",
+def _single_neighbors(state: ServeState, doc: str, depth: int = 1, layer: str = "links",
                       budget_tokens: int | None = None) -> dict:
     budget = budget_tokens or 800
     outcome, payload = resolve_doc(state.records, doc)
@@ -505,7 +513,7 @@ def guarded_write(state: ServeState, doc: str, content: str, mode: str = "create
     return "ok", payload
 
 
-def write_payload(state: ServeState, doc: str, content: str, mode: str = "create",
+def _single_write(state: ServeState, doc: str, content: str, mode: str = "create",
                   base_sha: str | None = None, budget_tokens: int | None = None,
                   refusal: str | None = None) -> dict:
     """brain_write's MCP result (spec/70) over the shared guarded_write core."""
@@ -543,7 +551,7 @@ def show_hint(presentation: dict, dropped: list[str]) -> str:
     return base
 
 
-def show_payload(state: ServeState, nodes: list[str] | None = None, focus: str | None = None,
+def _single_show(state: ServeState, nodes: list[str] | None = None, focus: str | None = None,
                  mode: str | None = None, annotation: str | None = None,
                  clear: bool = False) -> dict:
     """brain_show's MCP result (spec/95): resolve + broadcast a presentation, then
@@ -561,21 +569,278 @@ def show_payload(state: ServeState, nodes: list[str] | None = None, focus: str |
     }
 
 
+# -- federation (spec/75): route, fan out, merge, qualify ------------------------------
+#
+# Every public payload builder takes a ServeState (one brain — the pre-federation
+# shapes, byte-for-byte) OR a BrainSet. A single-brain set behaves as its state,
+# except that qualified `alias:path` docs are still accepted; a federated set
+# fans out / routes and qualifies every path it returns.
+
+
+def _as_set(target) -> BrainSet | None:
+    return target if isinstance(target, BrainSet) else None
+
+
+def _strip_alias(brain_set: BrainSet, doc: str) -> str:
+    """A single-brain set accepts (and drops) its own alias prefix."""
+    alias, rel = split_qualified(doc)
+    return rel if alias is not None and brain_set.by_alias(alias) is not None else doc
+
+
+def _brains_listing(brain_set: BrainSet) -> list[dict]:
+    listing = []
+    for brain in brain_set.brains:
+        manifest = brain_set.manifest_of(brain)
+        listing.append({
+            "alias": brain.alias,
+            "role": brain.role,
+            "here": brain.here,
+            "root": relative_root(brain.root),
+            "docs": len(manifest.get("files", {})),  # the same count as counts.docs
+            "tiers": manifest.get("tiers", {}),
+        })
+    return listing
+
+
+def overview_payload(target, budget_tokens: int | None = None, scope: str | None = None) -> dict:
+    brain_set = _as_set(target)
+    if brain_set is None:
+        return _single_overview(target, budget_tokens)
+    if not brain_set.federated:
+        return _single_overview(brain_set.state_for(brain_set.brains[0]), budget_tokens)
+
+    chosen, dropped = parse_scope(brain_set, scope)
+    focus = chosen[0] if scope and chosen and len(chosen) < len(brain_set.brains) else brain_set.focus
+    result = _single_overview(brain_set.state_for(focus), budget_tokens)
+    result = qualify_paths(focus.alias, result)
+    result["bundle"] = focus.alias
+    result["top_ghosts"] = [dict(g, target=qualify(focus.alias, g["target"])) for g in result["top_ghosts"]]
+    result["brains"] = _brains_listing(brain_set)
+    note = f"unknown scope '{', '.join(dropped)}' ignored. " if dropped else ""
+    aliases = ", ".join(b.alias for b in brain_set.brains)
+    result["hint"] = (note + f"{len(brain_set.brains)} brains ({aliases}) — tree shows '{focus.alias}'; "
+                      "brain_search searches all of them (scope narrows: here, me, or aliases); "
+                      "paths are alias:path.")
+    if result["truncated"]:
+        result["hint"] += " Tree trimmed to fit budget_tokens."
+    ordered = {k: result[k] for k in ("brains",)}
+    ordered.update({k: v for k, v in result.items() if k != "brains"})
+    return ordered
+
+
+def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
+                   budget_tokens: int | None = None, scope: str | None = None) -> dict:
+    brain_set = _as_set(target)
+    if brain_set is None:
+        return _single_search(target, query, mode, limit, budget_tokens)
+    if not brain_set.federated:
+        return _single_search(brain_set.state_for(brain_set.brains[0]), query, mode, limit, budget_tokens)
+
+    budget = budget_tokens or 1200
+    try:
+        limit = max(1, min(int(limit), 50))
+    except (TypeError, ValueError):
+        limit = 8
+    chosen, dropped = parse_scope(brain_set, scope)
+
+    merged: list[tuple[float, int, str, dict]] = []
+    used: list[str] = []
+    degraded = None
+    mode_note = None
+    contributing: list[str] = []
+    for order, brain in enumerate(chosen):
+        body = _single_search(brain_set.state_for(brain), query, mode, limit, budget_tokens=10**9)
+        if body["hint"].startswith("unknown mode"):
+            mode_note = body["hint"].split(". ", 1)[0] + ". "
+        for m in body["used_modes"]:
+            if m not in used:
+                used.append(m)
+        degraded = degraded or body["degraded_from"]
+        if body["hits"]:
+            contributing.append(brain.alias)
+        for hit in body["hits"]:
+            merged.append((-float(hit["score"]), order, hit["path"],
+                           {"path": qualify(brain.alias, hit["path"]), "brain": brain.alias,
+                            "title": hit["title"], "description": hit["description"],
+                            "score": hit["score"], "why": hit["why"]}))
+    merged.sort(key=lambda item: item[:3])
+    all_hits = [item[3] for item in merged]
+    hits = all_hits[:limit]
+    result = {
+        "hits": hits,
+        "searched": [b.alias for b in chosen],
+        "contributing": contributing,
+        "used_modes": [m for m in ("keyword", "semantic", "graph", "title") if m in used],
+        "degraded_from": degraded,
+        "truncated": False,
+        "hint": "",
+    }
+    while tokens_of(result) > budget and len(hits) > 1:
+        hits.pop()
+        result["truncated"] = True
+    notes = (mode_note or "") + (f"unknown scope '{', '.join(dropped)}' ignored. " if dropped else "")
+    if result["truncated"]:
+        hint = f"{len(all_hits[:limit]) - len(hits)} hits trimmed — raise budget_tokens or sharpen the query."
+    elif hits:
+        hint = f"brain_read '{hits[0]['path']}' opens the best hit (paths are alias:path)."
+    else:
+        hint = f"no hits in {', '.join(b.alias for b in chosen)} — brain_overview lists every brain."
+    result["hint"] = notes + hint
+    return result
+
+
+def _route(brain_set: BrainSet, doc: str, verb: str) -> tuple:
+    """(brain, rel path, None) or (None, None, error payload) for read/neighbors."""
+    brain, outcome, payload = brain_set.resolve(doc)
+    if outcome == "ok":
+        return brain, payload["path"], None
+    if outcome == "unknown_brain":
+        alias, _ = split_qualified(doc)
+        return None, None, {
+            "error": f"no brain called '{alias}' — brains here: {', '.join(payload)}",
+            "hint": "brain_overview lists every brain and its alias.",
+        }
+    if outcome == "ambiguous":
+        return None, None, {
+            "disambiguation": payload,
+            "hint": f"several docs match across brains — call {verb} again with one alias:path.",
+        }
+    return None, None, {
+        "error": f"nothing in any brain matches '{doc}'",
+        "suggestions": payload,
+        "hint": "try brain_search (it searches every brain), or brain_overview for the brain list.",
+    }
+
+
+def read_payload(target, doc: str, sections: list[str] | None = None,
+                 budget_tokens: int | None = None) -> dict:
+    brain_set = _as_set(target)
+    if brain_set is None:
+        return _single_read(target, doc, sections, budget_tokens)
+    if not brain_set.federated:
+        return _single_read(brain_set.state_for(brain_set.brains[0]), _strip_alias(brain_set, doc),
+                            sections, budget_tokens)
+    brain, rel, error = _route(brain_set, doc, "brain_read")
+    if error:
+        return error
+    result = _single_read(brain_set.state_for(brain), rel, sections, budget_tokens)
+    result = qualify_paths(brain.alias, result)
+    result["brain"] = brain.alias
+    if not result["truncated"]:
+        result["hint"] = f"brain_neighbors '{result['path']}' walks the links around this doc."
+    return result
+
+
+def neighbors_payload(target, doc: str, depth: int = 1, layer: str = "links",
+                      budget_tokens: int | None = None) -> dict:
+    brain_set = _as_set(target)
+    if brain_set is None:
+        return _single_neighbors(target, doc, depth, layer, budget_tokens)
+    if not brain_set.federated:
+        return _single_neighbors(brain_set.state_for(brain_set.brains[0]), _strip_alias(brain_set, doc),
+                                 depth, layer, budget_tokens)
+    brain, rel, error = _route(brain_set, doc, "brain_neighbors")
+    if error:
+        return error
+    result = _single_neighbors(brain_set.state_for(brain), rel, depth, layer, budget_tokens)
+    result = qualify_paths(brain.alias, result)
+    result["brain"] = brain.alias
+    result["hint"] = result["hint"].replace(f"'{rel}'", f"'{qualify(brain.alias, rel)}'")
+    return result
+
+
+def write_payload(target, doc: str, content: str, mode: str = "create",
+                  base_sha: str | None = None, budget_tokens: int | None = None,
+                  refusal: str | None = None) -> dict:
+    brain_set = _as_set(target)
+    if brain_set is None:
+        return _single_write(target, doc, content, mode, base_sha, budget_tokens, refusal)
+    if not brain_set.federated:
+        return _single_write(brain_set.state_for(brain_set.brains[0]), _strip_alias(brain_set, doc),
+                             content, mode, base_sha, budget_tokens, refusal)
+    alias, rel = split_qualified(doc)
+    if alias is None:
+        brain = brain_set.here
+        if brain is None:
+            aliases = ", ".join(b.alias for b in brain_set.brains)
+            return {"ok": False, "instruction": f"qualify the target — brain_write writes to one brain: "
+                                                f"use alias:path with one of {aliases}"}
+    else:
+        brain = brain_set.by_alias(alias)
+        if brain is None:
+            aliases = ", ".join(b.alias for b in brain_set.brains)
+            return {"ok": False, "instruction": f"no brain called '{alias}' — brains here: {aliases}"}
+    result = _single_write(brain_set.state_for(brain), rel, content, mode, base_sha, budget_tokens, refusal)
+    if result.get("ok"):
+        result["path"] = qualify(brain.alias, result["path"])
+        result["brain"] = brain.alias
+        result["hint"] = f"brain_read '{result['path']}' to verify — connected UIs already got the delta."
+    return result
+
+
+def show_payload(target, nodes: list[str] | None = None, focus: str | None = None,
+                 mode: str | None = None, annotation: str | None = None,
+                 clear: bool = False) -> dict:
+    brain_set = _as_set(target)
+    if brain_set is None:
+        return _single_show(target, nodes, focus, mode, annotation, clear)
+    if not brain_set.federated:
+        only = brain_set.brains[0]
+        return _single_show(brain_set.state_for(only),
+                            [_strip_alias(brain_set, n) for n in (nodes or [])] or nodes,
+                            _strip_alias(brain_set, focus) if focus else focus, mode, annotation, clear)
+    # A presentation is one UI: the brain of the first resolved node (else here, else
+    # the first brain) hosts it; nodes from other brains are dropped and listed.
+    brain = None
+    for token in [*(nodes or []), *([focus] if focus else [])]:
+        candidate, outcome, _ = brain_set.resolve(token)
+        if outcome == "ok":
+            brain = candidate
+            break
+    brain = brain or brain_set.focus
+    kept, foreign = [], []
+    for token in nodes or []:
+        alias, rel = split_qualified(token)
+        if alias is None or alias == brain.alias:
+            kept.append(rel)
+        else:
+            foreign.append(token)
+    focus_rel = split_qualified(focus)[1] if focus else focus
+    result = _single_show(brain_set.state_for(brain), kept if nodes is not None else None,
+                          focus_rel, mode, annotation, clear)
+    result["dropped"] = [*foreign, *result["dropped"]]
+    result["brain"] = brain.alias
+    if foreign:
+        result["hint"] += f" (a presentation shows one brain — '{brain.alias}'; other brains' nodes dropped)"
+    return result
+
+
 # -- the FastMCP wrapper -------------------------------------------------------------
 
 
-def create_mcp_server(state: ServeState, write_refusal: str | None = None):
-    """One FastMCP over a shared ServeState — same instance behind stdio and /mcp."""
+def _instructions(target) -> str:
+    base = ("A compiled knowledge bundle (an agent's brain). Start with brain_overview, "
+            "find docs with brain_search, open them with brain_read, walk links with "
+            "brain_neighbors, and add knowledge with brain_write.")
+    brain_set = _as_set(target)
+    if brain_set is None or not brain_set.federated:
+        return base
+    aliases = ", ".join(b.alias + (" (here)" if b.here else " (me)" if b.role == "user" else "")
+                        for b in brain_set.brains)
+    return (f"{len(brain_set.brains)} brains behind one server: {aliases}. brain_search searches "
+            "all of them by default (scope narrows to here, me, or aliases); every path is "
+            "alias:path and brain_read/brain_neighbors/brain_write take it. " + base)
+
+
+def create_mcp_server(state, write_refusal: str | None = None):
+    """One FastMCP over a shared ServeState — or a BrainSet (spec/75) — the same
+    instance behind stdio and /mcp."""
     from mcp.server.fastmcp import FastMCP
     from mcp.server.transport_security import TransportSecuritySettings
 
     server = FastMCP(
         "brainpick",
-        instructions=(
-            "A compiled knowledge bundle (an agent's brain). Start with brain_overview, "
-            "find docs with brain_search, open them with brain_read, walk links with "
-            "brain_neighbors, and add knowledge with brain_write."
-        ),
+        instructions=_instructions(state),
         stateless_http=True,
         log_level="WARNING",
         # brainpick guards non-localhost binds with its own bearer token (spec/80);
@@ -584,17 +849,21 @@ def create_mcp_server(state: ServeState, write_refusal: str | None = None):
     )
 
     @server.tool()
-    def brain_overview(budget_tokens: int | None = None) -> dict:
+    def brain_overview(scope: str | None = None, budget_tokens: int | None = None) -> dict:
         """One screen of the whole brain: doc/edge counts, tier status, and every doc
-        grouped by folder with its one-line description. Call this first to orient."""
-        return overview_payload(state, budget_tokens)
+        grouped by folder with its one-line description. Call this first to orient.
+        With several brains behind this server, `brains` lists them and scope
+        (all|here|me|alias,alias) picks which one the tree shows."""
+        return overview_payload(state, budget_tokens, scope=scope)
 
     @server.tool()
-    def brain_search(query: str, mode: str = "auto", limit: int = 8,
+    def brain_search(query: str, mode: str = "auto", limit: int = 8, scope: str | None = None,
                      budget_tokens: int | None = None) -> dict:
         """Find docs by keyword. Returns paths, titles, and descriptions — never full
-        bodies. Follow up with brain_read on the best hit's path."""
-        return search_payload(state, query, mode, limit, budget_tokens)
+        bodies. Follow up with brain_read on the best hit's path. With several brains
+        behind this server every brain is searched and hits are merged (paths become
+        alias:path); scope = all (default) | here | me | a comma-separated alias list."""
+        return search_payload(state, query, mode, limit, budget_tokens, scope=scope)
 
     @server.tool()
     def brain_read(doc: str, sections: list[str] | None = None,
@@ -637,10 +906,14 @@ def create_mcp_server(state: ServeState, write_refusal: str | None = None):
         return show_payload(state, nodes=nodes, focus=focus, mode=mode,
                             annotation=annotation, clear=clear)
 
+    def _focus_state() -> ServeState:
+        brain_set = _as_set(state)
+        return state if brain_set is None else brain_set.state_for(brain_set.focus)
+
     @server.resource("brain://index")
     def brain_index() -> str:
         """The generated index block — the bundle's table of contents."""
-        path = state.root / "index.md"
+        path = _focus_state().root / "index.md"
         if not path.is_file():
             return ""
         text = path.read_text(encoding="utf-8")
@@ -653,11 +926,20 @@ def create_mcp_server(state: ServeState, write_refusal: str | None = None):
 
     @server.resource("brain://doc/{path}")
     def brain_doc(path: str) -> str:
-        """Raw document content by bundle-relative path."""
-        record = state.record_for(path)
+        """Raw document content by bundle-relative path (alias:path across brains)."""
+        brain_set = _as_set(state)
+        if brain_set is None:
+            held = state
+        else:
+            alias, path = split_qualified(path)
+            brain = brain_set.by_alias(alias) if alias else brain_set.focus
+            if brain is None:
+                raise ValueError(f"no brain called '{alias}'")
+            held = brain_set.state_for(brain)
+        record = held.record_for(path)
         if record is None:
             raise ValueError(f"no doc at '{path}'")
-        file_path = state.root / path
+        file_path = held.root / path
         return file_path.read_text(encoding="utf-8") if file_path.is_file() else record["text"]
 
     return server

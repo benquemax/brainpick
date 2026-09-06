@@ -4,7 +4,7 @@ about: concept
 title: "Spec reference"
 description: "The normative spec documents both engines honor — manifest, the three tiers, REST, live deltas, MCP, config, timeline and presentations — each summarized here."
 tags: [spec]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-09-06T11:30:00Z
 ---
 
 # Spec reference
@@ -32,6 +32,7 @@ two engines, proven by conformance rather than hope.
 - [Spec: REST API](reference/spec/rest-api.md)
 - [Spec: live deltas](reference/spec/live-deltas.md)
 - [Spec: MCP tools](reference/spec/mcp-tools.md)
+- [Spec: federation](reference/spec/federation.md)
 - [Spec: presentations](reference/spec/presentations.md)
 
 ## Config and history

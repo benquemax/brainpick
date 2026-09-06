@@ -10,7 +10,12 @@ tool accepts `budget_tokens` (int; chars/4 estimate; results are shaped to
 fit — descriptions survive first, snippets/bodies are trimmed, and a
 truncated result says so and how to get the rest).
 
-## brain_overview()
+When one server fronts several brains (spec/75), every path in these
+payloads is qualified `alias:path`, `brain_search`/`brain_overview` take
+`scope`, and `brain_overview` adds `brains`; a single-brain server emits
+exactly the shapes below.
+
+## brain_overview({scope?, budget_tokens?})
 
 No required args. → `{"bundle", "counts": {"docs", "edges", "tags",
 "orphans", "ghosts"}, "tiers", "tree": [{"group", "docs": [{"path",
@@ -23,7 +28,7 @@ there are none), never subject to budget trimming (bounded size already).
 similarity-gap pairs — always present, `0` when T2 or the module is off,
 never budget-trimmed. Default budget 800.
 
-## brain_search({query, mode?, limit?, budget_tokens?})
+## brain_search({query, mode?, limit?, scope?, budget_tokens?})
 
 `mode ∈ auto|keyword|semantic|graph` (default `auto`). → `{"hits":
 [{"path", "title", "description", "score", "why"}], "used_modes",

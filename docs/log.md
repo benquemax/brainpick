@@ -1,5 +1,18 @@
 # Update log
 
+## 2026-09-06
+
+- Added: federation (spec/75) — one `brainpick mcp` fronts many brains. With
+  no `--root` the brain set is the daemon's registry ∪ the bundle the working
+  directory is in; `--root` is now repeatable (`ALIAS=DIR`). `brain_search`
+  fans out, merges by score and qualifies paths as `alias:path`, with a
+  `scope` (`all|here|me|aliases`); `brain_overview` lists `brains`;
+  read/neighbors/write/show route by alias, and an unqualified `brain_write`
+  lands *here* or declines. New `brainpick register [PATH] [--alias] [--user]
+  [--remove]` in both engines; a second conformance fixture (`kotikirja`) and
+  the `federated-query` class prove the merged hit set agrees. A single brain
+  serves exactly as before.
+
 ## 2026-08-03
 
 - Removed: LightRAG — the whole opt-in T3 extraction backend, its adapter

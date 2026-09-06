@@ -182,6 +182,23 @@ export {
   type ServeHandles,
 } from "./serve/app";
 export {
+  aliasFor,
+  Brain,
+  BrainSet,
+  discoverHere,
+  loadRegistry,
+  parseScope,
+  qualify,
+  qualifyPaths,
+  registerBrain,
+  registryPath,
+  resolveBrainSet,
+  runRegister,
+  splitQualified,
+  unregisterBrain,
+  type RegistryEntry,
+} from "./federation";
+export {
   bumpTimestamp,
   createMcpServer,
   neighborsPayload,

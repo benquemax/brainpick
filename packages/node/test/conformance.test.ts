@@ -15,6 +15,8 @@ import { canonicalJsonl, type JsonValue } from "../src/core/canonical";
 import { checkFresh, runCompile } from "../src/compile/pipeline";
 import { buildDocsRecords, renderReportBlock, type DocRecord, type Graph } from "../src/compile/t1";
 import { buildChunks } from "../src/compile/t2";
+import { Brain, BrainSet } from "../src/federation";
+import { searchPayload } from "../src/mcp";
 import { graphSearch, loadKg } from "../src/kg";
 import { search, type SearchHit } from "../src/query/keyword";
 import { runSearch } from "../src/query/router";
@@ -42,6 +44,8 @@ interface ConformanceCase {
   op?: string;
   doc?: string;
   depth?: number;
+  brains?: Record<string, string>;
+  scope?: string;
 }
 
 const CASES = (
@@ -251,6 +255,20 @@ describe("conformance", () => {
             const result = await runCompile(root);
             expect(result.delta, step.id).toEqual(JSON.parse(expectedLines[i]!));
           }
+        });
+        break;
+
+      case "federated-query":
+        // spec/75: each listed bundle is its own brain; brain_search fans out, merges
+        // and qualifies — the SET of alias:path hits is what both engines must agree on
+        test(c.id, async () => {
+          const brains = Object.entries(c.brains!).map(
+            ([alias, bundle]) => new Brain({ alias, root: copyBundle(bundle) }),
+          );
+          const body = await searchPayload(new BrainSet(brains), c.query!, c.mode, c.limit, null, c.scope ?? "all");
+          const hits = body["hits"] as Array<{ path: string; brain: string }>;
+          expect(new Set(hits.map((h) => h.path))).toEqual(new Set(c.expect_paths));
+          for (const hit of hits) expect(hit.path.startsWith(hit.brain + ":")).toBe(true);
         });
         break;
 

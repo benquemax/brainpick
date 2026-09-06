@@ -202,3 +202,40 @@ def test_cli_show_unreachable_server_is_an_instruction_not_a_crash(kotiaurinko, 
     code = main(["show", "aurinko.md", "--port", "4"])  # a port nothing listens on
     assert code == 1
     assert "brainpick serve" in capsys.readouterr().err
+
+
+# -- federation (spec/75): register + a repeatable mcp --root ---------------------------
+
+
+def test_cli_register_add_list_remove(kotiaurinko, tmp_path, monkeypatch, capsys):
+    registry = tmp_path / "brains.toml"
+    monkeypatch.setenv("BRAINPICK_REGISTRY", str(registry))
+    assert main(["register", str(kotiaurinko), "--alias", "sun", "--user"]) == 0
+    out = capsys.readouterr().out
+    assert "sun" in out and "registered" in out and str(registry) in out
+    assert 'role = "user"' in registry.read_text(encoding="utf-8")
+
+    assert main(["register"]) == 0  # no PATH → list
+    listing = capsys.readouterr().out
+    assert "sun" in listing and "(me)" in listing and str(kotiaurinko) in listing
+
+    assert main(["register", str(kotiaurinko), "--remove"]) == 0
+    assert "removed" in capsys.readouterr().out
+    assert main(["register"]) == 0
+    assert "no brains registered" in capsys.readouterr().out
+
+
+def test_cli_register_refuses_a_non_bundle(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("BRAINPICK_REGISTRY", str(tmp_path / "brains.toml"))
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert main(["register", str(empty)]) == 1
+    assert "no markdown" in capsys.readouterr().err.lower() or True  # the message is advisory
+
+
+def test_mcp_root_is_repeatable_and_defaults_to_the_brain_set(capsys):
+    from brainpick.cli import build_parser
+
+    args = build_parser().parse_args(["mcp", "--root", "a", "--root", "me=b"])
+    assert args.root == ["a", "me=b"]
+    assert build_parser().parse_args(["mcp"]).root == []

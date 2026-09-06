@@ -4,7 +4,7 @@ about: thing
 title: "brain_neighbors"
 description: "Adjacency around a doc — depth 1–3, on the link layer, the entity layer, or both — with entities degrading to links until T3."
 tags: [mcp, agents]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-06T11:30:00Z
 ---
 
 # brain_neighbors
@@ -13,7 +13,9 @@ timestamp: 2026-07-10T18:30:00Z
 `nodes` (`{path, title, description, distance}`) and `edges` (`{source,
 target, kind}`), plus a `hint`. `depth` is 1–3 (default 1); `layer ∈
 links|entities|both` (default `links`), where `entities` degrades to `links`
-with `degraded_from` until T3. Default budget 800.
+with `degraded_from` until T3. Default budget 800. Behind a federated server
+([federation](../../federation.md)) `doc` may be `alias:path`, every path in
+the answer is qualified, and the result names its `brain`.
 
 The entity layer reads the [knowledge graph tier](../../knowledge-graph-tier.md);
 its CLI mirror is [brainpick neighbors](../cli/neighbors.md). Back to [MCP tool reference](../../reference-mcp.md).

@@ -291,19 +291,68 @@ def _cmd_show(args: argparse.Namespace) -> int:
 def _cmd_mcp(args: argparse.Namespace) -> int:
     # stdio is the protocol channel: nothing may print to stdout here
     from brainpick.config import load_config
+    from brainpick.federation import resolve_brain_set
     from brainpick.mcp_server import WRITES_OFF_REFUSAL, create_mcp_server
-    from brainpick.serve.state import ServeState
 
-    root = Path(args.root).resolve()
-    config = load_config(root)
-    state = ServeState(root, config)
-    state.load()
-    refusal = WRITES_OFF_REFUSAL if config.serve.writes == "off" else None
-    create_mcp_server(state, write_refusal=refusal).run(transport="stdio")
+    # spec/75: explicit --root(s) win; else the registry ∪ the cwd's own bundle; a
+    # lone brain serves exactly as before (the plain single-brain payloads).
+    brain_set = resolve_brain_set(list(args.root))
+    if brain_set.federated:
+        target = brain_set
+        refusal = WRITES_OFF_REFUSAL if all(
+            load_config(b.root).serve.writes == "off" for b in brain_set.brains) else None
+    else:
+        target = brain_set.state_for(brain_set.brains[0])
+        refusal = WRITES_OFF_REFUSAL if target.config.serve.writes == "off" else None
+    create_mcp_server(target, write_refusal=refusal).run(transport="stdio")
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def _cmd_register(args: argparse.Namespace) -> int:
+    """spec/75: add, remove, or list the brains one `brainpick mcp` fronts."""
+    from brainpick.federation import (
+        entry_root,
+        load_registry,
+        register_brain,
+        registry_path,
+        unregister_brain,
+    )
+
+    registry = registry_path()
+    if args.path is None:
+        entries = load_registry(registry)
+        if not entries:
+            print(f"no brains registered ({registry}) — brainpick register <bundle> adds one")
+            return 0
+        for entry in entries:
+            root = entry_root(entry)
+            marks = "".join([" (me)" if entry.get("role") == "user" else "",
+                             "" if entry.get("enabled", True) else " (disabled)",
+                             "" if root else " (missing)"])
+            shown = str(root) if root else f"{entry['repo']}/{entry['bundle_path']}".rstrip("/")
+            print(f"  {entry.get('alias') or entry['id']:<20} {shown}{marks}")
+        print(f"registry: {registry}")
+        return 0
+
+    root = Path(args.path).resolve()
+    if args.remove:
+        if unregister_brain(root, registry):
+            print(f"removed {root} from {registry}")
+            return 0
+        print(f"{root} is not registered ({registry})", file=sys.stderr)
+        return 1
+    if not root.is_dir() or not any(root.rglob("*.md")):
+        print(f"{root} holds no markdown — a brain is an OKF bundle of .md files", file=sys.stderr)
+        return 1
+    entry = register_brain(root, registry, alias=args.alias, user=args.user)
+    label = entry.get("alias") or entry["id"]
+    print(f"registered {label}{' (me)' if entry.get('role') == 'user' else ''} → {root}")
+    print(f"registry: {registry}")
+    print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="brainpick",
         description="pick your agent's brain — compile and serve OKF knowledge bundles",
@@ -333,8 +382,18 @@ def main(argv: list[str] | None = None) -> int:
     p_serve.set_defaults(func=_cmd_serve)
 
     p_mcp = sub.add_parser("mcp", help="speak MCP over stdio (for agent hosts)")
-    p_mcp.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_mcp.add_argument("--root", action="append", default=[], metavar="[ALIAS=]DIR",
+                       help="bundle root — repeat to front several brains; default: every "
+                            "registered brain plus the current directory's (spec/75)")
     p_mcp.set_defaults(func=_cmd_mcp)
+
+    p_register = sub.add_parser("register", help="add a brain to the federation registry (or list/remove)")
+    p_register.add_argument("path", nargs="?", default=None, metavar="PATH",
+                            help="bundle root to register (omit to list the registry)")
+    p_register.add_argument("--alias", default=None, help="the brain's address in tool payloads")
+    p_register.add_argument("--user", action="store_true", help="mark it as your personal brain (scope 'me')")
+    p_register.add_argument("--remove", action="store_true", help="drop PATH from the registry")
+    p_register.set_defaults(func=_cmd_register)
 
     # The four query mirrors — the same router/state the MCP tools and REST use,
     # in plain terminal form (add --json for the raw MCP payload).
@@ -426,8 +485,11 @@ def main(argv: list[str] | None = None) -> int:
     pw_clear = password_sub.add_parser("clear", help="remove the password — the UI opens without a login")
     pw_clear.add_argument("--root", default=".", help="bundle root (default: current directory)")
     pw_clear.set_defaults(func=_cmd_password_clear)
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     return args.func(args)
 
 
