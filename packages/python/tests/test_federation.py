@@ -446,8 +446,11 @@ def test_register_from_hosts_registers_bundles_and_reports_the_rest(tmp_path, ca
     assert "registered kotiaurinko" in out and "registered kotikirja" in out
     assert "skipped" in out and str(gone) in out
     assert "claude mcp add brainpick --scope user" in out
-    text = registry.read_text(encoding="utf-8")
-    assert str(a) in text and str(b) in text and str(gone) not in text
+    # roots are stored canonical (TOML-escaped on Windows) — compare identities, not spellings
+    from brainpick.federation import entry_root, load_registry
+
+    assert [entry_root(e, env) for e in load_registry(registry)] == [a.resolve(), b.resolve()]
+    assert gone.name not in registry.read_text(encoding="utf-8")
 
     # idempotent: a second run leaves the registry alone
     before = registry.read_text(encoding="utf-8")
