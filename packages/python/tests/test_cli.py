@@ -224,6 +224,13 @@ def test_cli_register_add_list_remove(kotiaurinko, tmp_path, monkeypatch, capsys
     assert main(["register"]) == 0
     assert "no brains registered" in capsys.readouterr().out
 
+    # no --alias: the EFFECTIVE alias (the directory name) is shown, never the opaque id
+    assert main(["register", str(kotiaurinko)]) == 0
+    assert "registered kotiaurinko " in capsys.readouterr().out
+    assert main(["register"]) == 0
+    listing = capsys.readouterr().out
+    assert "kotiaurinko" in listing.split()[0]
+
 
 def test_cli_register_refuses_a_non_bundle(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("BRAINPICK_REGISTRY", str(tmp_path / "brains.toml"))

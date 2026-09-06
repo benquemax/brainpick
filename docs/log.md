@@ -12,6 +12,12 @@
   [--remove]` in both engines; a second conformance fixture (`kotikirja`) and
   the `federated-query` class prove the merged hit set agrees. A single brain
   serves exactly as before.
+- Fixed (found dogfooding against `~/Brain` + the docs wiki): federated search
+  merged by score, which buried a T2-fresh brain (RRF ~0.03) under a T1-only
+  one (BM25 ~4) — it now merges by rank, pinned by a conformance case that
+  asserts the exact order in both engines. Unqualified docs now resolve tier
+  by tier across the set, so an exact stem in one brain beats a fuzzy title
+  in another. `brainpick register` prints the effective alias, never the id.
 
 ## 2026-08-03
 

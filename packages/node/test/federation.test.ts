@@ -220,12 +220,23 @@ describe("federated search", () => {
       new Set(["aurinko:kuu.md", "aurinko:maa.md", "aurinko:aurinko.md", "kirja:kuu-muistio.md", "kirja:kahvi.md"]),
     );
     expect(hits[0]!["brain"]).toBe("aurinko");
-    const scores = hits.map((h) => h["score"] as number);
-    expect(scores).toEqual([...scores].sort((a, b) => b - a));
     expect(result["searched"]).toEqual(["aurinko", "kirja"]);
     expect(result["contributing"]).toEqual(["aurinko", "kirja"]);
     expect(result["used_modes"]).toEqual(["keyword"]);
     expect(result["hint"]).toContain("brain_read 'aurinko:kuu.md'");
+  });
+
+  test("merges by rank, not score (T2-fresh RRF vs T1-only BM25)", async () => {
+    // spec/75: scores are not commensurable across brains — a score merge would
+    // bury the RRF-scaled brain under the BM25 one; ranks interleave instead.
+    const set = makeSet();
+    writeFileSync(join(set.brains[0]!.root, "brainpick.local.toml"), '[models.embedding]\nkind = "mock"\n');
+    const result = await searchPayload(set, "kuu", "auto");
+    expect(result["used_modes"]).toEqual(["keyword", "semantic"]);
+    const hits = result["hits"] as Array<Record<string, unknown>>;
+    expect(hits.slice(0, 4).map((h) => h["brain"])).toEqual(["aurinko", "kirja", "aurinko", "kirja"]);
+    expect(Number(hits[0]!["score"])).toBeLessThan(Number(hits[1]!["score"]));
+    expect(hits[1]!["path"]).toBe("kirja:kuu-muistio.md");
   });
 
   test("scope narrows and unknown aliases are noted", async () => {
@@ -308,6 +319,25 @@ describe("routed read / neighbors / write / show", () => {
     expect((miss["suggestions"] as string[]).every((s) => s.includes(":"))).toBe(true);
     const unknown = await readPayload(makeSet(), "nope:kuu.md");
     expect(String(unknown["error"])).toContain("nope");
+  });
+
+  test("an exact hit in one brain beats a fuzzy title in another", async () => {
+    // spec/75: the ladder runs tier by tier ACROSS the set — "kuu-muistio" is a
+    // stem in kirja, so aurinko's fuzzy titles never enter the race.
+    const set = makeSet();
+    writeFileSync(
+      join(set.brains[0]!.root, "kuu-muistio-notes.md"),
+      "---\ntype: Concept\ntitle: Kuu-muistio notes\ndescription: Fuzzy twin.\n---\n" +
+        "# Kuu-muistio notes\nSee [Kuu](kuu.md).\n",
+    );
+    writeFileSync(
+      join(set.brains[0]!.root, "porch-moon-diary.md"),
+      "---\ntype: Concept\ntitle: Porch moon diary\ndescription: Only fuzzily reachable.\n---\n" +
+        "# Porch moon diary\nSee [Kuu](kuu.md).\n",
+    );
+    expect((await readPayload(set, "kuu-muistio"))["path"]).toBe("kirja:kuu-muistio.md");
+    // the fuzzy tier still runs when no brain has an exact match
+    expect((await readPayload(set, "porch moon diaries"))["path"]).toBe("aurinko:porch-moon-diary.md");
   });
 
   test("neighbors are qualified", async () => {
@@ -395,6 +425,14 @@ describe("the register runner", () => {
     lines.length = 0;
     expect(runRegister(null, { registryPath: registry, print })).toBe(0);
     expect(lines[0]).toContain("no brains registered");
+
+    // no alias: the EFFECTIVE alias (the directory name) is shown, never the opaque id
+    lines.length = 0;
+    expect(runRegister(root, { registryPath: registry, print })).toBe(0);
+    expect(lines[0]).toContain("registered kotiaurinko ");
+    lines.length = 0;
+    expect(runRegister(null, { registryPath: registry, print })).toBe(0);
+    expect(lines[0]!.trim().startsWith("kotiaurinko")).toBe(true);
 
     const errors: string[] = [];
     const empty = join(dir, "empty");

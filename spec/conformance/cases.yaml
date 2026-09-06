@@ -121,6 +121,24 @@ cases:
     # kotikirja alone; kotiaurinko's moon pages must NOT appear.
     expect_paths: [kirja:kuu-muistio.md, kirja:kahvi.md]
 
+  - id: federated-auto-kuu-rank-merge
+    class: federated-query
+    brains: {aurinko: kotiaurinko, kirja: kotikirja}
+    embed: [aurinko]          # these brains get the spec/30 mock embedder → T2 fresh → RRF scores
+    query: "kuu"
+    mode: auto
+    scope: all
+    limit: 8
+    # Reviewed: aurinko fuses keyword+semantic (RRF fractions ~0.03; its own
+    # ranking puts maa.md first under the mock embedder), kirja is T1-only (raw
+    # BM25 ~0.3). Scores are not comparable across brains, so the merge is by
+    # RANK — the brains' first hits, then their second hits, … then aurinko's
+    # remaining semantic hits. An engine that merges by score puts every kirja
+    # hit above every aurinko hit and fails; the ORDER is asserted here.
+    expect_paths: [aurinko:maa.md, kirja:kuu-muistio.md, aurinko:kuu.md, kirja:kahvi.md,
+                   aurinko:aurinko.md, aurinko:yksinainen.md, aurinko:komeetta.md, aurinko:planeetat.md]
+    expect_order: true
+
   # class: delta — apply scripted mutations to a compiled fixture, recompile
   # after each step, and compare emitted graph.delta payloads against the
   # scenario's expected-deltas.jsonl (seq-relative).

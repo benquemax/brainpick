@@ -17,7 +17,7 @@ import { generateBundleId, loadConfig } from "./config";
 import { atomicWrite } from "./core/fs";
 import { findRepoRoot } from "./detect";
 import type { DocRecord } from "./compile/t1";
-import { resolveDoc, ServeState } from "./serve/state";
+import { resolveDoc, resolveDocExact, resolveDocFuzzy, ServeState } from "./serve/state";
 
 export const RESERVED_ALIASES = ["all", "here", "me"] as const;
 const QUALIFIED = /^([a-z0-9][a-z0-9-]*):(.+)$/;
@@ -410,18 +410,20 @@ export class BrainSet {
       return { brain: null, outcome: "miss", payload: payload as string[] };
     }
 
-    const hits: Array<[Brain, DocRecord]> = [];
-    const ambiguous: Array<{ path: string; title: string }> = [];
+    // tier by tier across the set: an exact hit anywhere beats a fuzzy title anywhere
     const suggestions: string[] = [];
-    for (const brain of this.brains) {
-      const [outcome, payload] = resolveDoc((await this.stateFor(brain)).records, rel);
-      if (outcome === "ok") hits.push([brain, payload as DocRecord]);
-      else if (outcome === "ambiguous") {
-        for (const r of payload as DocRecord[]) ambiguous.push({ path: qualify(brain.alias, r.path), title: r.title });
-      } else for (const p of payload as string[]) suggestions.push(qualify(brain.alias, p));
-    }
-    if (hits.length === 1 && ambiguous.length === 0) return { brain: hits[0]![0], outcome: "ok", payload: hits[0]![1] };
-    if (hits.length > 0 || ambiguous.length > 0) {
+    for (const tier of [resolveDocExact, resolveDocFuzzy]) {
+      const hits: Array<[Brain, DocRecord]> = [];
+      const ambiguous: Array<{ path: string; title: string }> = [];
+      for (const brain of this.brains) {
+        const [outcome, payload] = tier((await this.stateFor(brain)).records, rel);
+        if (outcome === "ok") hits.push([brain, payload as DocRecord]);
+        else if (outcome === "ambiguous") {
+          for (const r of payload as DocRecord[]) ambiguous.push({ path: qualify(brain.alias, r.path), title: r.title });
+        } else for (const p of payload as string[]) suggestions.push(qualify(brain.alias, p));
+      }
+      if (hits.length === 1 && ambiguous.length === 0) return { brain: hits[0]![0], outcome: "ok", payload: hits[0]![1] };
+      if (hits.length === 0 && ambiguous.length === 0) continue;
       const listed = hits.map(([b, r]) => ({ path: qualify(b.alias, r.path), title: r.title })).concat(ambiguous);
       return { brain: null, outcome: "ambiguous", payload: listed };
     }
@@ -559,7 +561,7 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
       const marks =
         (entry.role === "user" ? " (me)" : "") + (entry.enabled ? "" : " (disabled)") + (root ? "" : " (missing)");
       const shown = root ?? `${entry.repo}/${entry.bundle_path}`.replace(/\/+$/, "");
-      print(`  ${(entry.alias || entry.id).padEnd(20)} ${shown}${marks}`);
+      print(`  ${shownAlias(entry).padEnd(20)} ${shown}${marks}`);
     }
     print(`registry: ${registry}`);
     return 0;
@@ -578,10 +580,15 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
     return 1;
   }
   const entry = registerBrain(root, registry, { alias: options.alias ?? null, user: options.user ?? false });
-  print(`registered ${entry.alias || entry.id}${entry.role === "user" ? " (me)" : ""} → ${root}`);
+  print(`registered ${shownAlias(entry)}${entry.role === "user" ? " (me)" : ""} → ${root}`);
   print(`registry: ${registry}`);
   print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.");
   return 0;
+}
+
+/** The address the tools use — never the opaque id. */
+function shownAlias(entry: RegistryEntry): string {
+  return entry.alias || aliasForRepo(entry.repo);
 }
 
 function hasMarkdown(root: string): boolean {

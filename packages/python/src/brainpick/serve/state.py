@@ -73,6 +73,16 @@ def resolve_doc(records: list[dict], needle: str) -> tuple[str, object]:
 
     Returns ("ok", record) | ("ambiguous", [records]) | ("miss", [suggested paths]).
     """
+    outcome, payload = resolve_doc_exact(records, needle)
+    if outcome != "miss":
+        return outcome, payload
+    return resolve_doc_fuzzy(records, needle)
+
+
+def resolve_doc_exact(records: list[dict], needle: str) -> tuple[str, object]:
+    """The exact tier of the ladder alone: path, then unique file stem. A "miss"
+    here means only that the fuzzy tier is next — federation (spec/75) runs the
+    exact tier across every brain before any brain's fuzzy tier."""
     needle = str(needle or "").strip().lstrip("/")
     by_path = {record["path"]: record for record in records}
     if needle in by_path:
@@ -85,7 +95,12 @@ def resolve_doc(records: list[dict], needle: str) -> tuple[str, object]:
         return "ok", stem_hits[0]
     if len(stem_hits) > 1:
         return "ambiguous", stem_hits
+    return "miss", []
 
+
+def resolve_doc_fuzzy(records: list[dict], needle: str) -> tuple[str, object]:
+    """The fuzzy-title tier of the ladder; a miss carries suggestions."""
+    needle = str(needle or "").strip().lstrip("/")
     by_title = {str(r["title"]).lower(): r for r in records}
     scored = sorted(
         ((difflib.SequenceMatcher(None, needle.lower(), title).ratio(), title) for title in by_title),

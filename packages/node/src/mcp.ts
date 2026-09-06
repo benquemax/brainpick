@@ -860,6 +860,7 @@ export async function searchPayload(
   } else bounded = 8;
   const [chosen, dropped] = parseScope(target, scope);
 
+  // key = (rank, set order, path) — never score: scores are not comparable across brains (spec/75)
   const merged: Array<{ key: [number, number, string]; hit: Payload }> = [];
   const used: string[] = [];
   let degraded: unknown = null;
@@ -874,9 +875,9 @@ export async function searchPayload(
     degraded = degraded ?? body["degraded_from"];
     const hits = body["hits"] as Array<Record<string, unknown>>;
     if (hits.length > 0) contributing.push(brain.alias);
-    for (const hit of hits) {
+    hits.forEach((hit, rank) => {
       merged.push({
-        key: [-Number(hit["score"]), order, String(hit["path"])],
+        key: [rank, order, String(hit["path"])],
         hit: {
           path: qualify(brain.alias, String(hit["path"])),
           brain: brain.alias,
@@ -886,7 +887,7 @@ export async function searchPayload(
           why: hit["why"],
         },
       });
-    }
+    });
   }
   merged.sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || cmpStr(a.key[2], b.key[2]));
   const all = merged.map((m) => m.hit).slice(0, bounded);

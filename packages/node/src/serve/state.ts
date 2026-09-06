@@ -103,6 +103,15 @@ export type Resolution<R extends ResolvableRecord> =
 
 /** The forgiving ladder (spec/70): exact path -> unique stem -> fuzzy title. */
 export function resolveDoc<R extends ResolvableRecord>(records: readonly R[], needle: unknown): Resolution<R> {
+  const exact = resolveDocExact(records, needle);
+  if (exact[0] !== "miss") return exact;
+  return resolveDocFuzzy(records, needle);
+}
+
+/** The exact tier of the ladder alone: path, then unique file stem. A "miss"
+ * here means only that the fuzzy tier is next — federation (spec/75) runs the
+ * exact tier across every brain before any brain's fuzzy tier. */
+export function resolveDocExact<R extends ResolvableRecord>(records: readonly R[], needle: unknown): Resolution<R> {
   const cleaned = pyStrip(String(needle ?? "")).replace(/^\/+/, "");
   const byPath = new Map(records.map((r) => [r.path, r]));
   const direct = byPath.get(cleaned);
@@ -113,7 +122,12 @@ export function resolveDoc<R extends ResolvableRecord>(records: readonly R[], ne
   const stemHits = records.filter((r) => stem(r.path).toLowerCase() === cleaned.toLowerCase());
   if (stemHits.length === 1) return ["ok", stemHits[0]!];
   if (stemHits.length > 1) return ["ambiguous", stemHits];
+  return ["miss", []];
+}
 
+/** The fuzzy-title tier of the ladder; a miss carries suggestions. */
+export function resolveDocFuzzy<R extends ResolvableRecord>(records: readonly R[], needle: unknown): Resolution<R> {
+  const cleaned = pyStrip(String(needle ?? "")).replace(/^\/+/, "");
   const byTitle = new Map<string, R>();
   for (const r of records) byTitle.set(String(r.title).toLowerCase(), r); // last wins, like the dict comp
   const matcher = new SequenceMatcher();

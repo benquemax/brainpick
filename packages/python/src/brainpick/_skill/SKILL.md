@@ -54,7 +54,8 @@ federated:
 
 - `brain_overview` lists `brains` (alias, role, `here`); its `scope` picks the tree.
 - `brain_search` searches every brain by default and tags each hit with its `brain`;
-  `scope` narrows it — `here`, `me`, or `alias,alias`.
+  `scope` narrows it — `here`, `me`, or `alias,alias`. Hits are ordered by rank
+  across brains; `score` values are only comparable within one brain.
 - Every path is `alias:path` — pass it back verbatim to `brain_read`, `brain_neighbors`,
   `brain_write`. A bare doc resolves across brains; several matches come back as a
   disambiguation.

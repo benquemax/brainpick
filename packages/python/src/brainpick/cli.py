@@ -311,12 +311,16 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
 def _cmd_register(args: argparse.Namespace) -> int:
     """spec/75: add, remove, or list the brains one `brainpick mcp` fronts."""
     from brainpick.federation import (
+        alias_for_repo,
         entry_root,
         load_registry,
         register_brain,
         registry_path,
         unregister_brain,
     )
+
+    def shown_alias(entry: dict) -> str:  # the address the tools use — never the opaque id
+        return entry.get("alias") or alias_for_repo(entry["repo"])
 
     registry = registry_path()
     if args.path is None:
@@ -330,7 +334,7 @@ def _cmd_register(args: argparse.Namespace) -> int:
                              "" if entry.get("enabled", True) else " (disabled)",
                              "" if root else " (missing)"])
             shown = str(root) if root else f"{entry['repo']}/{entry['bundle_path']}".rstrip("/")
-            print(f"  {entry.get('alias') or entry['id']:<20} {shown}{marks}")
+            print(f"  {shown_alias(entry):<20} {shown}{marks}")
         print(f"registry: {registry}")
         return 0
 
@@ -345,7 +349,7 @@ def _cmd_register(args: argparse.Namespace) -> int:
         print(f"{root} holds no markdown — a brain is an OKF bundle of .md files", file=sys.stderr)
         return 1
     entry = register_brain(root, registry, alias=args.alias, user=args.user)
-    label = entry.get("alias") or entry["id"]
+    label = shown_alias(entry)
     print(f"registered {label}{' (me)' if entry.get('role') == 'user' else ''} → {root}")
     print(f"registry: {registry}")
     print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.")

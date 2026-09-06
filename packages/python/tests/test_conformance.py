@@ -132,9 +132,16 @@ def test_federated_query(case, tmp_path):
 
     brains = [Brain(alias=alias, root=_bundle_copy(tmp_path, bundle))
               for alias, bundle in case["brains"].items()]
+    for brain in brains:
+        if brain.alias in case.get("embed", []):
+            (brain.root / "brainpick.toml").write_text(MOCK_CONFIG, encoding="utf-8")
     body = search_payload(BrainSet(brains), case["query"], mode=case["mode"],
                           limit=case["limit"], scope=case.get("scope", "all"))
-    assert {h["path"] for h in body["hits"]} == set(case["expect_paths"])
+    paths = [h["path"] for h in body["hits"]]
+    if case.get("expect_order"):
+        assert paths == case["expect_paths"]  # the rank merge is deterministic (spec/75)
+    else:
+        assert set(paths) == set(case["expect_paths"])
     assert all(":" in h["path"] and h["brain"] == h["path"].split(":", 1)[0] for h in body["hits"])
 
 

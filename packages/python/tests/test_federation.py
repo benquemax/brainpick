@@ -218,12 +218,25 @@ def test_federated_search_qualifies_and_merges(tmp_path):
     assert paths == {"aurinko:kuu.md", "aurinko:maa.md", "aurinko:aurinko.md",
                      "kirja:kuu-muistio.md", "kirja:kahvi.md"}
     assert result["hits"][0]["brain"] == "aurinko"
-    scores = [h["score"] for h in result["hits"]]
-    assert scores == sorted(scores, reverse=True)
     assert result["searched"] == ["aurinko", "kirja"]
     assert result["contributing"] == ["aurinko", "kirja"]
     assert result["used_modes"] == ["keyword"]
     assert "brain_read 'aurinko:kuu.md'" in result["hint"]
+
+
+def test_federated_search_merges_by_rank_not_score(tmp_path):
+    """Scores are not commensurable across brains (spec/75): a T2-fresh brain
+    scores RRF fractions (~0.03), a T1-only brain raw BM25 (~4.0). Merging by
+    score would bury the fresh brain entirely; the merge interleaves RANKS."""
+    brain_set = make_set(tmp_path)
+    (brain_set.brains[0].root / "brainpick.local.toml").write_text(
+        '[models.embedding]\nkind = "mock"\n', encoding="utf-8")  # aurinko gets T2, kirja stays T1
+    result = search_payload(brain_set, "kuu", mode="auto")
+    assert result["used_modes"] == ["keyword", "semantic"]
+    brains = [h["brain"] for h in result["hits"]]
+    assert brains[:4] == ["aurinko", "kirja", "aurinko", "kirja"]  # rank 1s, then rank 2s
+    assert result["hits"][0]["score"] < result["hits"][1]["score"]  # native scores kept as-is
+    assert result["hits"][1]["path"] == "kirja:kuu-muistio.md"
 
 
 def test_federated_search_scope_and_unknown_alias_note(tmp_path):
@@ -299,6 +312,19 @@ def test_read_disambiguates_across_brains_and_suggests_qualified(tmp_path):
     result = read_payload(twin, "kuu")
     assert {d["path"] for d in result["disambiguation"]} == {"a:kuu.md", "b:kuu.md"}
     miss = read_payload(brain_set, "zzzz-nothing")
+    # an EXACT hit in one brain beats a FUZZY title in another (spec/75, tier by tier):
+    # "kuu-muistio" is a stem in kirja; aurinko's titles ("Kuu", …) never enter the race
+    assert read_payload(brain_set, "kuu-muistio")["path"] == "kirja:kuu-muistio.md"
+    brain_set = make_set(tmp_path / "again")
+    (brain_set.brains[0].root / "kuu-muistio-notes.md").write_text(  # fuzzy-matches "kuu-muistio"
+        "---\ntype: Concept\ntitle: Kuu-muistio notes\ndescription: Fuzzy twin.\n---\n"
+        "# Kuu-muistio notes\nSee [Kuu](kuu.md).\n", encoding="utf-8")
+    (brain_set.brains[0].root / "porch-moon-diary.md").write_text(
+        "---\ntype: Concept\ntitle: Porch moon diary\ndescription: Only fuzzily reachable.\n---\n"
+        "# Porch moon diary\nSee [Kuu](kuu.md).\n", encoding="utf-8")
+    assert read_payload(brain_set, "kuu-muistio")["path"] == "kirja:kuu-muistio.md"
+    # the fuzzy tier still runs when no brain has an exact match
+    assert read_payload(brain_set, "porch moon diaries")["path"] == "aurinko:porch-moon-diary.md"
     assert "error" in miss and all(":" in s for s in miss["suggestions"])
     unknown = read_payload(brain_set, "nope:kuu.md")
     assert "error" in unknown and "nope" in unknown["error"]

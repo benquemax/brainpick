@@ -345,7 +345,7 @@ class BrainSet:
         in every brain, one hit is a hit, several is a disambiguation, none a miss.
         outcome ∈ ok | ambiguous | miss | unknown_brain. Payloads carry QUALIFIED
         paths when the set is federated."""
-        from brainpick.serve.state import resolve_doc
+        from brainpick.serve.state import resolve_doc, resolve_doc_exact, resolve_doc_fuzzy
 
         alias, rel = split_qualified(doc)
         if alias is not None:
@@ -359,22 +359,25 @@ class BrainSet:
             outcome, payload = resolve_doc(self.state_for(brain).records, rel)
             return brain, outcome, payload
 
-        hits: list[tuple[Brain, dict]] = []
-        ambiguous: list[dict] = []
+        # tier by tier across the set: an exact hit anywhere beats a fuzzy title anywhere
         suggestions: list[str] = []
-        for brain in self.brains:
-            outcome, payload = resolve_doc(self.state_for(brain).records, rel)
-            if outcome == "ok":
-                hits.append((brain, payload))
-            elif outcome == "ambiguous":
-                ambiguous += [{"path": qualify(brain.alias, r["path"]), "title": r["title"]} for r in payload]
-            else:
-                suggestions += [qualify(brain.alias, p) for p in payload]
-        if len(hits) == 1 and not ambiguous:
-            return hits[0][0], "ok", hits[0][1]
-        if hits or ambiguous:
-            listed = [{"path": qualify(b.alias, r["path"]), "title": r["title"]} for b, r in hits] + ambiguous
-            return None, "ambiguous", listed
+        for tier in (resolve_doc_exact, resolve_doc_fuzzy):
+            hits: list[tuple[Brain, dict]] = []
+            ambiguous: list[dict] = []
+            for brain in self.brains:
+                outcome, payload = tier(self.state_for(brain).records, rel)
+                if outcome == "ok":
+                    hits.append((brain, payload))
+                elif outcome == "ambiguous":
+                    ambiguous += [{"path": qualify(brain.alias, r["path"]), "title": r["title"]}
+                                  for r in payload]
+                else:
+                    suggestions += [qualify(brain.alias, p) for p in payload]
+            if len(hits) == 1 and not ambiguous:
+                return hits[0][0], "ok", hits[0][1]
+            if hits or ambiguous:
+                listed = [{"path": qualify(b.alias, r["path"]), "title": r["title"]} for b, r in hits]
+                return None, "ambiguous", listed + ambiguous
         return None, "miss", suggestions[:5]
 
     def _qualified_payload(self, brain: Brain, outcome: str, payload):

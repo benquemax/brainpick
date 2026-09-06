@@ -643,7 +643,7 @@ def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
         limit = 8
     chosen, dropped = parse_scope(brain_set, scope)
 
-    merged: list[tuple[float, int, str, dict]] = []
+    merged: list[tuple[int, int, str, dict]] = []  # (rank, set order, path, hit) — never score
     used: list[str] = []
     degraded = None
     mode_note = None
@@ -658,8 +658,8 @@ def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
         degraded = degraded or body["degraded_from"]
         if body["hits"]:
             contributing.append(brain.alias)
-        for hit in body["hits"]:
-            merged.append((-float(hit["score"]), order, hit["path"],
+        for rank, hit in enumerate(body["hits"]):
+            merged.append((rank, order, hit["path"],
                            {"path": qualify(brain.alias, hit["path"]), "brain": brain.alias,
                             "title": hit["title"], "description": hit["description"],
                             "score": hit["score"], "why": hit["why"]}))

@@ -4,7 +4,7 @@ about: concept
 title: Federation
 description: Many brains behind one MCP server — an agent asks once and every registered brain answers, hits merged and paths qualified as alias:path, so a project's knowledge and your personal brain are one search away.
 tags: [agents, mcp, spec]
-timestamp: 2026-09-06T11:30:00Z
+timestamp: 2026-09-06T14:40:00Z
 ---
 
 # Federation
@@ -47,8 +47,12 @@ Every brain has an **alias** — its git repo name by default, the directory nam
 outside a repo, `--alias` to choose one — and every path an agent sees from a
 federated server is qualified: `acme:docs/video-gen.md`. Tools accept it back:
 `brain_read 'acme:docs/video-gen.md'`. An unqualified doc is resolved in every
-brain; one hit is a hit, several become a disambiguation listing qualified
-paths, none is a miss with qualified suggestions. Reserved words `all`, `here`,
+brain, tier by tier: the exact tier (path or file stem) across the whole set
+first, the fuzzy-title tier only when no brain matched exactly — so
+`video-generation` opens `me:video-generation.md` even when a project has a
+page titled "Video generation notes". Within a tier, one hit is a hit,
+several become a disambiguation listing qualified paths; nothing anywhere is
+a miss with qualified suggestions. Reserved words `all`, `here`,
 `me` can never be aliases, and collisions take `-2`, `-3` in set order.
 
 ## What the agent sees
@@ -57,9 +61,13 @@ paths, none is a miss with qualified suggestions. Reserved words `all`, `here`,
   *here*, its root, doc count and tier status — that survives any budget. The
   tree shows the *focus* brain (here, else the first), and `scope` picks
   another.
-- **`brain_search`** fans out to every brain in scope, merges the hits by
-  score, qualifies the paths and tags each hit with its `brain`; the answer
-  also carries `searched` and `contributing`. `scope` narrows it: `all`
+- **`brain_search`** fans out to every brain in scope, merges the hits **by
+  rank** — every brain's first hit, then every brain's second — because
+  scores are not comparable across brains (a brain with fresh vectors scores
+  RRF fractions, a T1-only brain raw BM25; a score merge would bury the
+  former entirely). Paths are qualified, each hit is tagged with its `brain`
+  and keeps its native `score`; the answer also carries `searched` and
+  `contributing`. `scope` narrows it: `all`
   (default), `here`, `me`, or a comma-separated alias list — forgiving, like
   every enum in [MCP tools](mcp-tools.md).
 - **`brain_read`**, **`brain_neighbors`** route by the qualified path (or the

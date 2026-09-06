@@ -81,10 +81,15 @@ are stable for a given set and deterministic across engines.
 returns is qualified — search hits, overview trees, read paths and
 neighbors, neighbor nodes and edge endpoints, ghost targets — and every doc
 argument accepts one. An UNQUALIFIED doc argument in federated mode
-resolves in every brain with the forgiving ladder of spec/70; exactly one
-brain resolving it is a hit, more than one (or any brain finding it
-ambiguous) is a `disambiguation` listing qualified paths, none is a miss
-with up to five qualified suggestions. `brain_write` is the exception: an
+resolves in every brain with the forgiving ladder of spec/70 — applied
+TIER BY TIER across the set: first the exact tier (path, or unique file
+stem) in every brain, and only when no brain matches there the fuzzy-title
+tier. Within a tier, exactly one brain resolving it is a hit; more than one
+(or any brain finding it ambiguous) is a `disambiguation` listing qualified
+paths. An exact hit in one brain therefore wins over a fuzzy title in
+another — `brain_read 'video-generation'` opens `me:video-generation.md`
+even when a project brain has a page titled "Video generation notes".
+Nothing in any tier is a miss with up to five qualified suggestions. `brain_write` is the exception: an
 unqualified doc writes to `here` when there is one, else declines with
 `{"ok": false, "instruction": …}` naming the aliases — a write never
 guesses its target.
@@ -106,10 +111,13 @@ as spec/70 demands.
 
 Each brain in scope runs the ordinary spec/50 search (same `query`, `mode`,
 `limit`); a brain's degradation (T2 stale, T3 absent) affects only its own
-hits. The merged list is ordered by `score` descending, ties by set order
-then path, and cut to `limit`. Scores are compared as-is: RRF and cosine
-scores are commensurable across brains, BM25 only loosely — the ordering is
-deterministic, not calibrated. The response adds:
+hits. Scores are NOT comparable across brains — a brain with T2 fresh
+returns RRF fractions, one without T2 returns raw BM25 — so the merge is by
+RANK, never by score: the merged list interleaves the brains' rankings
+(every brain's first hit, then every brain's second, …), ties by set order
+then path, and is cut to `limit`. Each hit keeps its brain's native `score`
+for information; `hits` is therefore ordered by rank, not by `score`. The
+response adds:
 
 ```json
 {"hits": [{"path": "acme:render.md", "brain": "acme", "title", "description", "score", "why"}],

@@ -45,6 +45,8 @@ interface ConformanceCase {
   doc?: string;
   depth?: number;
   brains?: Record<string, string>;
+  embed?: string[];
+  expect_order?: boolean;
   scope?: string;
 }
 
@@ -265,9 +267,14 @@ describe("conformance", () => {
           const brains = Object.entries(c.brains!).map(
             ([alias, bundle]) => new Brain({ alias, root: copyBundle(bundle) }),
           );
+          for (const brain of brains) {
+            if ((c.embed ?? []).includes(brain.alias)) writeFileSync(join(brain.root, "brainpick.toml"), MOCK_CONFIG, "utf8");
+          }
           const body = await searchPayload(new BrainSet(brains), c.query!, c.mode, c.limit, null, c.scope ?? "all");
           const hits = body["hits"] as Array<{ path: string; brain: string }>;
-          expect(new Set(hits.map((h) => h.path))).toEqual(new Set(c.expect_paths));
+          const paths = hits.map((h) => h.path);
+          if (c.expect_order) expect(paths).toEqual(c.expect_paths); // the rank merge is deterministic (spec/75)
+          else expect(new Set(paths)).toEqual(new Set(c.expect_paths));
           for (const hit of hits) expect(hit.path.startsWith(hit.brain + ":")).toBe(true);
         });
         break;
