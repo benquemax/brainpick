@@ -382,3 +382,79 @@ def test_brain_set_loads_lazily(tmp_path, name):
     state = brain_set.state_for(brain)
     assert brain.loaded is True and (brain.root / ".brainpick" / "manifest.json").is_file()
     assert json.loads((brain.root / ".brainpick" / "manifest.json").read_text())["seq"] == state.seq
+
+
+# -- migrating per-project host entries (spec/75 --from-hosts) ------------------------
+
+
+def write_hosts(home, roots):
+    """The pre-federation shape in every known host: one `mcp --root DIR` per project."""
+    a, b, gone = roots
+    (home / ".claude.json").write_text(json.dumps({
+        "mcpServers": {"brainpick": {"command": "uvx", "args": ["brainpick", "mcp", "--root", str(a)]},
+                       "other": {"command": "npx", "args": ["some-server"]}},
+        "projects": {str(b): {"mcpServers": {"brainpick": {"command": "brainpick", "args": ["mcp", f"--root={b}"]}}}},
+    }), encoding="utf-8")
+    (home / ".config" / "opencode").mkdir(parents=True)
+    (home / ".config" / "opencode" / "opencode.json").write_text(json.dumps({
+        "mcp": {"brainpick": {"type": "local", "command": ["uv", "run", "brainpick", "mcp", "--root", str(a)]},
+                "remote": {"type": "remote", "url": "http://x/sse"}}}), encoding="utf-8")
+    (home / ".codex").mkdir()
+    (home / ".codex" / "config.toml").write_text(
+        f'[mcp_servers.brainpick]\ncommand = "brainpick"\nargs = ["mcp", "--root", "{gone}"]\n', encoding="utf-8")
+    (home / ".cursor").mkdir()
+    (home / ".cursor" / "mcp.json").write_text(json.dumps({
+        "mcpServers": {"bp": {"command": "brainpick", "args": ["serve", "--root", str(a)]}}}), encoding="utf-8")
+
+
+def test_scan_hosts_finds_every_per_project_root(tmp_path):
+    from brainpick.federation import scan_hosts
+
+    home = tmp_path / "home"
+    home.mkdir()
+    a = copy_bundle(tmp_path, "kotiaurinko")
+    b = copy_bundle(tmp_path, "kotikirja")
+    gone = tmp_path / "gone"
+    write_hosts(home, (a, b, gone))
+    found = scan_hosts({"HOME": str(home)})
+    # distinct roots, in discovery order; `serve --root` is not an mcp entry
+    assert [f.root for f in found] == [a, b, gone]
+    assert found[0].hosts == ["claude-code", "opencode"]
+    assert found[1].hosts == ["claude-code"] and found[2].hosts == ["codex"]
+    assert scan_hosts({"HOME": str(tmp_path / "nohome")}) == []
+
+
+def test_register_from_hosts_registers_bundles_and_reports_the_rest(tmp_path, capsys):
+    from brainpick.cli import main
+
+    home = tmp_path / "home"
+    home.mkdir()
+    a = copy_bundle(tmp_path, "kotiaurinko")
+    b = copy_bundle(tmp_path, "kotikirja")
+    gone = tmp_path / "gone"
+    write_hosts(home, (a, b, gone))
+    registry = tmp_path / "brains.toml"
+    env = {"HOME": str(home), "BRAINPICK_REGISTRY": str(registry)}
+
+    assert main(["register", "--from-hosts", "--dry-run"], env=env) == 0
+    out = capsys.readouterr().out
+    assert "kotiaurinko" in out and "kotikirja" in out and "gone" in out and "dry run" in out
+    assert not registry.exists()
+
+    assert main(["register", "--from-hosts"], env=env) == 0
+    out = capsys.readouterr().out
+    assert "registered kotiaurinko" in out and "registered kotikirja" in out
+    assert "skipped" in out and str(gone) in out
+    assert "claude mcp add brainpick --scope user" in out
+    text = registry.read_text(encoding="utf-8")
+    assert str(a) in text and str(b) in text and str(gone) not in text
+
+    # idempotent: a second run leaves the registry alone
+    before = registry.read_text(encoding="utf-8")
+    assert main(["register", "--from-hosts"], env=env) == 0
+    assert registry.read_text(encoding="utf-8") == before
+    assert "already registered" in capsys.readouterr().out
+
+    # nothing to find is a report, not a failure
+    assert main(["register", "--from-hosts"], env={"HOME": str(tmp_path / "empty"), "BRAINPICK_REGISTRY": str(registry)}) == 0
+    assert "no per-project" in capsys.readouterr().out

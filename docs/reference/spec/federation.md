@@ -4,7 +4,7 @@ about: concept
 title: "Spec: federation"
 description: "The normative contract for many brains behind one MCP server — brain set assembly, the registry, aliases and alias:path, scope, merged search, routed reads and the never-guessing write."
 tags: [spec, mcp, agents]
-timestamp: 2026-09-06T14:40:00Z
+timestamp: 2026-09-06T16:00:00Z
 ---
 
 # Spec: federation
@@ -46,6 +46,12 @@ brains so both engines agree byte-for-byte on what an agent sees.
   declines naming the aliases — it never guesses.
 - **Single-brain compatibility.** A set of one brain keeps the pre-federation
   payload shapes exactly, while still accepting qualified docs.
+- **Migration.** `brainpick register --from-hosts` scans the known host
+  config files (Claude Code, OpenCode, Codex, Cursor) for `mcp --root DIR`
+  command lines and registers each DIR; it never edits a host config. Every
+  other writer of `brains.toml` (the daemon) re-reads before writing and
+  preserves unknown keys. `brainpick doctor` reports the count on a `hosts:`
+  line.
 - **Conformance.** The `federated-query` class runs a two-brain fixture
   (`kotiaurinko` + `kotikirja`) through `brain_search` and compares the set of
   qualified hits — and, with one brain given the mock embedder (`embed`), the

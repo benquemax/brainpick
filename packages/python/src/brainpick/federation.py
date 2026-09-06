@@ -8,12 +8,13 @@ merge and qualify (alias:path) when the set holds more than one brain.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -485,7 +486,95 @@ def parse_scope(brain_set: BrainSet, scope) -> tuple[list[Brain], list[str]]:
     return ordered, dropped
 
 
+# -- migrating per-project host entries (spec/75 --from-hosts) ------------------------
+
+
+@dataclass(frozen=True)
+class HostRoot:
+    """One `mcp --root DIR` found in agent host configs — DIR plus the hosts naming it."""
+    root: Path
+    hosts: list[str]
+
+
+def _host_files(home: Path) -> list[tuple[str, Path]]:
+    return [
+        ("claude-code", home / ".claude.json"),
+        ("opencode", home / ".config" / "opencode" / "opencode.json"),
+        ("codex", home / ".codex" / "config.toml"),
+        ("cursor", home / ".cursor" / "mcp.json"),
+    ]
+
+
+def _server_argv(server) -> list[str]:
+    """The command line of one MCP server entry: `command` string + `args`, or
+    a `command` array (OpenCode). Remote servers have neither and yield []."""
+    if not isinstance(server, dict):
+        return []
+    command = server.get("command")
+    if isinstance(command, list):
+        return [str(part) for part in command]
+    argv = [str(command)] if isinstance(command, str) else []
+    args = server.get("args")
+    if isinstance(args, list):
+        argv += [str(part) for part in args]
+    return argv
+
+
+def _mcp_root_of(argv: list[str]) -> str | None:
+    """`… mcp … --root DIR` (or `--root=DIR`) → DIR; anything else → None."""
+    if "mcp" not in argv:
+        return None
+    tail = argv[argv.index("mcp") + 1:]
+    for i, part in enumerate(tail):
+        if part == "--root" and i + 1 < len(tail):
+            return tail[i + 1]
+        if part.startswith("--root="):
+            return part[len("--root="):]
+    return None
+
+
+def _servers_in(host: str, path: Path) -> list:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    try:
+        if host == "codex":
+            return list(tomllib.loads(text).get("mcp_servers", {}).values())
+        data = json.loads(text)
+    except (ValueError, TypeError, tomllib.TOMLDecodeError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    if host == "opencode":
+        return list((data.get("mcp") or {}).values())
+    servers = list((data.get("mcpServers") or {}).values())
+    for project in (data.get("projects") or {}).values():  # Claude Code per-project scope
+        if isinstance(project, dict):
+            servers += list((project.get("mcpServers") or {}).values())
+    return servers
+
+
+def scan_hosts(env: Mapping[str, str] | None = None) -> list[HostRoot]:
+    """Every distinct `brainpick mcp --root DIR` across the known host configs
+    (spec/75), in discovery order. Pure read — never edits a host config."""
+    env = os.environ if env is None else env
+    home = Path(env.get("HOME", "~")).expanduser()
+    found: dict[Path, list[str]] = {}
+    for host, path in _host_files(home):
+        for server in _servers_in(host, path):
+            raw = _mcp_root_of(_server_argv(server))
+            if raw is None:
+                continue
+            root = Path(raw).expanduser()
+            hosts = found.setdefault(root, [])
+            if host not in hosts:
+                hosts.append(host)
+    return [HostRoot(root, hosts) for root, hosts in found.items()]
+
+
 __all__ = [
+    "HostRoot", "scan_hosts",
     "Brain", "BrainSet", "alias_for", "discover_here", "load_registry", "parse_scope",
     "qualify", "qualify_paths", "register_brain", "registry_path", "resolve_brain_set",
     "save_registry", "split_qualified", "unregister_brain",

@@ -598,4 +598,15 @@ def run_doctor(
     else:
         emit("○", "node engine: npm engine arrives in M2")
 
+    # federation (spec/75): per-project `mcp --root` host entries can collapse into one
+    from brainpick.federation import scan_hosts
+
+    hosts = scan_hosts(env)
+    if hosts:
+        plural = "entry" if len(hosts) == 1 else "entries"
+        emit("○", f"hosts: {len(hosts)} per-project --root {plural} in agent configs",
+             "brainpick register --from-hosts collapses them into one user-scope entry")
+    else:
+        emit("○", "hosts: none — no per-project --root entries to migrate")
+
     return 1 if failed else 0

@@ -4,12 +4,13 @@ about: thing
 title: "brainpick register"
 description: "Add a brain to the federation registry — or list it, or remove one — so a single brainpick mcp entry fronts every brain you work with."
 tags: [cli, spec, agents]
-timestamp: 2026-09-06T11:30:00Z
+timestamp: 2026-09-06T16:00:00Z
 ---
 
 # brainpick register
 
-`brainpick register [PATH] [--alias ALIAS] [--user] [--remove]` maintains the
+`brainpick register [PATH] [--alias ALIAS] [--user] [--remove]` (and
+`--from-hosts [--dry-run]`) maintains the
 federation registry, `~/.config/brainpick/brains.toml` — the same file
 [the daemon](../../daemon.md) keeps, so a brain registered here is one the
 daemon can supervise and a brain the daemon added is one agents can query
@@ -25,7 +26,17 @@ daemon can supervise and a brain the daemon added is one agents can query
   one; the newest claim wins.
 - `--remove` drops PATH from the registry.
 - `brainpick register` with no PATH lists the registry: alias, root, and
-  `(me)`, `(disabled)` or `(missing)` marks.
+  `(me)`, `(disabled)` or `(missing)` marks (`brainpick register .` is the
+  explicit form for the working directory).
+- `--from-hosts` is the migration from the pre-federation shape. It scans the
+  agent host configs under `$HOME` — `~/.claude.json` (user and per-project
+  `mcpServers`), `~/.config/opencode/opencode.json`, `~/.codex/config.toml`,
+  `~/.cursor/mcp.json` — for every `brainpick mcp --root DIR` entry and
+  registers each DIR exactly as `register DIR` would. An already registered
+  root is left alone, a DIR that is not a bundle on this machine is reported
+  and skipped, and the command then prints the one user-scope entry that
+  replaces them all. It never edits a host config; `--dry-run` only reports.
+  Nothing found is a report, not a failure.
 
 A PATH holding no markdown is refused — a brain is an OKF bundle. The
 registry's location honors `BRAINPICK_REGISTRY` (the file), then

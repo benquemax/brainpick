@@ -669,6 +669,17 @@ export async function runDoctor(root: string, options: DoctorOptions = {}): Prom
     emit("○", "python engine: no pip sibling next to this checkout — either engine serves the same spec");
   }
 
+  // federation (spec/75): per-project `mcp --root` host entries can collapse into one
+  const { scanHosts } = await import("./federation");
+  const hosts = scanHosts(env);
+  if (hosts.length > 0) {
+    const plural = hosts.length === 1 ? "entry" : "entries";
+    emit("○", `hosts: ${hosts.length} per-project --root ${plural} in agent configs`,
+      "brainpick register --from-hosts collapses them into one user-scope entry");
+  } else {
+    emit("○", "hosts: none — no per-project --root entries to migrate");
+  }
+
   return failed ? 1 : 0;
 }
 

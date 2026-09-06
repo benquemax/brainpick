@@ -20,6 +20,7 @@ import {
   splitQualified,
   unregisterBrain,
   runRegister,
+  scanHosts,
 } from "../src/federation";
 import {
   createMcpServer,
@@ -31,6 +32,37 @@ import {
   writePayload,
 } from "../src/mcp";
 import { cleanup, copyBundle, tempDir } from "./helpers";
+
+/** The pre-federation shape in every known host: one `mcp --root DIR` per project. */
+function writeHosts(home: string, [a, b, gone]: [string, string, string]): void {
+  writeFileSync(
+    join(home, ".claude.json"),
+    JSON.stringify({
+      mcpServers: {
+        brainpick: { command: "uvx", args: ["brainpick", "mcp", "--root", a] },
+        other: { command: "npx", args: ["some-server"] },
+      },
+      projects: { [b]: { mcpServers: { brainpick: { command: "brainpick", args: ["mcp", `--root=${b}`] } } } },
+    }),
+  );
+  mkdirSync(join(home, ".config", "opencode"), { recursive: true });
+  writeFileSync(
+    join(home, ".config", "opencode", "opencode.json"),
+    JSON.stringify({
+      mcp: {
+        brainpick: { type: "local", command: ["uv", "run", "brainpick", "mcp", "--root", a] },
+        remote: { type: "remote", url: "http://x/sse" },
+      },
+    }),
+  );
+  mkdirSync(join(home, ".codex"));
+  writeFileSync(join(home, ".codex", "config.toml"), `[mcp_servers.brainpick]\ncommand = "brainpick"\nargs = ["mcp", "--root", "${gone}"]\n`);
+  mkdirSync(join(home, ".cursor"));
+  writeFileSync(
+    join(home, ".cursor", "mcp.json"),
+    JSON.stringify({ mcpServers: { bp: { command: "brainpick", args: ["serve", "--root", a] } } }),
+  );
+}
 
 afterEach(cleanup);
 
@@ -439,5 +471,70 @@ describe("the register runner", () => {
     mkdirSync(empty);
     expect(runRegister(empty, { registryPath: registry, print, printErr: (l) => errors.push(l) })).toBe(1);
     expect(errors[0]).toContain("no markdown");
+  });
+});
+
+describe("migrating per-project host entries (spec/75 --from-hosts)", () => {
+  test("scanHosts finds every per-project root", () => {
+    const dir = tempDir();
+    const home = join(dir, "home");
+    mkdirSync(home);
+    const a = copyBundle("kotiaurinko");
+    const b = copyBundle("kotikirja");
+    const gone = join(dir, "gone");
+    writeHosts(home, [a, b, gone]);
+    const found = scanHosts({ HOME: home });
+    // distinct roots, in discovery order; `serve --root` is not an mcp entry
+    expect(found.map((f) => f.root)).toEqual([a, b, gone]);
+    expect(found[0]!.hosts).toEqual(["claude-code", "opencode"]);
+    expect(found[1]!.hosts).toEqual(["claude-code"]);
+    expect(found[2]!.hosts).toEqual(["codex"]);
+    expect(scanHosts({ HOME: join(dir, "nohome") })).toEqual([]);
+  });
+
+  test("register --from-hosts registers bundles and reports the rest", () => {
+    const dir = tempDir();
+    const home = join(dir, "home");
+    mkdirSync(home);
+    const a = copyBundle("kotiaurinko");
+    const b = copyBundle("kotikirja");
+    const gone = join(dir, "gone");
+    writeHosts(home, [a, b, gone]);
+    const registry = join(dir, "brains.toml");
+    const lines: string[] = [];
+    const print = (line: string) => lines.push(line);
+    const env = { HOME: home };
+
+    expect(runRegister(null, { fromHosts: true, dryRun: true, registryPath: registry, print, env })).toBe(0);
+    let text = lines.join("\n");
+    expect(text).toContain("kotiaurinko");
+    expect(text).toContain("kotikirja");
+    expect(text).toContain("gone");
+    expect(text).toContain("dry run");
+    expect(existsSync(registry)).toBe(false);
+
+    lines.length = 0;
+    expect(runRegister(null, { fromHosts: true, registryPath: registry, print, env })).toBe(0);
+    text = lines.join("\n");
+    expect(text).toContain("registered kotiaurinko");
+    expect(text).toContain("registered kotikirja");
+    expect(text).toContain("skipped");
+    expect(text).toContain(gone);
+    expect(text).toContain("claude mcp add brainpick --scope user");
+    const toml = readFileSync(registry, "utf8");
+    expect(toml).toContain(a);
+    expect(toml).toContain(b);
+    expect(toml).not.toContain(gone);
+
+    // idempotent: a second run leaves the registry alone
+    lines.length = 0;
+    expect(runRegister(null, { fromHosts: true, registryPath: registry, print, env })).toBe(0);
+    expect(readFileSync(registry, "utf8")).toBe(toml);
+    expect(lines.join("\n")).toContain("already registered");
+
+    // nothing to find is a report, not a failure
+    lines.length = 0;
+    expect(runRegister(null, { fromHosts: true, registryPath: registry, print, env: { HOME: join(dir, "empty") } })).toBe(0);
+    expect(lines.join("\n")).toContain("no per-project");
   });
 });

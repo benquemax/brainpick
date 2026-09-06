@@ -372,10 +372,23 @@ program
   .option("--alias <alias>", "the brain's address in tool payloads")
   .option("--user", "mark it as your personal brain (scope 'me')")
   .option("--remove", "drop PATH from the registry")
-  .action(async (path: string | undefined, opts: { alias?: string; user?: boolean; remove?: boolean }) => {
-    const { runRegister } = await import("./federation");
-    process.exitCode = runRegister(path ?? null, { alias: opts.alias ?? null, user: opts.user, remove: opts.remove });
-  });
+  .option("--from-hosts", "register every `mcp --root DIR` found in agent host configs (spec/75 migration)")
+  .option("--dry-run", "with --from-hosts: report, don't write")
+  .action(
+    async (
+      path: string | undefined,
+      opts: { alias?: string; user?: boolean; remove?: boolean; fromHosts?: boolean; dryRun?: boolean },
+    ) => {
+      const { runRegister } = await import("./federation");
+      process.exitCode = runRegister(path ?? null, {
+        alias: opts.alias ?? null,
+        user: opts.user,
+        remove: opts.remove,
+        fromHosts: opts.fromHosts,
+        dryRun: opts.dryRun,
+      });
+    },
+  );
 
 const token = program.command("token").description("manage bearer tokens for agents (spec/80 auth)");
 

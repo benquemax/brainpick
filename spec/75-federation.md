@@ -61,10 +61,42 @@ role = "user"             # optional — "user" marks the personal brain (scope 
 ```
 
 `brainpick register [PATH] [--alias A] [--user] [--remove]` adds (or, with
-`--remove`, drops) the bundle at PATH (default `.`); with no PATH it lists
-the registry. Writers emit keys in the order above, TOML basic strings,
-atomically (temp + rename); readers drop a malformed entry and keep the
-rest. Unknown keys survive a round trip.
+`--remove`, drops) the bundle at PATH; with no PATH it lists the registry
+(`brainpick register .` is the explicit form for the working directory).
+Writers emit keys in the order above, TOML basic strings, atomically (temp +
+rename); readers drop a malformed entry and keep the rest. Unknown keys
+survive a round trip — and every OTHER writer of this file (the daemon)
+MUST preserve keys it does not interpret and MUST re-read the file before
+writing, since `register` may have added entries meanwhile.
+
+### Migrating per-project host entries
+
+`brainpick register --from-hosts` is the one-command migration from the
+pre-federation shape (one `brainpick mcp --root DIR` MCP entry per project in
+each agent host) to one registry. It scans the known host config files under
+`$HOME`:
+
+| host | file | where the servers live |
+|---|---|---|
+| Claude Code | `~/.claude.json` | `mcpServers` and every `projects.<dir>.mcpServers` |
+| OpenCode | `~/.config/opencode/opencode.json` | `mcp` (`command` is an array) |
+| Codex | `~/.codex/config.toml` | `[mcp_servers.<name>]` (`command` + `args`) |
+| Cursor / generic | `~/.cursor/mcp.json` | `mcpServers` |
+
+A server counts when its command line (the `command` string plus `args`, or
+the `command` array) contains the token `mcp` followed somewhere by
+`--root DIR` (also `--root=DIR`). Each distinct DIR that is a bundle root is
+registered exactly as `register DIR` would (an existing entry is left
+alone); a DIR that no longer exists or is not a bundle is reported and
+skipped. The command prints what it registered, then the single replacement
+entry (`claude mcp add brainpick --scope user -- <brainpick> mcp`) and
+notes that the old per-project entries can now be removed — it never edits
+a host config itself. With `--dry-run` it only reports. Exit code 0 even
+when nothing was found (a report, not a failure).
+
+`brainpick doctor` adds a `hosts:` line: the number of per-project `--root`
+entries the same scan finds, with the `--from-hosts` arrow when there are
+any, and `○ hosts: none` otherwise.
 
 ## Aliases
 

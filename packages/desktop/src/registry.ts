@@ -33,6 +33,9 @@ export interface BrainRecord {
   port: number;
   enabled: boolean;
   host: string;
+  /** Keys the daemon does not interpret — the engine's `alias` and `role`
+   * (spec/75 federation) live in this same file and MUST survive a save. */
+  [extra: string]: unknown;
 }
 
 export interface Registry {
@@ -233,13 +236,13 @@ export interface RegistryStore {
   set(next: Registry): void;
 }
 
+/** The daemon's handle on brains.toml. `get()` reads the FILE every time — the
+ * engine's `brainpick register` writes the same file while the daemon runs, and
+ * a cached snapshot would overwrite those entries on the daemon's next save.
+ * The file is tiny; a read per control call is nothing. */
 export function createRegistryStore(env: Env = process.env): RegistryStore {
-  let current = loadRegistry(env);
   return {
-    get: () => current,
-    set: (next) => {
-      saveRegistry(next, env);
-      current = next;
-    },
+    get: () => loadRegistry(env),
+    set: (next) => saveRegistry(next, env),
   };
 }

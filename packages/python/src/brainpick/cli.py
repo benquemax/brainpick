@@ -322,7 +322,10 @@ def _cmd_register(args: argparse.Namespace) -> int:
     def shown_alias(entry: dict) -> str:  # the address the tools use — never the opaque id
         return entry.get("alias") or alias_for_repo(entry["repo"])
 
-    registry = registry_path()
+    env = getattr(args, "_env", None)
+    registry = registry_path(env)
+    if args.from_hosts:
+        return _register_from_hosts(args, registry, env, shown_alias)
     if args.path is None:
         entries = load_registry(registry)
         if not entries:
@@ -353,6 +356,49 @@ def _cmd_register(args: argparse.Namespace) -> int:
     print(f"registered {label}{' (me)' if entry.get('role') == 'user' else ''} → {root}")
     print(f"registry: {registry}")
     print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.")
+    return 0
+
+
+def _register_from_hosts(args: argparse.Namespace, registry, env, shown_alias) -> int:
+    """spec/75: the one-command migration — every `mcp --root DIR` in the agent
+    host configs becomes a registry entry; then ONE replacement entry is shown.
+    Never edits a host config."""
+    from brainpick.federation import entry_root, load_registry, register_brain, scan_hosts
+    from brainpick.scaffold import brainpick_command
+
+    found = scan_hosts(env)
+    if not found:
+        print("no per-project `brainpick mcp --root` entries found in ~/.claude.json, "
+              "opencode.json, ~/.codex/config.toml or ~/.cursor/mcp.json — nothing to migrate")
+        return 0
+    existing = {entry_root(e, env) for e in load_registry(registry)}
+    label = "dry run — would register" if args.dry_run else "registered"
+    registered = 0
+    for item in found:
+        via = ", ".join(item.hosts)
+        root = item.root.resolve()
+        if root in existing:
+            print(f"  already registered {root} ({via})")
+            continue
+        if not root.is_dir() or not any(root.rglob("*.md")):
+            print(f"  skipped {root} ({via}) — not a bundle on this machine")
+            continue
+        if args.dry_run:
+            print(f"  {label} {root} ({via})")
+            continue
+        entry = register_brain(root, registry, alias=None, user=False)
+        print(f"  {label} {shown_alias(entry)} → {root} ({via})")
+        registered += 1
+    print(f"registry: {registry}")
+    if args.dry_run:
+        print("re-run without --dry-run to write the registry.")
+        return 0
+    if registered:
+        cmd = " ".join(brainpick_command())
+        print(f"\nreplace the per-project entries with ONE user-scope entry:\n"
+              f"  claude mcp add brainpick --scope user -- {cmd} mcp\n"
+              "(the old --root entries keep working until you remove them; "
+              "brainpick register ~/brain --user marks your personal brain.)")
     return 0
 
 
@@ -397,6 +443,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_register.add_argument("--alias", default=None, help="the brain's address in tool payloads")
     p_register.add_argument("--user", action="store_true", help="mark it as your personal brain (scope 'me')")
     p_register.add_argument("--remove", action="store_true", help="drop PATH from the registry")
+    p_register.add_argument("--from-hosts", action="store_true",
+                            help="register every `mcp --root DIR` found in agent host configs (spec/75 migration)")
+    p_register.add_argument("--dry-run", action="store_true", help="with --from-hosts: report, don't write")
     p_register.set_defaults(func=_cmd_register)
 
     # The four query mirrors — the same router/state the MCP tools and REST use,
@@ -492,8 +541,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, env: dict | None = None) -> int:
     args = build_parser().parse_args(argv)
+    args._env = env  # tests pass an isolated HOME/registry; None means the process env
     return args.func(args)
 
 

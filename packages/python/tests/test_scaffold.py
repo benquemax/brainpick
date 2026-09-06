@@ -392,3 +392,21 @@ def test_mcp_snippets_teach_federation(tmp_path):
     out = mcp_snippets(tmp_path)
     assert f"brainpick register {tmp_path}" in out
     assert "--scope user" in out and "--user" in out
+
+
+def test_doctor_hosts_line_counts_per_project_entries(kotiaurinko, tmp_path, capsys):
+    import json
+
+    run_init(kotiaurinko, env={}, probes=NO_BACKENDS)
+    capsys.readouterr()
+    home = tmp_path / "home"
+    home.mkdir()
+    assert run_doctor(kotiaurinko, env={"HOME": str(home)}, probes=NO_BACKENDS) == 0
+    assert "○ hosts: none" in capsys.readouterr().out
+
+    (home / ".claude.json").write_text(json.dumps({"mcpServers": {"brainpick": {
+        "command": "brainpick", "args": ["mcp", "--root", str(kotiaurinko)]}}}), encoding="utf-8")
+    assert run_doctor(kotiaurinko, env={"HOME": str(home)}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert "hosts: 1 per-project --root entry" in out
+    assert "brainpick register --from-hosts" in out

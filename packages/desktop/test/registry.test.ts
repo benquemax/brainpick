@@ -11,6 +11,7 @@ import {
   addBrain,
   brainBundleRoot,
   clonedRepoDir,
+  createRegistryStore,
   DEMO_BRAIN,
   isLocalHost,
   isLocalRepo,
@@ -107,6 +108,46 @@ test("saveRegistry writes canonical, hand-editable TOML", () => {
   const text = readFileSync(join(configDir, "brains.toml"), "utf8");
   expect(text).toContain("[[brain]]");
   expect(text).toContain('id = "a"');
+});
+
+test("unknown keys survive load → save (the engine's alias/role, spec/75)", () => {
+  // `brainpick register` writes alias and role = "user" into the SAME file; the
+  // daemon must never strip what it does not understand.
+  const configDir = tempConfigDir();
+  const env = { BRAINPICK_DAEMON_CONFIG_DIR: configDir };
+  const text =
+    '[[brain]]\nid = "me"\nrepo = "/home/x/Brain"\nbundle_path = ""\nport = 4750\nenabled = true\n' +
+    'host = "127.0.0.1"\nalias = "brain"\nrole = "user"\n';
+  saveRegistry({ brains: [] }, env);
+  require("node:fs").writeFileSync(join(configDir, "brains.toml"), text, "utf8");
+  const loaded = loadRegistry(env);
+  expect(loaded.brains[0]).toMatchObject({ id: "me", alias: "brain", role: "user" });
+  saveRegistry(addBrain(loaded, { id: "b", repo: "/r", bundle_path: "", port: 4751, enabled: true, host: "127.0.0.1" }), env);
+  const again = readFileSync(join(configDir, "brains.toml"), "utf8");
+  expect(again).toContain('alias = "brain"');
+  expect(again).toContain('role = "user"');
+});
+
+test("the registry store sees entries another writer added since it was created", () => {
+  // The daemon holds the store for its whole life; `brainpick register` (the
+  // engine) writes the file meanwhile. A cached snapshot would overwrite those
+  // entries on the daemon's next save — so get() always reads the file.
+  const configDir = tempConfigDir();
+  const env = { BRAINPICK_DAEMON_CONFIG_DIR: configDir };
+  saveRegistry({ brains: [{ id: "a", repo: "/a", bundle_path: "", port: 4750, enabled: true, host: "127.0.0.1" }] }, env);
+  const store = createRegistryStore(env);
+  expect(store.get().brains.map((b) => b.id)).toEqual(["a"]);
+
+  // ...another process registers a brain
+  saveRegistry(
+    addBrain(loadRegistry(env), { id: "reg", repo: "/reg", bundle_path: "", port: 4751, enabled: true, host: "127.0.0.1" }),
+    env,
+  );
+  expect(store.get().brains.map((b) => b.id)).toEqual(["a", "reg"]);
+
+  // ...and the daemon's own save keeps it
+  store.set(addBrain(store.get(), { id: "c", repo: "/c", bundle_path: "", port: 4752, enabled: true, host: "127.0.0.1" }));
+  expect(loadRegistry(env).brains.map((b) => b.id)).toEqual(["a", "reg", "c"]);
 });
 
 test("loadRegistry skips a malformed entry and keeps the rest", () => {

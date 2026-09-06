@@ -4,7 +4,7 @@ about: concept
 title: Federation
 description: Many brains behind one MCP server — an agent asks once and every registered brain answers, hits merged and paths qualified as alias:path, so a project's knowledge and your personal brain are one search away.
 tags: [agents, mcp, spec]
-timestamp: 2026-09-06T14:40:00Z
+timestamp: 2026-09-06T16:00:00Z
 ---
 
 # Federation
@@ -97,3 +97,27 @@ claude mcp add brainpick --scope user -- brainpick mcp
 Whatever directory the agent starts in becomes *here*; everything registered
 rides along. See [agent integrations](agent-integrations.md) for the harnesses
 this plugs into and [the daemon](daemon.md) for the registry it shares.
+
+## Migrating from one entry per project
+
+Nothing breaks on upgrade: `brainpick mcp --root DIR` still serves exactly one
+brain with the pre-federation payloads, and every existing host entry keeps
+working. The migration is opt-in and one command:
+
+```
+brainpick register --from-hosts --dry-run   # what it would register, from your host configs
+brainpick register --from-hosts             # register them; prints the single replacement entry
+brainpick register ~/brain --user           # your personal brain, if you have one
+claude mcp add brainpick --scope user -- brainpick mcp
+```
+
+`--from-hosts` reads every `mcp --root DIR` from the agent host configs and
+registers each DIR, skipping what is already registered or no longer a bundle
+on this machine; it never edits the host configs, so remove the old per-project
+entries at your own pace. [brainpick doctor](reference/cli/doctor.md) counts
+those entries on its `hosts:` line until you do.
+
+The registry is shared with [the daemon](daemon.md): `brainpick register` and
+the daemon write the same `brains.toml`, the daemon re-reads it before every
+save and keeps the keys it does not interpret (`alias`, `role`), so a brain
+registered for agents while the daemon runs is never lost.

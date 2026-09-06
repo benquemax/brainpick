@@ -388,3 +388,22 @@ test("mcp snippets teach federation (spec/75)", () => {
   expect(text).toContain("--scope user");
   expect(text).toContain("--user");
 });
+
+test("doctor hosts line counts per-project --root entries", async () => {
+  const root = copyBundle();
+  await runInit(root, { env: {}, probes: NO_BACKENDS, print: () => undefined });
+  const home = join(tempDir(), "home");
+  mkdirSync(home);
+  const none = capture();
+  expect(await runDoctor(root, { env: { HOME: home }, probes: NO_BACKENDS, print: none.print })).toBe(0);
+  expect(none.text()).toContain("○ hosts: none");
+
+  writeFileSync(
+    join(home, ".claude.json"),
+    JSON.stringify({ mcpServers: { brainpick: { command: "brainpick", args: ["mcp", "--root", root] } } }),
+  );
+  const some = capture();
+  expect(await runDoctor(root, { env: { HOME: home }, probes: NO_BACKENDS, print: some.print })).toBe(0);
+  expect(some.text()).toContain("hosts: 1 per-project --root entry");
+  expect(some.text()).toContain("brainpick register --from-hosts");
+});

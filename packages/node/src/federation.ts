@@ -16,6 +16,7 @@ import { parse as parseToml } from "smol-toml";
 import { generateBundleId, loadConfig } from "./config";
 import { atomicWrite } from "./core/fs";
 import { findRepoRoot } from "./detect";
+import { brainpickCommand } from "./scaffold";
 import type { DocRecord } from "./compile/t1";
 import { resolveDoc, resolveDocExact, resolveDocFuzzy, ServeState } from "./serve/state";
 
@@ -540,16 +541,164 @@ export function registryExists(path: string = registryPath()): boolean {
 
 export interface RegisterRunOptions extends RegisterOptions {
   remove?: boolean;
+  /** spec/75 migration: register every `mcp --root DIR` found in agent host configs. */
+  fromHosts?: boolean;
+  /** with fromHosts: report, don't write. */
+  dryRun?: boolean;
   registryPath?: string;
+  env?: Env;
   print?: (line: string) => void;
   printErr?: (line: string) => void;
+}
+
+// -- migrating per-project host entries (spec/75 --from-hosts) ------------------------
+
+/** One `mcp --root DIR` found in agent host configs — DIR plus the hosts naming it. */
+export interface HostRoot {
+  root: string;
+  hosts: string[];
+}
+
+function hostFiles(home: string): Array<[string, string]> {
+  return [
+    ["claude-code", join(home, ".claude.json")],
+    ["opencode", join(home, ".config", "opencode", "opencode.json")],
+    ["codex", join(home, ".codex", "config.toml")],
+    ["cursor", join(home, ".cursor", "mcp.json")],
+  ];
+}
+
+/** The command line of one MCP server entry: `command` string + `args`, or a
+ * `command` array (OpenCode). Remote servers have neither and yield []. */
+function serverArgv(server: unknown): string[] {
+  if (typeof server !== "object" || server === null) return [];
+  const s = server as Record<string, unknown>;
+  if (Array.isArray(s["command"])) return s["command"].map(String);
+  const argv = typeof s["command"] === "string" ? [s["command"]] : [];
+  if (Array.isArray(s["args"])) argv.push(...s["args"].map(String));
+  return argv;
+}
+
+/** `… mcp … --root DIR` (or `--root=DIR`) → DIR; anything else → null. */
+function mcpRootOf(argv: string[]): string | null {
+  const at = argv.indexOf("mcp");
+  if (at < 0) return null;
+  const tail = argv.slice(at + 1);
+  for (let i = 0; i < tail.length; i++) {
+    const part = tail[i]!;
+    if (part === "--root" && i + 1 < tail.length) return tail[i + 1]!;
+    if (part.startsWith("--root=")) return part.slice("--root=".length);
+  }
+  return null;
+}
+
+function values(obj: unknown): unknown[] {
+  return typeof obj === "object" && obj !== null ? Object.values(obj as Record<string, unknown>) : [];
+}
+
+function serversIn(host: string, path: string): unknown[] {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return [];
+  }
+  let data: unknown;
+  try {
+    data = host === "codex" ? parseToml(text) : JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (typeof data !== "object" || data === null) return [];
+  const d = data as Record<string, unknown>;
+  if (host === "codex") return values(d["mcp_servers"]);
+  if (host === "opencode") return values(d["mcp"]);
+  const servers = values(d["mcpServers"]);
+  for (const project of values(d["projects"])) {
+    // Claude Code per-project scope
+    if (typeof project === "object" && project !== null) {
+      servers.push(...values((project as Record<string, unknown>)["mcpServers"]));
+    }
+  }
+  return servers;
+}
+
+/** Every distinct `brainpick mcp --root DIR` across the known host configs
+ * (spec/75), in discovery order. Pure read — never edits a host config. */
+export function scanHosts(env: Env = process.env): HostRoot[] {
+  const home = env["HOME"] ?? homedir();
+  const found = new Map<string, string[]>();
+  for (const [host, path] of hostFiles(home)) {
+    for (const server of serversIn(host, path)) {
+      const raw = mcpRootOf(serverArgv(server));
+      if (raw === null) continue;
+      const root = raw.startsWith("~/") ? join(homedir(), raw.slice(2)) : raw;
+      const hosts = found.get(root) ?? [];
+      if (!hosts.includes(host)) hosts.push(host);
+      found.set(root, hosts);
+    }
+  }
+  return [...found.entries()].map(([root, hosts]) => ({ root, hosts }));
+}
+
+/** spec/75: the one-command migration — every `mcp --root DIR` in the agent
+ * host configs becomes a registry entry; then ONE replacement entry is shown.
+ * Never edits a host config. */
+function registerFromHosts(registry: string, options: RegisterRunOptions, print: (line: string) => void): number {
+  const env = options.env ?? process.env;
+  const found = scanHosts(env);
+  if (found.length === 0) {
+    print(
+      "no per-project `brainpick mcp --root` entries found in ~/.claude.json, " +
+        "opencode.json, ~/.codex/config.toml or ~/.cursor/mcp.json — nothing to migrate",
+    );
+    return 0;
+  }
+  const existing = new Set(loadRegistry(registry).map((e) => entryRoot(e, env)));
+  const label = options.dryRun ? "dry run — would register" : "registered";
+  let registered = 0;
+  for (const item of found) {
+    const via = item.hosts.join(", ");
+    const root = resolve(item.root);
+    if (existing.has(root)) {
+      print(`  already registered ${root} (${via})`);
+      continue;
+    }
+    if (!isDir(root) || !hasMarkdown(root)) {
+      print(`  skipped ${root} (${via}) — not a bundle on this machine`);
+      continue;
+    }
+    if (options.dryRun) {
+      print(`  ${label} ${root} (${via})`);
+      continue;
+    }
+    const entry = registerBrain(root, registry, { alias: null, user: false });
+    print(`  ${label} ${shownAlias(entry)} → ${root} (${via})`);
+    registered += 1;
+  }
+  print(`registry: ${registry}`);
+  if (options.dryRun) {
+    print("re-run without --dry-run to write the registry.");
+    return 0;
+  }
+  if (registered > 0) {
+    const cmd = brainpickCommand().join(" ");
+    print(
+      `\nreplace the per-project entries with ONE user-scope entry:\n` +
+        `  claude mcp add brainpick --scope user -- ${cmd} mcp\n` +
+        "(the old --root entries keep working until you remove them; " +
+        "brainpick register ~/brain --user marks your personal brain.)",
+    );
+  }
+  return 0;
 }
 
 /** `brainpick register [PATH] [--alias A] [--user] [--remove]` — no PATH lists. */
 export function runRegister(path: string | null, options: RegisterRunOptions = {}): number {
   const print = options.print ?? ((line: string) => console.log(line));
   const printErr = options.printErr ?? ((line: string) => console.error(line));
-  const registry = options.registryPath ?? registryPath();
+  const registry = options.registryPath ?? registryPath(options.env);
+  if (options.fromHosts) return registerFromHosts(registry, options, print);
   if (path === null) {
     const entries = loadRegistry(registry);
     if (entries.length === 0) {

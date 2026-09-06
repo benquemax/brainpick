@@ -18,6 +18,17 @@
   asserts the exact order in both engines. Unqualified docs now resolve tier
   by tier across the set, so an exact stem in one brain beats a fuzzy title
   in another. `brainpick register` prints the effective alias, never the id.
+- Added: the migration path to federation — `brainpick register --from-hosts
+  [--dry-run]` reads every `brainpick mcp --root DIR` from the agent host
+  configs (Claude Code, OpenCode, Codex, Cursor) and registers each DIR, then
+  prints the one user-scope entry that replaces them; `brainpick doctor` gains
+  a `hosts:` line counting what is left to migrate. Both engines.
+- Fixed: the daemon cached `brains.toml` for its whole life and serialized only
+  the keys it knew — a brain registered for agents while `brainpickd` ran was
+  overwritten on the daemon's next save, and `alias`/`role` were stripped. The
+  daemon now re-reads the file on every access and round-trips unknown keys.
+- Version 0.2.0: additive — one server fronts many brains; `--root` entries,
+  tool signatures and single-brain payloads are unchanged.
 
 ## 2026-08-03
 
