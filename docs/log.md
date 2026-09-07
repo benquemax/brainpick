@@ -1,7 +1,9 @@
 # Update log
 
-## 2026-09-07 (0.3.1)
+## 2026-09-07
 
+- Released 0.3.1 (the README ships in the PyPI package; this release
+  carries the new one).
 - Added: the hypothesis — a small model with frictionless access to
   knowledge and skills that evolve in real time becomes a self-improving
   agent that beats a large model without such access, at a fraction of the
@@ -12,9 +14,6 @@
 - Changed: the brain format's read path starts with `git pull` and its write
   path ends with a push (spec/85; henxels' first skill says so since 0.13.1).
 - Docs: `docs/the-tiers.md` no longer advertises an opt-in LLM extractor.
-  The README ships in the PyPI package — this release carries the new one.
-
-## 2026-09-07
 
 - Added: the brain format (spec/85) — an opinionated OKF bundle for agent
   memory: folders as memory types, inline grounding, a data-flow architecture
