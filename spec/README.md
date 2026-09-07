@@ -43,6 +43,7 @@ is the reference implementation) and the diffs are reviewed like code.
 | `70-mcp-tools.md` | MCP tool names, schemas, budgets |
 | `75-federation.md` | many brains behind one MCP server — the registry, aliases, qualified paths, scope, merged search |
 | `80-config.md` | `brainpick.toml` |
+| `85-brain-format.md` | the brain format — `_brain/` layout, memory-type folders, `[brain]` config, `brain://` links, format versioning |
 | `90-timeline.md` | `timeline.json` (the Time Machine history dimension) |
 | `95-presentations.md` | `brain_show` — agent-driven UI presentations (live spotlight/focus/annotate) |
 | `schemas/` | JSON Schemas for normative artifacts and messages |

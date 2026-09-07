@@ -4,7 +4,7 @@ about: concept
 title: "Architecture decision records"
 description: "The founding and major decisions behind brainpick — one Architecture Decision Record per call, each with its context, alternatives and consequences, richly cross-linked."
 tags: [governance]
-timestamp: 2026-08-25T12:00:00Z
+timestamp: 2026-09-07T11:30:00Z
 ---
 
 # Architecture decision records
@@ -56,6 +56,7 @@ what it weighed against, and what the choice costs. Each page carries
 - [ADR: dogfood henxels and codumentation from day one](reference/adr/dogfood-henxels-codumentation.md)
 - [ADR: TDD and the pre-push regression armor](reference/adr/tdd-regression-armor.md)
 - [ADR: agent-agnostic, AGENTS.md is the one agent doc](reference/adr/agent-agnostic.md)
+- [ADR: the brain format is a spec, the brain template lives in henxels](reference/adr/brain-template-in-henxels.md)
 
 These records close the reference volume layer the [Reference](reference.md) hub
 opens, and they follow the [wiki conventions](wiki-conventions.md) the whole

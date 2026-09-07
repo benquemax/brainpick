@@ -89,6 +89,21 @@ export interface ModelsConfig {
   extraction: ExtractionConfig;
 }
 
+export const BRAIN_AUDIENCES = ["personal", "team", "public"] as const;
+
+/** [brain] — the bundle declares itself a brain (spec/85): an opinionated OKF
+ * bundle that is an agent's memory. Absent section → a wiki, not a brain. */
+export interface BrainConfig {
+  format: number; // brain-format version; 0 = not a brain
+  origin: string; // canonical git URL — a lookup key, never the identity ([bundle] id is)
+  audience: string; // personal | team | public — who this brain is written for
+  readers: string[]; // for team: the assumed readers
+}
+
+export function isBrain(config: Config): boolean {
+  return config.brain.format > 0;
+}
+
 export interface Config {
   spec: string;
   bundle: BundleConfig;
@@ -99,6 +114,7 @@ export interface Config {
   ui: UiConfig;
   validate: ValidateConfig;
   similarity_gaps: SimilarityGapsConfig;
+  brain: BrainConfig;
 }
 
 export function defaultConfig(): Config {
@@ -123,10 +139,11 @@ export function defaultConfig(): Config {
     ui: { max_nodes_mobile: 8000, default_mode: "cosmos" },
     validate: { henxels: "auto" },
     similarity_gaps: { threshold: 0.75, max_pairs: 50 },
+    brain: { format: 0, origin: "", audience: "personal", readers: [] },
   };
 }
 
-const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps"] as const;
+const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps", "brain"] as const;
 // [models.*] tables are nested and handled separately below.
 const KNOWN_TOP = new Set(["spec", "models", ...SECTIONS]);
 
@@ -317,6 +334,11 @@ export function loadConfig(
       `BRAINPICK_MODELS_${tableName.toUpperCase()}`,
       env,
     );
+  }
+
+  if (!(BRAIN_AUDIENCES as readonly string[]).includes(config.brain.audience)) {
+    warn(`[brain] audience '${config.brain.audience}' is not one of ${BRAIN_AUDIENCES.join(", ")} — using 'personal'`);
+    config.brain.audience = "personal";
   }
 
   return config;

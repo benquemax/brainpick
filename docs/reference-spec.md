@@ -4,7 +4,7 @@ about: concept
 title: "Spec reference"
 description: "The normative spec documents both engines honor — manifest, the three tiers, REST, live deltas, MCP, config, timeline and presentations — each summarized here."
 tags: [spec]
-timestamp: 2026-09-06T11:30:00Z
+timestamp: 2026-09-07T11:30:00Z
 ---
 
 # Spec reference
@@ -38,6 +38,7 @@ two engines, proven by conformance rather than hope.
 ## Config and history
 
 - [Spec: configuration](reference/spec/config.md)
+- [Spec: brain format](reference/spec/brain-format.md)
 - [Spec: timeline](reference/spec/timeline.md)
 
 Everything here is the machinery behind the [artifact spec](artifact-spec.md)

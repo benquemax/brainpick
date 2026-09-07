@@ -90,6 +90,24 @@ class SimilarityGapsConfig:
     max_pairs: int = 50      # cap on reported pairs, highest score first
 
 
+BRAIN_AUDIENCES = ("personal", "team", "public")
+
+
+@dataclass
+class BrainConfig:
+    """[brain] — the bundle declares itself a brain (spec/85): an opinionated OKF
+    bundle that is an agent's memory. Absent section → a wiki, not a brain."""
+
+    format: int = 0             # brain-format version; 0 = not a brain
+    origin: str = ""            # canonical git URL — a lookup key, never the identity ([bundle] id is)
+    audience: str = "personal"  # personal | team | public — who this brain is written for
+    readers: list[str] = field(default_factory=list)  # for team: the assumed readers
+
+    @property
+    def is_brain(self) -> bool:
+        return self.format > 0
+
+
 @dataclass
 class EmbeddingConfig:
     kind: str = ""      # ollama | openai-compatible | openai | fastembed | mock (test hook)
@@ -126,9 +144,10 @@ class Config:
     ui: UiConfig = field(default_factory=UiConfig)
     validate: ValidateConfig = field(default_factory=ValidateConfig)
     similarity_gaps: SimilarityGapsConfig = field(default_factory=SimilarityGapsConfig)
+    brain: BrainConfig = field(default_factory=BrainConfig)
 
 
-_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps")
+_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps", "brain")
 _MODEL_TABLES = ("embedding", "extraction")
 # [models.*] tables are nested and handled separately below.
 _KNOWN_TOP = {"spec", "models", *_SECTIONS}
@@ -316,5 +335,10 @@ def load_config(root: str | Path, env: Mapping[str, str] | None = None) -> Confi
             raw = env.get(f"BRAINPICK_MODELS_{table_name.upper()}_{key.upper()}")
             if raw is not None:
                 setattr(model, key, _from_env(getattr(model, key), raw))
+
+    if config.brain.audience not in BRAIN_AUDIENCES:
+        warnings.warn(f"[brain] audience '{config.brain.audience}' is not one of "
+                      f"{', '.join(BRAIN_AUDIENCES)} — using 'personal'", stacklevel=2)
+        config.brain.audience = "personal"
 
     return config

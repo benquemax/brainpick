@@ -47,10 +47,18 @@ max_asset_bytes = 8388608       # 8 MiB — POST /api/assets upload cap (spec/50
 
 [validate]
 henxels = "auto"                # auto | always | never
+
+[brain]                         # present only on a brain, not a plain wiki (spec/85)
+format = 0                      # brain-format version; 0 = not a brain
+origin = ""                     # canonical git URL — a lookup key, never the identity
+audience = "personal"           # personal | team | public — unknown values warn → personal
+readers = []                    # for team: the assumed readers, by handle or role
 ```
 
 Unknown keys are warnings, not errors (config written by a newer brainpick
-must not brick an older one).
+must not brick an older one). `[brain]` is defined in spec/85; all of its
+keys are optional and `BRAINPICK_BRAIN_*` env overrides apply to the
+scalars.
 
 ## `[bundle] id` — brain identity
 

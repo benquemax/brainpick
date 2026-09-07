@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
 
-import { generateBundleId, loadConfig } from "../src/config";
+import { generateBundleId, isBrain, loadConfig } from "../src/config";
 import { cleanup, tempDir } from "./helpers";
 
 afterEach(cleanup);
@@ -253,4 +253,42 @@ test("extraction model section parses without warnings", () => {
   expect(cfg.models.extraction.kind).toBe("ollama");
   expect(cfg.models.extraction.model).toBe("qwen3.5:4b");
   expect(cfg.models.extraction.api_key_env).toBe("MY_KEY");
+});
+
+// --- [brain] (spec/85) -------------------------------------------------------
+
+test("brain defaults mean not a brain", () => {
+  const { cfg } = load(tempDir());
+  expect(cfg.brain).toEqual({ format: 0, origin: "", audience: "personal", readers: [] });
+  expect(isBrain(cfg)).toBe(false);
+});
+
+test("brain section from toml", () => {
+  const { cfg } = load(
+    withToml('[brain]\nformat = 1\norigin = "git@github.com:me/x.git"\naudience = "team"\nreaders = ["tom", "agents"]\n'),
+  );
+  expect(cfg.brain).toEqual({
+    format: 1,
+    origin: "git@github.com:me/x.git",
+    audience: "team",
+    readers: ["tom", "agents"],
+  });
+  expect(isBrain(cfg)).toBe(true);
+});
+
+test("brain env overrides", () => {
+  const { cfg } = load(tempDir(), {
+    BRAINPICK_BRAIN_FORMAT: "1",
+    BRAINPICK_BRAIN_ORIGIN: "https://example.com/b.git",
+    BRAINPICK_BRAIN_AUDIENCE: "public",
+  });
+  expect(cfg.brain.format).toBe(1);
+  expect(cfg.brain.origin).toBe("https://example.com/b.git");
+  expect(cfg.brain.audience).toBe("public");
+});
+
+test("brain unknown audience warns and falls back", () => {
+  const { cfg, warnings } = load(withToml('[brain]\naudience = "everyone"\n'));
+  expect(cfg.brain.audience).toBe("personal");
+  expect(warnings.some((w) => w.includes("audience"))).toBe(true);
 });

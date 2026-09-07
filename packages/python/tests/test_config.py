@@ -282,3 +282,46 @@ def test_unknown_extraction_keys_warn_not_error(tmp_path):
     with pytest.warns(UserWarning):
         cfg = load_config(tmp_path)
     assert cfg.models.extraction.kind == ""
+
+
+# --- [brain] (spec/85) -------------------------------------------------------
+
+
+def test_brain_defaults_mean_not_a_brain(tmp_path):
+    cfg = load_config(tmp_path)
+    assert cfg.brain.format == 0
+    assert cfg.brain.origin == ""
+    assert cfg.brain.audience == "personal"
+    assert cfg.brain.readers == []
+    assert cfg.brain.is_brain is False
+
+
+def test_brain_section_from_toml(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        '[brain]\nformat = 1\norigin = "git@github.com:me/x.git"\n'
+        'audience = "team"\nreaders = ["tom", "agents"]\n', encoding="utf-8",
+    )
+    cfg = load_config(tmp_path)
+    assert cfg.brain.format == 1
+    assert cfg.brain.origin == "git@github.com:me/x.git"
+    assert cfg.brain.audience == "team"
+    assert cfg.brain.readers == ["tom", "agents"]
+    assert cfg.brain.is_brain is True
+
+
+def test_brain_env_overrides(tmp_path):
+    cfg = load_config(tmp_path, env={
+        "BRAINPICK_BRAIN_FORMAT": "1",
+        "BRAINPICK_BRAIN_ORIGIN": "https://example.com/b.git",
+        "BRAINPICK_BRAIN_AUDIENCE": "public",
+    })
+    assert cfg.brain.format == 1
+    assert cfg.brain.origin == "https://example.com/b.git"
+    assert cfg.brain.audience == "public"
+
+
+def test_brain_unknown_audience_warns_and_falls_back(tmp_path):
+    (tmp_path / "brainpick.toml").write_text('[brain]\naudience = "everyone"\n', encoding="utf-8")
+    with pytest.warns(UserWarning, match="audience"):
+        cfg = load_config(tmp_path)
+    assert cfg.brain.audience == "personal"
