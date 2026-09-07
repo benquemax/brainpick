@@ -53,9 +53,24 @@ def test_integrate_opencode_writes_skill_under_its_convention(repo, capsys):
     assert "opencode" in capsys.readouterr().out.lower()
 
 
+def test_integrate_dsh_writes_skill_and_prints_cordis_insert(repo, capsys):
+    root, bundle = repo
+    assert run_integrate("dsh", bundle) == 0
+    skill = root / SKILL_DESTINATIONS["dsh"]
+    assert skill.read_text(encoding="utf-8") == CANONICAL.read_text(encoding="utf-8")
+    out = capsys.readouterr().out
+    assert "@deepseek-ai/dsh-mcp-client" in out       # the mcp-client bundle
+    assert "cordis.patch.yml" in out                   # where the row goes
+    assert "serverName: brainpick" in out
+    assert str(bundle) in out                          # resolved absolute root, not a stale path
+    assert "claude mcp add" not in out                 # dsh has no such command
+
+
 def test_integrate_dry_run_is_inert(repo, capsys):
     root, bundle = repo
     assert run_integrate("claude-code", bundle, dry_run=True) == 0
+    assert not (root / ".claude").exists()
+    assert run_integrate("dsh", bundle, dry_run=True) == 0
     assert not (root / ".claude").exists()
     assert run_integrate("agents-md", bundle, dry_run=True) == 0
     assert not (root / "AGENTS.md").exists()

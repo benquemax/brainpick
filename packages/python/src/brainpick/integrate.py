@@ -9,6 +9,9 @@ Three targets, one family voice (mirrors henxels' `integrate`):
   opencode.json MCP snippet.
 - `agents-md`    — ensure an AGENTS.md exists (the one place integrate may create a
   file), install the brain-report markers if absent, and compile so the block fills.
+- `dsh`          — write the Agent Skill (the `.claude/skills` convention dsh shares),
+  then PRINT the `cordis.patch.yml` insert that mounts brainpick through
+  `@deepseek-ai/dsh-mcp-client` (dsh has no `claude mcp add`; a server is a config row).
 
 The shipped Agent Skill (integrations/skill/SKILL.md, canonical) rides inside the
 package; the parity test asserts the shipped copy is byte-identical to the canonical.
@@ -22,15 +25,17 @@ from pathlib import Path
 from brainpick.compile.pipeline import run_compile
 from brainpick.compile.t1 import REPORT_BEGIN_PREFIX, REPORT_END_MARKER
 from brainpick.detect import find_repo_root
-from brainpick.scaffold import _Voice, mcp_snippets
+from brainpick.scaffold import _Voice, dsh_snippet, mcp_snippets
 
-TARGETS = ("claude-code", "opencode", "agents-md")
+TARGETS = ("claude-code", "opencode", "agents-md", "dsh")
 HENXELS_BEGIN = "<!-- henxels:begin -->"
 
 # harness -> where its Agent Skill lands, relative to the repo root
 SKILL_DESTINATIONS = {
     "claude-code": Path(".claude") / "skills" / "brainpick" / "SKILL.md",
     "opencode": Path(".opencode") / "skills" / "brainpick" / "SKILL.md",
+    # dsh loads Agent Skills from the same .claude/skills convention as Claude Code.
+    "dsh": Path(".claude") / "skills" / "brainpick" / "SKILL.md",
 }
 
 _MINIMAL_AGENTS = "# AGENTS.md\n\nWorking notes for agents in this repository.\n"
@@ -128,6 +133,18 @@ def _integrate_opencode(voice: _Voice, root: Path, repo: Path, dry_run: bool) ->
     return 0
 
 
+def _integrate_dsh(voice: _Voice, root: Path, repo: Path, dry_run: bool) -> int:
+    dest, existed = _write_skill(repo, "dsh", dry_run)
+    verb = "would write" if dry_run else ("updated" if existed else "wrote")
+    voice.line("✓", f"skill: {verb} {dest}")
+    if dry_run:
+        voice.step("• print the cordis.patch.yml insert for @deepseek-ai/dsh-mcp-client")
+        return 0
+    voice.raw()
+    voice.raw(dsh_snippet(root))
+    return 0
+
+
 def _integrate_agents_md(voice: _Voice, root: Path, repo: Path, dry_run: bool) -> int:
     agents = repo / "AGENTS.md"
     existed = agents.is_file()
@@ -177,4 +194,6 @@ def run_integrate(target: str, root: str | Path, dry_run: bool = False) -> int:
         return _integrate_claude_code(voice, root, repo, dry_run)
     if target == "opencode":
         return _integrate_opencode(voice, root, repo, dry_run)
+    if target == "dsh":
+        return _integrate_dsh(voice, root, repo, dry_run)
     return _integrate_agents_md(voice, root, repo, dry_run)

@@ -500,7 +500,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_integrate = sub.add_parser("integrate", help="install brainpick into an agent harness (skill, MCP, report)")
     p_integrate.add_argument("target", metavar="<target>",
-                             help="the harness to wire up: claude-code | opencode | agents-md")
+                             help="the harness to wire up: claude-code | opencode | agents-md | dsh")
     p_integrate.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_integrate.add_argument("--dry-run", action="store_true",
                              help="print what integrate would do without writing anything")

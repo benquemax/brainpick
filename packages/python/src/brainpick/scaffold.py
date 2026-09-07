@@ -212,6 +212,38 @@ def mcp_snippets(bundle: Path) -> str:
     return "\n".join(parts)
 
 
+def dsh_snippet(bundle: Path) -> str:
+    """The DeepSeek Harness (dsh) wiring: an insert entry for the web profile's
+    `cordis.patch.yml` that mounts brainpick through `@deepseek-ai/dsh-mcp-client`
+    as a stdio server. dsh has no `claude mcp add` equivalent — a server is a
+    config row, so we print the exact row with the resolved absolute root."""
+    command = brainpick_command() + ["mcp", "--root", str(bundle)]
+    entry = (
+        "    - id: mcp-brainpick\n"
+        "      name: '@deepseek-ai/dsh-mcp-client'\n"
+        "      config:\n"
+        "        serverName: brainpick\n"
+        "        transport: stdio\n"
+        f"        command: {command[0]}\n"
+        f"        args: {json.dumps(command[1:])}\n"
+        "        failOnStartupError: false"
+    )
+    parts = [
+        "Wire brainpick into DeepSeek Harness (dsh):",
+        "",
+        "  Add this insert entry to your web profile's cordis.patch.yml",
+        "  (~/.dsh/profiles/web/cordis.patch.yml), then restart the service",
+        "  (e.g. systemctl --user restart dsh.service) and hard-refresh:",
+        "",
+        "  - insert:",
+        entry,
+        "",
+        "  Tools then surface as mcp__brainpick__brain_* — brain_overview first,",
+        "  then brain_search / brain_read / brain_neighbors.",
+    ]
+    return "\n".join(parts)
+
+
 def henxels_fragment(contract: Path, bundle: Path) -> str:
     """The freshness gate, paste-able into an existing contract — never applied for you."""
     root = os.path.relpath(bundle, contract.parent)
