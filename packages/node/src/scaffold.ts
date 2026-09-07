@@ -15,7 +15,7 @@ import { parse as parseToml } from "smol-toml";
 
 import { AUTH_FILE, authActive, ensureGitignored, loadAuth } from "./auth";
 import { checkFresh, runCompile } from "./compile/pipeline";
-import { CONFIG_FILE, generateBundleId, LOCAL_CONFIG_FILE, loadConfig } from "./config";
+import { CONFIG_FILE, generateBundleId, isBrain, LOCAL_CONFIG_FILE, loadConfig } from "./config";
 import {
   detectBundle,
   detectHenxels,
@@ -284,9 +284,13 @@ function handOffToHenxels(voice: Voice, root: string, bundle: BundleInfo): numbe
         "carry OKF `type:` frontmatter (3+ needed, or an index.md with okf_version)",
     );
   }
-  voice.step("brainpick never scaffolds wikis — its sibling henxels owns the template:");
+  voice.step("brainpick never scaffolds wikis — its sibling henxels owns the templates:");
   voice.step("  uv tool install henxels");
-  voice.step(`  cd ${root} && henxels init --template okf-llm-wiki --wiki-dir .`);
+  voice.step(`  cd ${root} && henxels init --template okf-llm-wiki --wiki-dir .   (a wiki)`);
+  voice.step(
+    `  cd ${root} && henxels init --template brainpick-brain            ` +
+      "(a brain — your agent's memory, spec/85)",
+  );
   voice.step(`then come back: brainpick init --root ${root}`);
   return 1;
 }
@@ -358,6 +362,18 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
   }
   root = resolve(root);
 
+  // 0 — the config may already exist and point below itself ([bundle] root, spec/80):
+  // a brain scaffolded by henxels keeps brainpick.toml at the repo root and the
+  // bundle in _brain/. Config is written where it was read; artifacts land in the bundle.
+  const configRoot = root;
+  const config = loadConfig(configRoot, env, () => undefined); // doctor reports config problems
+  root = resolve(configRoot, config.bundle.root);
+  if (!isDirectory(root)) {
+    voice.line("✗", `[bundle] root points at ${root}, which is not a directory`);
+    voice.arrow(`create it or fix [bundle] root in ${join(configRoot, CONFIG_FILE)}`);
+    return 1;
+  }
+
   // 1 — the bundle
   const bundle = detectBundle(root);
   if (bundle.kind === "none") return handOffToHenxels(voice, root, bundle);
@@ -365,6 +381,13 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
     voice.line("✓", `bundle: OKF at ${root} — index.md declares okf_version (${bundle.docs} docs)`);
   } else {
     voice.line("✓", `bundle: ${bundle.typed} typed concept docs at ${root} (density scan)`);
+  }
+  if (isBrain(config)) {
+    voice.line(
+      "✓",
+      `brain: format ${config.brain.format} · audience ${config.brain.audience}` +
+        " — read skills/ first, then knowledge/, then journal/ (spec/85)",
+    );
   }
 
   // 2 — link style (informational in 0.1)
@@ -415,7 +438,7 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
   // 5 — config (written once; an existing config is the user's, not ours).
   // The shared file carries bundle policy; detected endpoints are machine-local
   // and go to brainpick.local.toml (spec/80 layering).
-  const configPath = join(root, CONFIG_FILE);
+  const configPath = join(configRoot, CONFIG_FILE);
   if (fileExists(configPath)) {
     voice.line("○", `config: ${CONFIG_FILE} exists — left untouched`);
     if (existingBundleId(configPath) === null) {
@@ -429,7 +452,7 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
     voice.line("✓", `config: ${CONFIG_FILE} written`);
   }
   if (backend !== null) {
-    const localPath = join(root, LOCAL_CONFIG_FILE);
+    const localPath = join(configRoot, LOCAL_CONFIG_FILE);
     if (fileExists(localPath)) {
       voice.line("○", `config: ${LOCAL_CONFIG_FILE} exists — left untouched`);
       voice.step(
@@ -459,8 +482,8 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
     voice.line("✓", `gitignore: ${AUTH_FILE} added to ${authIgnored} (secrets stay off the record)`);
   }
 
-  // 6 — compile T1
-  const result = await runCompile(root);
+  // 6 — compile T1 (the bundle, with the config read from where it lives)
+  const result = await runCompile(root, false, null, loadConfig(configRoot, env));
   const stats = result.stats;
   voice.line(
     "✓",

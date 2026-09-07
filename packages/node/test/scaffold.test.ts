@@ -252,6 +252,58 @@ test("init prints the henxels freshness gate", async () => {
   expect(readFileSync(join(root, "henxels.yaml"), "utf8")).toBe("henxels: []\n");
 });
 
+// -- init over a brain (spec/85: config at the repo root, bundle in _brain/) --------
+
+/** What `henxels init --template brainpick-brain` leaves behind, minimally. */
+function brainRepo(): string {
+  const repo = join(tempDir(), "repo");
+  typedBundle(join(repo, "_brain"));
+  writeFileSync(join(repo, "_brain", "index.md"), '---\nokf_version: "0.1"\n---\n\n# Brain\n', "utf8");
+  writeFileSync(
+    join(repo, "brainpick.toml"),
+    'spec = "0.1"\n\n[bundle]\nroot = "_brain"\n\n[index]\nmode = "section"\n\n[brain]\nformat = 1\naudience = "team"\n',
+    "utf8",
+  );
+  return repo;
+}
+
+test("init honours [bundle] root from a repo-root config", async () => {
+  const repo = brainRepo();
+  const out = capture();
+  expect(await runInit(repo, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
+  const text = out.text();
+  expect(text).toContain(`bundle: OKF at ${join(repo, "_brain")}`);
+  expect(existsSync(join(repo, "_brain", ".brainpick", "manifest.json"))).toBe(true);
+  expect(existsSync(join(repo, ".brainpick"))).toBe(false);
+  expect(text).toContain("left untouched"); // the template's config is the user's
+  expect(text).toContain("no [bundle] id yet"); // identity is minted here, suggested not written
+});
+
+test("init names the brain it found", async () => {
+  const repo = brainRepo();
+  const out = capture();
+  expect(await runInit(repo, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
+  const text = out.text();
+  expect(text).toContain("brain: format 1 · audience team");
+  expect(text).toContain("skills/"); // the read order is taught at the door
+});
+
+test("init is silent about brains for a plain wiki", async () => {
+  const root = copyBundle();
+  const out = capture();
+  expect(await runInit(root, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(0);
+  expect(out.text()).not.toContain("brain: format");
+});
+
+test("init handoff offers the brain template", async () => {
+  const empty = join(tempDir(), "tyhja");
+  mkdirSync(empty);
+  const out = capture();
+  expect(await runInit(empty, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(1);
+  expect(out.text()).toContain("henxels init --template okf-llm-wiki");
+  expect(out.text()).toContain("henxels init --template brainpick-brain");
+});
+
 // -- doctor ------------------------------------------------------------------------
 
 test("doctor happy table exits zero", async () => {

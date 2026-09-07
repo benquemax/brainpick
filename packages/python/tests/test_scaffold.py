@@ -410,3 +410,52 @@ def test_doctor_hosts_line_counts_per_project_entries(kotiaurinko, tmp_path, cap
     out = capsys.readouterr().out
     assert "hosts: 1 per-project --root entry" in out
     assert "brainpick register --from-hosts" in out
+
+
+# -- init over a brain (spec/85: config at the repo root, bundle in _brain/) --------
+
+def brain_repo(tmp_path: Path) -> Path:
+    """What `henxels init --template brainpick-brain` leaves behind, minimally."""
+    repo = tmp_path / "repo"
+    typed_bundle(repo / "_brain")
+    (repo / "_brain" / "index.md").write_text(
+        '---\nokf_version: "0.1"\n---\n\n# Brain\n', encoding="utf-8"
+    )
+    (repo / "brainpick.toml").write_text(
+        'spec = "0.1"\n\n[bundle]\nroot = "_brain"\n\n[index]\nmode = "section"\n\n'
+        "[brain]\nformat = 1\naudience = \"team\"\n",
+        encoding="utf-8",
+    )
+    return repo
+
+
+def test_init_honours_bundle_root_from_a_repo_root_config(tmp_path, capsys):
+    repo = brain_repo(tmp_path)
+    assert run_init(repo, env={}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert f"bundle: OKF at {repo / '_brain'}" in out
+    assert (repo / "_brain" / ".brainpick" / "manifest.json").is_file()
+    assert not (repo / ".brainpick").exists()
+    assert "left untouched" in out  # the template's config is the user's
+    assert "no [bundle] id yet" in out  # identity is minted here, suggested not written
+    assert f"--root {repo / '_brain'}" not in out.split("Hand these keys")[0]
+
+
+def test_init_names_the_brain_it_found(tmp_path, capsys):
+    repo = brain_repo(tmp_path)
+    assert run_init(repo, env={}, probes=NO_BACKENDS) == 0
+    out = capsys.readouterr().out
+    assert "brain: format 1 · audience team" in out
+    assert "skills/" in out  # the read order is taught at the door
+
+
+def test_init_is_silent_about_brains_for_a_plain_wiki(kotiaurinko, capsys):
+    assert run_init(kotiaurinko, env={}, probes=NO_BACKENDS) == 0
+    assert "brain: format" not in capsys.readouterr().out
+
+
+def test_init_handoff_offers_the_brain_template(tmp_path, capsys):
+    assert run_init(tmp_path, env={}, probes=NO_BACKENDS) == 1
+    out = capsys.readouterr().out
+    assert "henxels init --template okf-llm-wiki" in out
+    assert "henxels init --template brainpick-brain" in out

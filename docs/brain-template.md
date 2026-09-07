@@ -4,7 +4,7 @@ about: thing
 title: "The brain template"
 description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the sixteen rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
 tags: [brain-format, henxels]
-timestamp: 2026-09-07T11:30:00Z
+timestamp: 2026-09-07T14:00:00Z
 ---
 
 # The brain template
@@ -106,7 +106,9 @@ the digest shows the agent.
 Two rules are principles rather than checks and live in the first skill:
 [Grounding](grounding.md) (every claim says where it came from) and
 [Brain subsidiarity](brain-subsidiarity.md) (the closest brain wins, update
-both, duplicate or point).
+both, duplicate or point). Several brains reach one agent through
+[Federation](federation.md) — the registry the `[brain] audience` and
+`brain://` links assume.
 
 ## Fixed for life versus cheap to iterate
 
@@ -187,6 +189,10 @@ summaries.
 ## Status
 
 The format is specified ([Spec: brain format](reference/spec/brain-format.md))
-and both engines read `[brain]`. The template itself lands in henxels next,
-followed by `brainpick init` recognising `_brain/`, the overview ordering,
-`skilltree.md` generation and the Agent Skill export.
+and both engines read `[brain]`. The template ships in henxels
+(`henxels init --template brainpick-brain`, documented in
+[henxels' brainpick brain starter](https://github.com/benquemax/henxels/blob/main/docs/brainpick-brain-starter.md)),
+and [brainpick init](reference/cli/init.md) recognises the result in place —
+config at the repo root, bundle in `_brain/` — in both engines. Still to come:
+the overview listing `skills/` first, `skilltree.md` generation, the Agent
+Skill export and `brain://` link extraction.

@@ -22,7 +22,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
     import tomli as tomllib
 
 from brainpick.compile.pipeline import check_fresh, run_compile
-from brainpick.config import LOCAL_CONFIG_FILE, config_layers, generate_bundle_id, resolve_bundle
+from brainpick.config import (
+    CONFIG_FILE,
+    LOCAL_CONFIG_FILE,
+    config_layers,
+    generate_bundle_id,
+    resolve_bundle,
+)
 from brainpick.vectorstore import lancedb_available
 from brainpick.detect import (
     Backend,
@@ -254,9 +260,11 @@ def _hand_off_to_henxels(voice: _Voice, root: Path, bundle: BundleInfo) -> int:
     else:
         voice.line("✗", f"no bundle at {root} — {bundle.docs} .md files but only {bundle.typed} "
                         "carry OKF `type:` frontmatter (3+ needed, or an index.md with okf_version)")
-    voice.step("brainpick never scaffolds wikis — its sibling henxels owns the template:")
+    voice.step("brainpick never scaffolds wikis — its sibling henxels owns the templates:")
     voice.step("  uv tool install henxels")
-    voice.step(f"  cd {root} && henxels init --template okf-llm-wiki --wiki-dir .")
+    voice.step(f"  cd {root} && henxels init --template okf-llm-wiki --wiki-dir .   (a wiki)")
+    voice.step(f"  cd {root} && henxels init --template brainpick-brain            "
+               "(a brain — your agent's memory, spec/85)")
     voice.step(f"then come back: brainpick init --root {root}")
     return 1
 
@@ -311,6 +319,18 @@ def run_init(
         return 1
     root = root.resolve()
 
+    # 0 — the config may already exist and point below itself ([bundle] root, spec/80):
+    # a brain scaffolded by henxels keeps brainpick.toml at the repo root and the
+    # bundle in _brain/. Config is written where it was read; artifacts land in the bundle.
+    config_root = root
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # doctor reports config problems; init just proceeds
+        root, config = resolve_bundle(config_root)
+    if not root.is_dir():
+        voice.line("✗", f"[bundle] root points at {root}, which is not a directory")
+        voice.arrow(f"create it or fix [bundle] root in {config_root / CONFIG_FILE}")
+        return 1
+
     # 1 — the bundle
     bundle = detect_bundle(root)
     if bundle.kind == "none":
@@ -319,6 +339,9 @@ def run_init(
         voice.line("✓", f"bundle: OKF at {root} — index.md declares okf_version ({bundle.docs} docs)")
     else:
         voice.line("✓", f"bundle: {bundle.typed} typed concept docs at {root} (density scan)")
+    if config.brain.is_brain:
+        voice.line("✓", f"brain: format {config.brain.format} · audience {config.brain.audience}"
+                        " — read skills/ first, then knowledge/, then journal/ (spec/85)")
 
     # 2 — link style (informational in 0.1)
     style = detect_link_style(root)
@@ -360,7 +383,7 @@ def run_init(
 
     # 5 — config (written once; an existing config is the user's, not ours).
     # Shared policy and machine-local endpoints are separate layers (spec/80).
-    config_path = root / "brainpick.toml"
+    config_path = config_root / CONFIG_FILE
     if config_path.exists():
         voice.line("○", "config: brainpick.toml exists — left untouched")
         if _existing_bundle_id(config_path) is None:
@@ -373,7 +396,7 @@ def run_init(
         voice.line("✓", "config: brainpick.toml written (shared policy — endpoints stay local)")
 
     if backend is not None:
-        local_path = root / "brainpick.local.toml"
+        local_path = config_root / LOCAL_CONFIG_FILE
         if local_path.exists():
             voice.line("○", "config: brainpick.local.toml exists — left untouched")
             voice.step(f'pin the detected backend yourself: [models.embedding] '
@@ -397,8 +420,8 @@ def run_init(
     if ignored is not None:
         voice.line("✓", f"gitignore: {AUTH_FILE} added to {ignored} (secrets stay off the record)")
 
-    # 6 — compile T1
-    result = run_compile(root)
+    # 6 — compile T1 (from where the config lives, so [bundle] root applies)
+    result = run_compile(config_root)
     stats = result.stats
     voice.line("✓", f"compiled: {stats['docs']} docs · {stats['edges']} links · "
                     f"{stats['orphans']} orphans — your brain, compiled")
