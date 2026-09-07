@@ -38,7 +38,9 @@ GraphRAG): built from scratch by a model, expensive enough to run only once
 in a while, and so outdated from day one — and because the model re-derives
 every association from zero, the graph never *credits* what the brain
 already knew; nothing an agent learns today makes tomorrow's graph better.
-Brainpick tried LightRAG as its T3 and removed it for exactly that reason
+Brainpick ran LightRAG early on and removed it for exactly that reason —
+there is no LLM extractor in the mix any more, and the graph is derived
+algorithmically in both engines
 ([ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/similarity-gap-detector.md)).
 A graph that is cheap enough to follow every commit is one the brain can
 evolve *with*; a graph that is too expensive to follow the brain is a
@@ -82,9 +84,16 @@ export const validate = async () => {
   if (!/LightRAG/.test(adr)) {
     throw new Error('The sub-hypothesis cites the similarity-gap-detector ADR for dropping LightRAG, but the ADR no longer mentions it');
   }
-  const tiers = fs.readFileSync(path.join(root, 'docs', 'the-tiers.md'), 'utf-8');
-  if (!/derived algorithmically from\s+links and tags by default/.test(tiers)) {
-    throw new Error('The sub-hypothesis claims the graph is algorithmic; docs/the-tiers.md no longer says T3 is derived algorithmically by default');
+  // "No LLM extractor in the mix": neither engine may depend on lightrag, and
+  // the config must still treat the removed value as a fallback, not a backend.
+  const pyproject = fs.readFileSync(path.join(root, 'packages', 'python', 'pyproject.toml'), 'utf-8');
+  const nodePkg = fs.readFileSync(path.join(root, 'packages', 'node', 'package.json'), 'utf-8');
+  if (/lightrag/i.test(pyproject) || /lightrag/i.test(nodePkg)) {
+    throw new Error('The sub-hypothesis says there is no LLM extractor in the mix, but an engine depends on lightrag');
+  }
+  const pyConfig = fs.readFileSync(path.join(root, 'packages', 'python', 'src', 'brainpick', 'config.py'), 'utf-8');
+  if (!/removed "lightrag"/.test(pyConfig)) {
+    throw new Error('config.py no longer documents "lightrag" as a removed value that falls back to algorithmic');
   }
 
   // The brain format it points at is a real spec section with a data flow.

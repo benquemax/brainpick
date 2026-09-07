@@ -4,7 +4,7 @@ about: concept
 title: The hypothesis
 description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; the sub-hypothesis that a knowledge graph only contributes to evolution if it is rebuilt on every commit, unlike LLM-extracted graphs such as LightRAG; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
 tags: [brain, design, vision]
-timestamp: 2026-09-07T19:00:00Z
+timestamp: 2026-09-07T19:30:00Z
 ---
 
 # The hypothesis
@@ -86,15 +86,19 @@ in a while, so the graph is outdated from day one. Worse, because the model
 re-derives every association from zero, the graph never *credits* what the
 brain already knew: nothing an agent learns today makes tomorrow's graph
 better, so such a graph is a snapshot of the brain, not a part of it.
-Brainpick ran LightRAG as its T3 and removed it for exactly this reason
+Brainpick ran LightRAG early on and removed it for exactly this reason
 ([ADR: the similarity gap-detector](reference/adr/similarity-gap-detector.md),
-[ADR: the KGBackend adapter](reference/adr/kgbackend-adapter.md)).
+[ADR: the KGBackend adapter](reference/adr/kgbackend-adapter.md)). There is
+no LLM extractor in the mix any more: T3 is derived algorithmically in both
+engines, and `modules.graph.backend = "lightrag"` is only recognised as a
+removed value that falls back to algorithmic
+([modules.graph](reference/config/modules-graph.md)).
 
 This is, knowingly, reinventing the knowledge graph — on the premise that
 the associations belong in the files, where agents can improve them under
-the contract, and the graph is what the files say today. An LLM is welcome
-as an opt-in *extractor* that writes its findings back into the files; it
-is never the owner of the graph.
+the contract, and the graph is what the files say today. Where a model
+helps, it helps as an agent that *writes links into the files* through the
+contract — never as the owner of a graph beside them.
 
 ## What would falsify it
 

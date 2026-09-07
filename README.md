@@ -67,7 +67,9 @@ GraphRAG): built from scratch by a model, expensive enough to run only once
 in a while, and so outdated from day one — and because the model re-derives
 every association from zero, the graph never *credits* what the brain
 already knew; nothing an agent learns today makes tomorrow's graph better.
-Brainpick tried LightRAG as its T3 and removed it for exactly that reason
+Brainpick ran LightRAG early on and removed it for exactly that reason —
+there is no LLM extractor in the mix any more, and the graph is derived
+algorithmically in both engines
 ([ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/similarity-gap-detector.md)).
 A graph that is cheap enough to follow every commit is one the brain can
 evolve *with*; a graph that is too expensive to follow the brain is a

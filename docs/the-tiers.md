@@ -4,7 +4,7 @@ about: concept
 title: The tiers
 description: Brainpick's four-tier retrieval ladder, where every tier is optional except the files and each degrades gracefully to the one below.
 tags: [tier]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-07T19:30:00Z
 ---
 
 # The tiers
@@ -19,7 +19,7 @@ breaking anything below it.
 | T0 | grep/glob over the files | nothing |
 | T1 | generated `index.md`, link graph, backlinks, tags | nothing (deterministic) |
 | T2 | vector search over chunks | an embedding model |
-| T3 | entity/relation graph | nothing; an LLM only for opt-in extraction |
+| T3 | entity/relation graph | nothing (algorithmic) |
 
 **T0** is not a feature, it is a guarantee: a brain is plain markdown, so any
 agent with file tools already has a working query strategy.
@@ -38,9 +38,10 @@ retrieval fuses keyword and vector hits (see
 
 **T3** adds an entity/relation layer via the
 [knowledge graph tier](knowledge-graph-tier.md): derived algorithmically from
-links and tags by default (no model needed), with LLM extraction available
-as an opt-in backend. It stays off only when explicitly configured that way;
-graph-shaped queries then fall back to the T1 link graph.
+links and tags — no model needed, in both engines. (LLM extraction was tried
+and removed; see [The hypothesis](the-hypothesis.md) for why an expensive
+graph cannot follow the brain.) It stays off only when explicitly configured
+that way; graph-shaped queries then fall back to the T1 link graph.
 
 The ladder is also the failure model: a missing model is a downgrade, not an
 error. Every surface — MCP, CLI, the [holographic brain](holographic-brain.md)
