@@ -1,5 +1,7 @@
 {{ intro }}
 
+{{ hypothesis }}
+
 {{ principles }}
 
 {{ theStack }}

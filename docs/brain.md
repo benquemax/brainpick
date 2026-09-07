@@ -4,7 +4,7 @@ about: concept
 title: "The brain"
 description: "A brain is a wiki meant to be an agent's memory — an OKF bundle with memory-type folders, a declared data flow architecture, inline grounding, an audience and an identity other brains can address; what makes it more than a wiki, and what brainpick does with the difference."
 tags: [brain-format]
-timestamp: 2026-09-07T17:00:00Z
+timestamp: 2026-09-07T18:00:00Z
 ---
 
 # The brain
@@ -15,6 +15,10 @@ bundle — the engine does not care — but a brain is the shape brainpick
 *recommends*, and the shape the henxels `brainpick-brain` starter template
 produces (see [The brain template](brain-template.md)). The contract is
 [Spec: brain format](reference/spec/brain-format.md); this page is the why.
+
+A brain is also the load-bearing part of [The hypothesis](the-hypothesis.md):
+knowledge and skills outside the model, evolving in real time, so the model
+can be small.
 
 ## What makes it a brain
 

@@ -52,6 +52,23 @@ brainpick` gets a native Node server and compiler with zero Python
 required — same artifacts, same web UI, same MCP tools, every tier
 compiled natively in both.
 
+## The hypothesis
+
+Give an agent powered by a small model frictionless access to knowledge
+and skills that evolve in real time, and you get a self-improving agent
+that is not only as capable as one on a large, powerful LLM but better —
+if the large LLM does not have the same frictionless, evolving access.
+Brainpick therefore aims at an architecture in which the agent has
+*sufficient* intelligence inside the LLM and the skills plus knowledge
+are not baked into it. That decreases the need for huge amounts of VRAM
+and compute, has the potential for a better and more up-to-date world
+understanding than big LLMs, and produces more intelligence per kWh.
+The brain format's data flow — journals distil into knowledge into
+skills, every write refereed, every claim grounded — is how the outside
+memory earns the trust a model would otherwise need weights for. The bet
+is testable, and testing it (same tasks, small model with a brain against
+large model without, in outcomes and watt-hours) is on the roadmap.
+
 ## Who it is for
 
 Small local models are first-class citizens: the target profile is a

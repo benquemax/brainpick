@@ -30,6 +30,43 @@ It is a window into the brain, never a dependency of it — see the
 docs compiled and served by brainpick itself.
 
 
+## The hypothesis
+
+A small model with **frictionless access to knowledge and skills that
+evolve in real time** becomes a self-improving agent — and not merely as
+capable as an agent on a large frontier model, but *more* capable than one
+whose large model lacks that access. The large model's knowledge is frozen
+at training time; the brain's is corrected the moment an agent notices it
+was wrong.
+
+Brainpick is built on that bet. Its target architecture puts *just enough*
+intelligence inside the model — reading, reasoning, tool use — and keeps
+knowledge and skills **outside** it, in a brain that any agent can read,
+ground, and improve as it works:
+
+- **Less VRAM and compute.** Skills and facts are not baked into weights, so
+  the model that runs them can be a 27B on your own machine (principle 1),
+  not a data-center model. Learning something new is a commit, not a
+  fine-tune.
+- **A better, more current world model.** A brain is corrected in real
+  time by every agent that uses it, grounded to its sources, and refereed
+  on every write — where a large model's understanding is as old as its
+  training cut-off and as opaque as its weights.
+- **More intelligence per kWh.** The same task done by a small model over a
+  living brain costs a fraction of the energy of a frontier model rediscovering
+  the answer from scratch — and the second time, the answer is a skill.
+
+Everything else in this README is engineering in service of that bet: the
+[brain format](https://github.com/benquemax/brainpick/blob/main/spec/85-brain-format.md)
+turns notes into memory with a data flow (journals → knowledge → skills),
+[henxels](https://github.com/benquemax/henxels) keeps every write true so the
+brain can be trusted, and the tiers make retrieval cheap enough that a small
+model never has to *remember* — only to *look*. The hypothesis is testable and
+we intend to test it: the same tasks, a small model with a brain against a
+large one without, measured in outcomes and in watt-hours.
+
+
+
 ## Principles
 
 1. **Small models are first-class citizens.** If a 27B can't drive it, it
