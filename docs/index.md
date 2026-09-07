@@ -32,7 +32,7 @@ is the target's title.
 * [Static snapshot](static-snapshot.md) - a brain baked into a fully static site — the GitHub Pages demo path, searchable and time-travelling with no engine behind it
 * [Shareable views](shareable-views.md) - the address bar as the view: query-param deep links that replicate exactly what the sender sees, with a share button choosing what the link prescribes
 * [Onboarding](onboarding.md) - one command from zero to a living brain
-* [The hypothesis](the-hypothesis.md) - the bet: a small model with frictionless, evolving knowledge and skills beats a large model without — less VRAM, more current, more intelligence per kWh
+* [The hypothesis](the-hypothesis.md) - the bet: a small model with frictionless, evolving knowledge and skills beats a large model without — less VRAM, more current, more intelligence per kWh; the graph regenerated from the repository, never accumulated
 * [The brain](brain.md) - a wiki meant to be an agent's memory: memory-type folders, a data flow, grounding, an audience and an identity
 * [Data flow architecture](data-flow-architecture.md) - episodes distil into knowledge into skills; retrieval runs the mirror path; pointers upward, never copies
 * [Grounding](grounding.md) - every claim says where it came from, inline and Wikipedia-style, no citation template
