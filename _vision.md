@@ -69,13 +69,17 @@ memory earns the trust a model would otherwise need weights for. The bet
 is testable, and testing it (same tasks, small model with a brain against
 large model without, in outcomes and watt-hours) is on the roadmap.
 
-A sub-hypothesis: the knowledge graph should be *generated from the
-repository* — derived, disposable, rebuilt from scratch on demand (once a
-week from nothing is a fine habit) — never accumulated. That is what lets
-the associations evolve with the content instead of fossilising, and what
-makes it possible to hand the LLM knowledge and skills that are always
-rebased onto the current state of the repository, frictionlessly, the
-way code is.
+A sub-hypothesis: a knowledge graph only contributes to the evolution of
+a brain if it can be rebuilt on every commit. Knowledge accumulates in
+the repository; the graph is generated from it, algorithmically, in
+under a second — so it is never behind the brain. The widely used
+alternative, an LLM-extracted graph such as LightRAG, is rebuilt from
+scratch once in a while because it is expensive; it is outdated from
+day one, and because the model re-derives everything from zero it never
+credits what the brain already knew — such graphs do not contribute to
+evolution. We tried it, and removed it. Brainpick is reinventing the
+knowledge graph on this premise: associations live in the files, where
+agents improve them, and the graph is what the files say today.
 
 ## Who it is for
 

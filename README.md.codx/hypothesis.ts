@@ -27,18 +27,24 @@ ground, and improve as it works:
   living brain costs a fraction of the energy of a frontier model rediscovering
   the answer from scratch — and the second time, the answer is a skill.
 
-**A sub-hypothesis: the knowledge graph must be regenerated from the
-repository, never accumulated.** Brainpick's graph is a derived artifact —
-compiled from the files, disposable, rebuilt from scratch whenever asked
-(\`brainpick compile --full\`, or \`rm -rf .brainpick/\`; once a week is a
-fine habit). That is what lets the associations *evolve*: when a doc is
-distilled, split or corrected, its links, backlinks, vectors and entities
-are recomputed from what the repository says *now*, not patched onto what
-it said before. A store that accumulates — a hand-tended index, a vector
-database fed incrementally, weights fine-tuned on last month's facts —
-carries every stale association forward and cannot be rebased. Because the
-brain is a repository, the knowledge and skills an LLM reads are always
-rebased onto the current state, frictionlessly, the same way code is.
+**A sub-hypothesis: a knowledge graph only evolves if it can be rebuilt on
+every commit.** Knowledge accumulates in the repository — every commit builds
+on the ones before, with history, diff and review — and the graph is
+*generated* from it. Brainpick's graph is algorithmic: links, backlinks,
+tags, entities and relations are derived from the files in under a second,
+so it is rebuilt on every commit and always reflects everything the brain
+has learned. Compare the widely used LLM-extracted graphs (LightRAG,
+GraphRAG): built from scratch by a model, expensive enough to run only once
+in a while, and so outdated from day one — and because the model re-derives
+every association from zero, the graph never *credits* what the brain
+already knew; nothing an agent learns today makes tomorrow's graph better.
+Brainpick tried LightRAG as its T3 and removed it for exactly that reason
+([ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/similarity-gap-detector.md)).
+A graph that is cheap enough to follow every commit is one the brain can
+evolve *with*; a graph that is too expensive to follow the brain is a
+snapshot of it. Yes, this is reinventing knowledge graphs — on the premise
+that the associations belong in the files, where agents can improve them,
+and the graph is what the files say today.
 
 Everything else in this README is engineering in service of that bet: the
 [brain format](https://github.com/benquemax/brainpick/blob/main/spec/85-brain-format.md)
@@ -63,21 +69,22 @@ export const validate = async () => {
   if (!/## The hypothesis/.test(vision)) {
     throw new Error('The hypothesis must be stated in _vision.md (the north star), not only in the README');
   }
-  for (const claim of ['VRAM', 'kWh', 'self-improving', 'regenerated from the\nrepository']) {
+  for (const claim of ['VRAM', 'kWh', 'self-improving', 'rebuilt on\nevery commit']) {
     if (!content.includes(claim)) {
       throw new Error(`The hypothesis section must keep its three claims; "${claim}" is missing`);
     }
   }
 
-  // The sub-hypothesis rests on the artifacts being disposable and a from-scratch
-  // rebuild existing: spec/00 must say so and the CLI must offer --full.
-  const spec00 = fs.readFileSync(path.join(root, 'spec', '00-overview.md'), 'utf-8');
-  if (!/rm -rf `?\.brainpick\/`?/.test(spec00)) {
-    throw new Error('The sub-hypothesis claims the graph is disposable, but spec/00 no longer says rm -rf .brainpick/ is safe');
+  // The sub-hypothesis is grounded in lived experience: LightRAG was T3 and was
+  // removed; the ADR it points at must still say so, and T3 must still derive
+  // algorithmically (the graph can only follow every commit if no model is needed).
+  const adr = fs.readFileSync(path.join(root, 'docs', 'reference', 'adr', 'similarity-gap-detector.md'), 'utf-8');
+  if (!/LightRAG/.test(adr)) {
+    throw new Error('The sub-hypothesis cites the similarity-gap-detector ADR for dropping LightRAG, but the ADR no longer mentions it');
   }
-  const cli = fs.readFileSync(path.join(root, 'packages', 'python', 'src', 'brainpick', 'cli.py'), 'utf-8');
-  if (!cli.includes('"--full"')) {
-    throw new Error('The sub-hypothesis names `brainpick compile --full`, but the CLI has no --full flag');
+  const tiers = fs.readFileSync(path.join(root, 'docs', 'the-tiers.md'), 'utf-8');
+  if (!/derived algorithmically from\s+links and tags by default/.test(tiers)) {
+    throw new Error('The sub-hypothesis claims the graph is algorithmic; docs/the-tiers.md no longer says T3 is derived algorithmically by default');
   }
 
   // The brain format it points at is a real spec section with a data flow.
@@ -94,7 +101,8 @@ export const errorContent = `
 [Validation Failed] The "The hypothesis" section drifted from reality.
 
 The bet on small models must be stated in _vision.md (## The hypothesis) and
-in docs/the-hypothesis.md, keep its claims (VRAM, kWh, self-improving, regenerated from the repository),
-and point at a spec/85 that has a data flow architecture. Fix the repo, or
+in docs/the-hypothesis.md, keep its claims (VRAM, kWh, self-improving, rebuilt on every commit),
+point at a spec/85 that has a data flow architecture, and cite an ADR that
+still records dropping LightRAG. Fix the repo, or
 edit README.md.codx/hypothesis.ts if the bet itself changed (Tom's call).
 `;

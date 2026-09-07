@@ -2,9 +2,9 @@
 type: article
 about: concept
 title: The hypothesis
-description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; the sub-hypothesis that the graph must be regenerated from the repository so associations evolve and knowledge is always rebased; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
+description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; the sub-hypothesis that a knowledge graph only contributes to evolution if it is rebuilt on every commit, unlike LLM-extracted graphs such as LightRAG; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
 tags: [brain, design, vision]
-timestamp: 2026-09-07T18:30:00Z
+timestamp: 2026-09-07T19:00:00Z
 ---
 
 # The hypothesis
@@ -64,30 +64,37 @@ weights, and read as *cheaply*. That is what the brain format is for:
   in a handful of tools ([MCP tools](mcp-tools.md)) small enough for a small
   model to drive: the model never has to *remember*, only to *look*.
 
-## Sub-hypothesis: generate the graph from the repository
+## Sub-hypothesis: a graph that follows every commit
 
-The knowledge graph must be a **derived artifact regenerated from the
-repository**, never an accumulated store. Everything under `.brainpick/` is
-compiled from the files and disposable ([Spec: overview](reference/spec/overview.md));
-`brainpick compile --full` ([compile](reference/cli/compile.md)) or plain
-`rm -rf .brainpick/` rebuilds it from nothing, and doing so on a schedule —
-once a week from scratch — is a habit, not a recovery.
+A knowledge graph contributes to a brain's evolution only if it can be
+rebuilt **on every commit**. Knowledge accumulates in the repository —
+every commit builds on the ones before, with history, diff and review —
+and the graph is *generated* from it: links, backlinks, tags
+([The tiers](the-tiers.md), T1) and entities and relations
+([Knowledge graph tier](knowledge-graph-tier.md), T3) are derived
+algorithmically from the files by the [Compile pipeline](compile-pipeline.md)
+in under a second, and the artifacts are disposable
+([Spec: overview](reference/spec/overview.md)). Nothing is ever behind the
+brain; a page written today is linked from pages written a year ago the
+moment it is compiled, and a correction corrects every association through
+it. That is what puts the latest knowledge and skills in front of the LLM
+frictionlessly: pull, compile, read.
 
-Two things follow that an accumulating store cannot offer:
+Compare the widely used LLM-extracted graphs — LightRAG, GraphRAG. A model
+builds the graph from scratch, which is expensive enough that it runs once
+in a while, so the graph is outdated from day one. Worse, because the model
+re-derives every association from zero, the graph never *credits* what the
+brain already knew: nothing an agent learns today makes tomorrow's graph
+better, so such a graph is a snapshot of the brain, not a part of it.
+Brainpick ran LightRAG as its T3 and removed it for exactly this reason
+([ADR: the similarity gap-detector](reference/adr/similarity-gap-detector.md),
+[ADR: the KGBackend adapter](reference/adr/kgbackend-adapter.md)).
 
-- **Associations evolve.** When a doc is distilled, split, merged or
-  corrected, its links, backlinks, vectors and entities are recomputed from
-  what the repository says *now* ([Compile pipeline](compile-pipeline.md)).
-  A hand-tended index, an incrementally fed vector database, or weights
-  fine-tuned on last month's facts each carry every stale association
-  forward; a regenerated graph carries none.
-- **Knowledge and skills are rebased.** Because the brain is a repository,
-  what the LLM reads is always rebased onto the current state — pulled,
-  diffed, reverted, merged like code — and the agent gets that
-  frictionlessly, without a retraining or a re-indexing step it has to
-  remember to run. This is [principle 2](https://github.com/benquemax/brainpick/blob/main/README.md)
-  (the files are the brain) and [principle 4](https://github.com/benquemax/brainpick/blob/main/README.md)
-  (agents never tend the index) seen from the hypothesis's side.
+This is, knowingly, reinventing the knowledge graph — on the premise that
+the associations belong in the files, where agents can improve them under
+the contract, and the graph is what the files say today. An LLM is welcome
+as an opt-in *extractor* that writes its findings back into the files; it
+is never the owner of the graph.
 
 ## What would falsify it
 
@@ -98,8 +105,8 @@ cannot *use* what it reads — if reasoning, not knowledge, was the
 bottleneck all along. It also fails if the brain cannot stay trustworthy
 under agent writes, which is why every layer of the stack that guards
 trust (henxels, grounding, the data flow) exists before any that adds
-cleverness. The sub-hypothesis fails on its own if a regenerated graph
-turns out *worse* than an accumulated one — if associations the compile
-cannot recover from the files (a curator's judgement, say) matter more
-than the stale ones regeneration sheds. Results belong in this wiki when they exist; until then this
+cleverness. The sub-hypothesis fails on its own if an LLM-extracted
+graph, rebuilt once in a while, answers better than the algorithmic one
+rebuilt on every commit — if the associations a model infers and the files
+do not state matter more than being current. Results belong in this wiki when they exist; until then this
 page is the bet, stated plainly, per [Wiki conventions](wiki-conventions.md).

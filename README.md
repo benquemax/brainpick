@@ -56,18 +56,24 @@ ground, and improve as it works:
   living brain costs a fraction of the energy of a frontier model rediscovering
   the answer from scratch — and the second time, the answer is a skill.
 
-**A sub-hypothesis: the knowledge graph must be regenerated from the
-repository, never accumulated.** Brainpick's graph is a derived artifact —
-compiled from the files, disposable, rebuilt from scratch whenever asked
-(`brainpick compile --full`, or `rm -rf .brainpick/`; once a week is a
-fine habit). That is what lets the associations *evolve*: when a doc is
-distilled, split or corrected, its links, backlinks, vectors and entities
-are recomputed from what the repository says *now*, not patched onto what
-it said before. A store that accumulates — a hand-tended index, a vector
-database fed incrementally, weights fine-tuned on last month's facts —
-carries every stale association forward and cannot be rebased. Because the
-brain is a repository, the knowledge and skills an LLM reads are always
-rebased onto the current state, frictionlessly, the same way code is.
+**A sub-hypothesis: a knowledge graph only evolves if it can be rebuilt on
+every commit.** Knowledge accumulates in the repository — every commit builds
+on the ones before, with history, diff and review — and the graph is
+*generated* from it. Brainpick's graph is algorithmic: links, backlinks,
+tags, entities and relations are derived from the files in under a second,
+so it is rebuilt on every commit and always reflects everything the brain
+has learned. Compare the widely used LLM-extracted graphs (LightRAG,
+GraphRAG): built from scratch by a model, expensive enough to run only once
+in a while, and so outdated from day one — and because the model re-derives
+every association from zero, the graph never *credits* what the brain
+already knew; nothing an agent learns today makes tomorrow's graph better.
+Brainpick tried LightRAG as its T3 and removed it for exactly that reason
+([ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/similarity-gap-detector.md)).
+A graph that is cheap enough to follow every commit is one the brain can
+evolve *with*; a graph that is too expensive to follow the brain is a
+snapshot of it. Yes, this is reinventing knowledge graphs — on the premise
+that the associations belong in the files, where agents can improve them,
+and the graph is what the files say today.
 
 Everything else in this README is engineering in service of that bet: the
 [brain format](https://github.com/benquemax/brainpick/blob/main/spec/85-brain-format.md)
