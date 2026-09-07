@@ -112,6 +112,11 @@ The **write path** promotes: `raw/` → `journals/` → `knowledge/` →
 gains a pointer to it ("now covered by [skill]") rather than a copy — DRY
 by pointer, in the direction of distillation.
 
+A brain is shared memory held in Git. The read path therefore begins with
+**pulling the brain's latest version** (every mounted brain) and the write
+path ends with a push; the first skill states both. Engines MAY report a
+checkout that is behind its remote, and MUST NOT pull on the agent's behalf.
+
 The **read path** is the mirror: `skills/` first, then `knowledge/`, then
 `journals/`, and `raw/` only by grep, to ground or to distil. Engines
 SHOULD reflect this in `brain_overview` by listing `type: playbook` docs

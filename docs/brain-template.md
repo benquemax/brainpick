@@ -4,7 +4,7 @@ about: thing
 title: "The brain template"
 description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
 tags: [brain-format, henxels]
-timestamp: 2026-09-07T16:00:00Z
+timestamp: 2026-09-07T17:00:00Z
 ---
 
 # The brain template
@@ -41,7 +41,7 @@ _brain/
   log.md              the bundle's running log, date-sectioned, newest first
   knowledge/          semantic memory — evergreen concept docs
   skills/
-    using-the-brain.md   the first skill: read order, grounding, subsidiarity, "not the truth"
+    using-the-brain.md   the first skill: pull first, read order, grounding, subsidiarity, "not the truth"
     skilltree.md         generated from depends_on — edit the skills, never the tree
   journals/
     index.md             what a journal is and how the month rolls

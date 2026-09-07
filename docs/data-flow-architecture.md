@@ -4,7 +4,7 @@ about: concept
 title: "Data flow architecture"
 description: "How information moves through a brain — episodes in the journal distil into evergreen knowledge and then into actionable skills, retrieval runs the mirror path from most distilled to least, and each layer points upward instead of repeating — the principle that makes a brain memory rather than a pile of pages."
 tags: [brain-format]
-timestamp: 2026-09-07T16:00:00Z
+timestamp: 2026-09-07T17:00:00Z
 ---
 
 # Data flow architecture
@@ -72,6 +72,12 @@ fact no skill covers yet; then the journals, for episodes when nothing
 distilled exists; and `raw/` only by grep, to check a source or to distil
 something new. With several brains, the closest brain comes before any of
 this — see [Brain subsidiarity](brain-subsidiarity.md).
+
+Before any of it: **pull.** A brain is shared memory in Git — other agents
+and people commit to it between sessions — so the read path starts with
+`git pull` in every mounted brain, and the write path ends with a push.
+An answer built on a stale checkout is built on knowledge the brain has
+already corrected; the first skill makes this its first instruction.
 
 The spec asks brainpick to reflect the read path in `brain_overview` by
 listing `type: playbook` docs first — the *type*, never the folder, because
