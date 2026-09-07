@@ -2,9 +2,9 @@
 type: article
 about: concept
 title: The hypothesis
-description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; the sub-hypothesis that a knowledge graph only contributes to evolution if it is rebuilt on every commit, unlike LLM-extracted graphs such as LightRAG; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
+description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; the sub-hypothesis that associations are made by the author at write time under the contract and the graph derived from them, not extracted retroactively by a model as LightRAG does; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
 tags: [brain, design, vision]
-timestamp: 2026-09-07T19:30:00Z
+timestamp: 2026-09-07T20:00:00Z
 ---
 
 # The hypothesis
@@ -64,41 +64,55 @@ weights, and read as *cheaply*. That is what the brain format is for:
   in a handful of tools ([MCP tools](mcp-tools.md)) small enough for a small
   model to drive: the model never has to *remember*, only to *look*.
 
-## Sub-hypothesis: a graph that follows every commit
+## Sub-hypothesis: associations are made at write time
 
-A knowledge graph contributes to a brain's evolution only if it can be
-rebuilt **on every commit**. Knowledge accumulates in the repository —
-every commit builds on the ones before, with history, diff and review —
-and the graph is *generated* from it: links, backlinks, tags
-([The tiers](the-tiers.md), T1) and entities and relations
-([Knowledge graph tier](knowledge-graph-tier.md), T3) are derived
-algorithmically from the files by the [Compile pipeline](compile-pipeline.md)
-in under a second, and the artifacts are disposable
-([Spec: overview](reference/spec/overview.md)). Nothing is ever behind the
-brain; a page written today is linked from pages written a year ago the
-moment it is compiled, and a correction corrects every association through
-it. That is what puts the latest knowledge and skills in front of the LLM
-frictionlessly: pull, compile, read.
+The associations in a knowledge graph should be made **by the author, at
+the moment of writing** — not extracted afterwards by a model. An agent
+writing to a brain already has the relevant pages in its context: it just
+read them to ground what it is about to say ([Grounding](grounding.md)). So
+the associations come for free — it links the pages and tags the doc — and
+the contract refuses the write if it did not ([Henxels contract
+reference](reference-henxels.md): every link lands, no orphans, frontmatter
+is the one MUST).
+
+The graph is then *derived* from what the files carry, algorithmically, on
+every commit, in under a second ([Compile pipeline](compile-pipeline.md)):
+
+- **T1** — the doc graph from the links the author wrote: backlinks, tags,
+  orphans, ghosts ([The tiers](the-tiers.md)).
+- **T3** — the entity/relation graph from tags and ghosts
+  ([Knowledge graph tier](knowledge-graph-tier.md),
+  [Spec: T3 knowledge graph](reference/spec/t3-kg.md)).
+- **T2** — vectors for the semantic connections nobody wrote
+  ([Search modes](search-modes.md)), and the
+  [Similarity gap-detector](similarity-gap-detector.md) joining T2 against
+  T1 to flag pages that *should* be linked — cumulatively, at zero model
+  cost.
+
+Knowledge accumulates in the repository, commit on commit; a page written
+today is linked from pages written a year ago the moment it is compiled;
+a correction corrects every association through it. That is what puts the
+latest knowledge and skills in front of the LLM frictionlessly: pull,
+compile, read.
 
 Compare the widely used LLM-extracted graphs — LightRAG, GraphRAG. A model
-builds the graph from scratch, which is expensive enough that it runs once
-in a while, so the graph is outdated from day one. Worse, because the model
-re-derives every association from zero, the graph never *credits* what the
-brain already knew: nothing an agent learns today makes tomorrow's graph
-better, so such a graph is a snapshot of the brain, not a part of it.
-Brainpick ran LightRAG early on and removed it for exactly this reason
+reads the corpus *retroactively*, without the author's context, to guess at
+associations the author already had. That is expensive enough to run once
+in a while, so the graph is outdated from day one; and because every pass
+re-derives from zero, the graph never *credits* what the brain already knew
+— nothing an agent learns today makes tomorrow's graph better. Such a graph
+is a snapshot of the brain, not a part of it. Brainpick ran LightRAG early
+on and retired it for exactly this reason
 ([ADR: the similarity gap-detector](reference/adr/similarity-gap-detector.md),
 [ADR: the KGBackend adapter](reference/adr/kgbackend-adapter.md)). There is
-no LLM extractor in the mix any more: T3 is derived algorithmically in both
-engines, and `modules.graph.backend = "lightrag"` is only recognised as a
-removed value that falls back to algorithmic
+no LLM extractor in the mix: `modules.graph.backend = "lightrag"` is only
+recognised as a removed value that falls back to algorithmic
 ([modules.graph](reference/config/modules-graph.md)).
 
 This is, knowingly, reinventing the knowledge graph — on the premise that
-the associations belong in the files, where agents can improve them under
-the contract, and the graph is what the files say today. Where a model
-helps, it helps as an agent that *writes links into the files* through the
-contract — never as the owner of a graph beside them.
+the associations belong in the files, made by whoever knows them best at
+the moment they are known, under a contract that will not let them be
+skipped. A model's contribution counts only when it lands in the files.
 
 ## What would falsify it
 
@@ -109,8 +123,8 @@ cannot *use* what it reads — if reasoning, not knowledge, was the
 bottleneck all along. It also fails if the brain cannot stay trustworthy
 under agent writes, which is why every layer of the stack that guards
 trust (henxels, grounding, the data flow) exists before any that adds
-cleverness. The sub-hypothesis fails on its own if an LLM-extracted
-graph, rebuilt once in a while, answers better than the algorithmic one
-rebuilt on every commit — if the associations a model infers and the files
-do not state matter more than being current. Results belong in this wiki when they exist; until then this
+cleverness. The sub-hypothesis fails on its own if a graph extracted
+retroactively by a model answers better than the one authors built as they
+wrote — if the associations authors miss, even under the contract and with
+the gap-detector prompting them, matter more than being current and cheap. Results belong in this wiki when they exist; until then this
 page is the bet, stated plainly, per [Wiki conventions](wiki-conventions.md).

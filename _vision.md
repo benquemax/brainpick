@@ -69,17 +69,19 @@ memory earns the trust a model would otherwise need weights for. The bet
 is testable, and testing it (same tasks, small model with a brain against
 large model without, in outcomes and watt-hours) is on the roadmap.
 
-A sub-hypothesis: a knowledge graph only contributes to the evolution of
-a brain if it can be rebuilt on every commit. Knowledge accumulates in
-the repository; the graph is generated from it, algorithmically, in
-under a second — so it is never behind the brain. The widely used
-alternative, an LLM-extracted graph such as LightRAG, is rebuilt from
-scratch once in a while because it is expensive; it is outdated from
-day one, and because the model re-derives everything from zero it never
-credits what the brain already knew — such graphs do not contribute to
-evolution. We tried it, and removed it. Brainpick is reinventing the
-knowledge graph on this premise: associations live in the files, where
-agents improve them, and the graph is what the files say today.
+A sub-hypothesis: associations should be made at write time by the
+author, not extracted afterwards. An agent writing to the brain already
+has the relevant pages in its context, so the associations come for free
+— it links and tags, and henxels enforces that it did. The graph is then
+derived algorithmically from what the files carry (links, tags, ghosts),
+on every commit, with vectors for the semantic connections nobody wrote.
+LLM-extracted graphs such as LightRAG do the opposite — a model guesses
+retroactively, without the author's context, at real cost, once in a
+while, from zero each time — which is why they are outdated from day one
+and never contribute to the brain's evolution. We ran LightRAG, and
+retired it. Brainpick reinvents the knowledge graph on this premise: the
+associations belong in the files, made by whoever knows them best, at
+the moment they are known.
 
 ## Who it is for
 

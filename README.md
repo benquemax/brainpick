@@ -56,26 +56,27 @@ ground, and improve as it works:
   living brain costs a fraction of the energy of a frontier model rediscovering
   the answer from scratch — and the second time, the answer is a skill.
 
-**A sub-hypothesis: a knowledge graph only evolves if it can be rebuilt on
-every commit.** Knowledge accumulates in the repository — every commit builds
-on the ones before, with history, diff and review — and the graph is
-*generated* from it. Brainpick's graph is algorithmic: links, backlinks,
-tags, entities and relations are derived from the files in under a second,
-so it is rebuilt on every commit and always reflects everything the brain
-has learned. Compare the widely used LLM-extracted graphs (LightRAG,
-GraphRAG): built from scratch by a model, expensive enough to run only once
-in a while, and so outdated from day one — and because the model re-derives
-every association from zero, the graph never *credits* what the brain
-already knew; nothing an agent learns today makes tomorrow's graph better.
-Brainpick ran LightRAG early on and removed it for exactly that reason —
-there is no LLM extractor in the mix any more, and the graph is derived
-algorithmically in both engines
-([ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/similarity-gap-detector.md)).
-A graph that is cheap enough to follow every commit is one the brain can
-evolve *with*; a graph that is too expensive to follow the brain is a
-snapshot of it. Yes, this is reinventing knowledge graphs — on the premise
-that the associations belong in the files, where agents can improve them,
-and the graph is what the files say today.
+**A sub-hypothesis: associations are made at write time, by the author,
+not extracted afterwards.** When an agent writes to a brain it already has
+the relevant pages in its context — it just read them to ground what it is
+saying — so the associations come **for free**: it links them, tags them,
+and henxels refuses the write if it did not. The knowledge graph is then
+*derived* from what the files carry — T1 from the links, T3 from tags and
+ghosts — algorithmically, in under a second, on every commit; vectors (T2)
+supply the semantic connections nobody wrote, and the similarity gap-detector
+joins the two to flag what *should* be linked. Compare the widely used
+LLM-extracted graphs (LightRAG, GraphRAG): a model reads the corpus
+*retroactively*, without the author's context, to guess at associations the
+author already had — expensive enough to run once in a while, outdated from
+day one, and re-derived from zero every pass, so nothing an agent learns
+today makes tomorrow's graph better. Brainpick ran LightRAG early on and
+retired it for exactly that reason
+([ADR](https://github.com/benquemax/brainpick/blob/main/docs/reference/adr/similarity-gap-detector.md));
+there is no LLM extractor in the mix. A graph the brain's own authors build
+as they write is one the brain evolves *with*; a graph extracted from it is
+a snapshot of it. Yes, this is reinventing knowledge graphs — on the premise
+that the associations belong in the files, where they are made by whoever
+knows them best, at the moment they are known.
 
 Everything else in this README is engineering in service of that bet: the
 [brain format](https://github.com/benquemax/brainpick/blob/main/spec/85-brain-format.md)

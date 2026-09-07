@@ -39,8 +39,8 @@ retrieval fuses keyword and vector hits (see
 **T3** adds an entity/relation layer via the
 [knowledge graph tier](knowledge-graph-tier.md): derived algorithmically from
 links and tags — no model needed, in both engines. (LLM extraction was tried
-and removed; see [The hypothesis](the-hypothesis.md) for why an expensive
-graph cannot follow the brain.) It stays off only when explicitly configured
+and removed; see [The hypothesis](the-hypothesis.md) for why associations are
+made at write time, not extracted afterwards.) It stays off only when explicitly configured
 that way; graph-shaped queries then fall back to the T1 link graph.
 
 The ladder is also the failure model: a missing model is a downgrade, not an
