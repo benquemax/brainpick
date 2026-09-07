@@ -1,5 +1,22 @@
 # Update log
 
+## 2026-09-07
+
+- Added: the brain format (spec/85) — an opinionated OKF bundle for agent
+  memory: folders as memory types, inline grounding, a data-flow architecture
+  (raw → journals → knowledge → skills, read in reverse), subsidiarity between
+  brains, and a `[brain]` config section (`format`, `origin`, `audience`,
+  `readers`) parsed by both engines. `brainpick init` recognises a brain in
+  place (honours `[bundle] root`, announces the brain) and, with no bundle
+  yet, hands off to `uvx henxels init --template brainpick-brain` (or
+  `okf-llm-wiki`). Principle 14 — a thin view, not a format owner: brainpick
+  reads root, frontmatter and reserved names, never folder layout. README
+  gained the five-layer stack diagram.
+- Fixed: `[bundle] exclude` was ignored by compile and the freshness check
+  (only the timeline honoured it) — both engines now scan with the config's
+  include/exclude everywhere, so a brain's `raw/` stays greppable but never
+  compiles.
+
 ## 2026-09-06
 
 - Added: federation (spec/75) — one `brainpick mcp` fronts many brains. With

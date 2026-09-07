@@ -1,7 +1,7 @@
 {
   "name": "@brainpick/webui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "brainpick web UI — the live 2D cosmos view of a compiled bundle (PWA)",
   "type": "module",
   "scripts": {
