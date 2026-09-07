@@ -117,3 +117,22 @@ def test_check_fresh_honours_bundle_root(kotiaurinko):
     run_compile(repo)
     assert check_fresh(repo).fresh is True
     assert check_fresh(kotiaurinko).fresh is True          # --root at the bundle itself still works
+
+
+def test_compile_honours_bundle_exclude(kotiaurinko):
+    """[bundle] exclude (spec/80) keeps matching files out of the manifest, the graph
+    and check_fresh alike — a brain's raw/ material stays greppable but never compiles."""
+    (kotiaurinko / "brainpick.toml").write_text('[bundle]\nexclude = ["raw/*"]\n', encoding="utf-8")
+    (kotiaurinko / "raw").mkdir()
+    (kotiaurinko / "raw" / "dump.md").write_text("# dump\n\nSee [kuu](../kuu.md).\n", encoding="utf-8")
+
+    run_compile(kotiaurinko)
+
+    manifest = json.loads(read(kotiaurinko / ".brainpick" / "manifest.json"))
+    assert "raw/dump.md" not in manifest["files"]
+    assert "kuu.md" in manifest["files"]
+    graph = json.loads(read(kotiaurinko / ".brainpick" / "t1" / "graph.json"))
+    assert "raw/dump.md" not in {n["id"] for n in graph["nodes"]}
+    assert check_fresh(kotiaurinko).fresh is True
+    (kotiaurinko / "raw" / "more.md").write_text("# more\n", encoding="utf-8")
+    assert check_fresh(kotiaurinko).fresh is True  # excluded files never stale the brain

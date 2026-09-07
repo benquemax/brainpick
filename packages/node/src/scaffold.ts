@@ -284,13 +284,12 @@ function handOffToHenxels(voice: Voice, root: string, bundle: BundleInfo): numbe
         "carry OKF `type:` frontmatter (3+ needed, or an index.md with okf_version)",
     );
   }
-  voice.step("brainpick never scaffolds wikis — its sibling henxels owns the templates:");
-  voice.step("  uv tool install henxels");
-  voice.step(`  cd ${root} && henxels init --template okf-llm-wiki --wiki-dir .   (a wiki)`);
+  voice.step("brainpick never scaffolds — its sibling henxels owns the templates (one shot, no install):");
   voice.step(
-    `  cd ${root} && henxels init --template brainpick-brain            ` +
-      "(a brain — your agent's memory, spec/85)",
+    `  cd ${root} && uvx henxels init --template brainpick-brain   ` +
+      "(a brain — your agent's memory in _brain/, spec/85)",
   );
+  voice.step(`  cd ${root} && uvx henxels init --template okf-llm-wiki     (a plain wiki in _wiki/)`);
   voice.step(`then come back: brainpick init --root ${root}`);
   return 1;
 }
@@ -581,7 +580,7 @@ export async function runDoctor(root: string, options: DoctorOptions = {}): Prom
     emit("✓", `bundle: ${bundle.typed} typed concept docs of ${bundle.docs} (density scan)`);
   } else {
     emit("✗", `bundle: nothing OKF-shaped at ${root}`,
-      `cd ${root} && henxels init --template okf-llm-wiki --wiki-dir .`);
+      `cd ${root} && uvx henxels init --template brainpick-brain   (or okf-llm-wiki)`);
   }
 
   // artifacts

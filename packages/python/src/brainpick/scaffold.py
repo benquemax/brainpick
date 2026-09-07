@@ -260,11 +260,10 @@ def _hand_off_to_henxels(voice: _Voice, root: Path, bundle: BundleInfo) -> int:
     else:
         voice.line("✗", f"no bundle at {root} — {bundle.docs} .md files but only {bundle.typed} "
                         "carry OKF `type:` frontmatter (3+ needed, or an index.md with okf_version)")
-    voice.step("brainpick never scaffolds wikis — its sibling henxels owns the templates:")
-    voice.step("  uv tool install henxels")
-    voice.step(f"  cd {root} && henxels init --template okf-llm-wiki --wiki-dir .   (a wiki)")
-    voice.step(f"  cd {root} && henxels init --template brainpick-brain            "
-               "(a brain — your agent's memory, spec/85)")
+    voice.step("brainpick never scaffolds — its sibling henxels owns the templates (one shot, no install):")
+    voice.step(f"  cd {root} && uvx henxels init --template brainpick-brain   "
+               "(a brain — your agent's memory in _brain/, spec/85)")
+    voice.step(f"  cd {root} && uvx henxels init --template okf-llm-wiki     (a plain wiki in _wiki/)")
     voice.step(f"then come back: brainpick init --root {root}")
     return 1
 
@@ -491,7 +490,7 @@ def run_doctor(
         emit("✓", f"bundle: {bundle.typed} typed concept docs of {bundle.docs} (density scan)")
     else:
         emit("✗", f"bundle: nothing OKF-shaped at {root}",
-             f"cd {root} && henxels init --template okf-llm-wiki --wiki-dir .")
+             f"cd {root} && uvx henxels init --template brainpick-brain   (or okf-llm-wiki)")
 
     # artifacts
     verdict = check_fresh(root, config)

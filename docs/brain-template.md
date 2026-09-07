@@ -2,9 +2,9 @@
 type: playbook
 about: thing
 title: "The brain template"
-description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the sixteen rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
+description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
 tags: [brain-format, henxels]
-timestamp: 2026-09-07T14:00:00Z
+timestamp: 2026-09-07T16:00:00Z
 ---
 
 # The brain template
@@ -43,19 +43,21 @@ _brain/
   skills/
     using-the-brain.md   the first skill: read order, grounding, subsidiarity, "not the truth"
     skilltree.md         generated from depends_on — edit the skills, never the tree
-  journal/
-    log.md               running episodic log
-    YYYY-MM-DD-slug.md   dated entries
+  journals/
+    index.md             what a journal is and how the month rolls
+    YYYY-MM.md           the current month — a ## YYYY-MM-DD section per day, newest first
+    archive/YYYY-MM.md   earlier months, moved here by the agent on the first entry of a new month
+  raw/index.md        undistilled source material — greppable, indexed, excluded from the compiled brain
   vision/index.md     the northstar as a book; unlinked chapters are invisible
   plans/index.md      decided work only
 _todo.md              parking lot — project management, beside the brain
 _temp/                scratch — gitignored, always excluded
-brainpick.toml        shared policy, committed: [bundle] id, [brain] format = 1
+brainpick.toml        shared policy, committed: [bundle] root = "_brain", exclude = ["raw/*"], [brain] format = 1
 brainpick.local.toml  machine-local endpoints — gitignored, never committed
 henxels.yaml          the contract below
 ```
 
-## The sixteen rules
+## The rules
 
 Each is a henxel in the scaffolded `henxels.yaml`; the `why:` text is what
 the digest shows the agent.
@@ -67,7 +69,8 @@ the digest shows the agent.
    `brainpick compile --check-fresh` runs as a `run_before_commit` gate.
    Stale artifacts lie to agents ([Compile pipeline](compile-pipeline.md)).
 2. Folders are memory types, one job each, nothing replicated across layers
-   ([Data flow architecture](data-flow-architecture.md)).
+   ([Data flow architecture](data-flow-architecture.md)); `raw/` beside
+   them is source material, not memory.
 3. Skills form a dependency tree: `depends_on` in frontmatter,
    `skilltree.md` generated from it.
 4. Work areas may live inside the brain (catalogues, small scripts); a
@@ -89,18 +92,33 @@ the digest shows the agent.
    the check*, not rot.
 10. Every link lands in the bundle: `rooted_links_resolve` and
     `links_resolve` — no ghosts hiding.
-11. Kebab-case everywhere; journal entries match `YYYY-MM-DD-slug.md`.
-12. The journal points to changes, never replicates them.
+11. Kebab-case everywhere.
+12. One journal file per month, `journals/YYYY-MM.md`, a `## YYYY-MM-DD`
+    section per day, newest first, no frontmatter
+    (`filename_matches_regex`, `no_frontmatter`, `log_headings_are_dates`).
+    Entries point to what they changed, never restate it.
+13. Only the current month stays at the top of `journals/` (`max_files: 1`
+    with the index excepted); earlier months live in `journals/archive/`.
+    The roll is the agent's act — the first skill teaches it, the check
+    blocks a commit that forgot it. It is deliberately not a brainpick
+    command: the engine does not know the layout
+    ([Structure agnosticism](structure-agnosticism.md)).
+14. Archived months keep the same shape, untouched.
+15. `raw/` is orderly, never a dump: kebab-case names, listed in
+    `raw/index.md`, a wider filetype list (`.csv .html .pdf .png …`), no
+    frontmatter or links required. `brainpick.toml` excludes it
+    ([bundle.exclude](reference/config/bundle-exclude.md)) so it never
+    drowns the distilled layers — grep it to ground or to distil.
 
 **Process**
 
-13. Shared policy committed, machine-local config never — and no credentials
+16. Shared policy committed, machine-local config never — and no credentials
     anywhere (`no_secrets`).
-14. Generated artifacts are marked and regenerated on commit; edit the
+17. Generated artifacts are marked and regenerated on commit; edit the
     source, never the output.
-15. Deletion is deliberate: blessing required, removed lines count; near-
+18. Deletion is deliberate: blessing required, removed lines count; near-
     duplicate files are warned about.
-16. The rules live in one contract file and editing it is the only
+19. The rules live in one contract file and editing it is the only
     sanctioned escape; `--no-verify` is a genuine emergency only.
 
 Two rules are principles rather than checks and live in the first skill:
@@ -127,9 +145,12 @@ Only the third row is a corner, and four things sit in it — chosen once,
 kept minimal:
 
 - **The root name `_brain/`.** Part of every cross-brain address. Fixed.
-- **The five folder names and their semantics.** Sufficient by
-  construction: a new memory type is a `type` value or a sub-folder, never a
-  sixth sibling. Adding is cheap; renaming is not.
+- **The five memory-type folders and their semantics** (plus `raw/`).
+  Sufficient by construction: a new memory type is a `type` value or a
+  sub-folder, never a seventh sibling. Adding is cheap; renaming is not —
+  and note that this corner is the *template's*: brainpick never reads a
+  folder name, so even a rename would break cross-brain links, not
+  compilation ([Structure agnosticism](structure-agnosticism.md)).
 - **The brain-format frontmatter keys** (`depends_on`, `export`). Few and
   boring, optional on arrival, never renamed — deprecate by adding. Human-
   read provenance is inline prose, not a key, precisely so the key set stays

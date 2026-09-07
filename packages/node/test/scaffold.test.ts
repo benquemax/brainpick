@@ -132,8 +132,9 @@ test("init empty dir hands the scaffold to henxels", async () => {
   const out = capture();
   expect(await runInit(empty, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(1);
   const text = out.text();
-  expect(text).toContain("uv tool install henxels");
-  expect(text).toContain("henxels init --template okf-llm-wiki --wiki-dir .");
+  expect(text).toContain("uvx henxels init --template brainpick-brain"); // one-shot, no install step
+  expect(text).toContain("uvx henxels init --template okf-llm-wiki");
+  expect(text.indexOf("brainpick-brain")).toBeLessThan(text.indexOf("okf-llm-wiki")); // the brain is the primary path
   expect(readdirSync(empty)).toEqual([]); // never reimplement the wiki template
 });
 
@@ -300,8 +301,8 @@ test("init handoff offers the brain template", async () => {
   mkdirSync(empty);
   const out = capture();
   expect(await runInit(empty, { env: {}, probes: NO_BACKENDS, print: out.print })).toBe(1);
-  expect(out.text()).toContain("henxels init --template okf-llm-wiki");
-  expect(out.text()).toContain("henxels init --template brainpick-brain");
+  expect(out.text()).toContain("uvx henxels init --template okf-llm-wiki");
+  expect(out.text()).toContain("uvx henxels init --template brainpick-brain");
 });
 
 // -- doctor ------------------------------------------------------------------------

@@ -104,6 +104,13 @@ function writeTimeline(root: string, config: Config): void {
   atomicWrite(join(root, ".brainpick", "t1", "timeline.json"), canonicalJson(timeline as unknown as JsonValue));
 }
 
+/** The bundle as [bundle] include/exclude define it (spec/80) — the one scan every
+ * tier and the freshness check share, so an excluded file is invisible everywhere at
+ * once (raw material in a brain, say: greppable, never compiled). */
+function scanBundle(root: string, config: Config): Document[] {
+  return scan(root, config.bundle.include, config.bundle.exclude);
+}
+
 export async function runCompile(
   root: string,
   full = false,
@@ -117,12 +124,12 @@ export async function runCompile(
   if (wanted.size === 1 && wanted.has("t3")) return compileT3Only(bp, cfg);
 
   const warnings: string[] = [];
-  let docs = scan(root);
+  let docs = scanBundle(root, cfg);
   const [indexText, diskIndex] = prospectiveIndex(root, docs);
   const indexChanged = indexText !== diskIndex;
   if (indexChanged) {
     atomicWrite(join(root, INDEX_FILE), indexText);
-    docs = scan(root); // the bundle now includes the index as written
+    docs = scanBundle(root, cfg); // the bundle now includes the index as written
   }
 
   const graph = buildGraph(docs);
@@ -365,7 +372,7 @@ export function checkFresh(root: string): Freshness {
     return { fresh: false, reason: "never compiled — run: brainpick compile" };
   }
 
-  const docs = scan(root);
+  const docs = scanBundle(root, loadConfig(root));
   const [indexText, diskIndex] = prospectiveIndex(root, docs);
   if (indexText !== diskIndex) {
     return { fresh: false, reason: "stale — run: brainpick compile" };

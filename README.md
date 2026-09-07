@@ -70,6 +70,60 @@ docs compiled and served by brainpick itself.
 13. **The family eats its own dog food.** This repo is governed by henxels
     and codumented from day one, and every feature is exercised on a real
     brain — bugs in any sibling tool surface at home first.
+14. **A thin view, not a format owner.** Brainpick renders whatever is
+    correctly fronted under a root: it reads frontmatter and OKF's reserved
+    names, never folder layout. The layout belongs to the template and its
+    henxels contract, so a brain born on any version keeps working with
+    every later brainpick — the keys it reads are additive-only, never
+    renamed, never newly required. A wiki, a brain, or something in between
+    all compile the same way.
+
+
+## The stack
+
+Five layers, each optional, each a strict superset of the one below — the
+whole point is that you can stop at any layer and nothing above is owed.
+
+```mermaid
+block-beta
+  columns 1
+  H["brainpick for humans — the holographic brain (web UI, PWA, desktop app)"]
+  A["brainpick for agents — MCP tools + CLI over the compiled tiers (T1–T3)"]
+  B["the brain format — an opinionated OKF bundle: memory-type folders, grounding, data flow, identity"]
+  O["OKF — the Open Knowledge Format: markdown + frontmatter, index.md and log.md"]
+  X["henxels — the referee: a contract on the repo that keeps every writer true to the format"]
+  style X fill:#1f2937,stroke:#111827,color:#fff
+  style O fill:#374151,stroke:#111827,color:#fff
+  style B fill:#4b5563,stroke:#111827,color:#fff
+  style A fill:#6b7280,stroke:#111827,color:#fff
+  style H fill:#9ca3af,stroke:#111827,color:#111
+```
+
+- **henxels** is the foundation: a
+  [contract](https://github.com/benquemax/henxels) that makes the layers above
+  it *hold* under agent writes — from a git hook or from `brain_write` alike.
+  Brainpick itself never requires it (a hand-tended OKF folder compiles fine);
+  without it the format is a hope, with it the format is a fact. It also ships
+  the templates: `okf-llm-wiki` for a wiki, `brainpick-brain` for a brain.
+- **OKF** is the file format: plain markdown, a frontmatter `type`, an
+  `index.md`, a `log.md`. Any OKF bundle — a wiki, a docs folder, a pile of
+  notes with `type:` — is a valid input to everything above.
+- **The brain format** ([spec/85](https://github.com/benquemax/brainpick/blob/main/spec/85-brain-format.md))
+  is OKF plus opinions: folders as memory types (`knowledge/ skills/
+  journals/ vision/ plans/`, `raw/` for source material), inline grounding,
+  a data-flow architecture (journals → knowledge → skills, read in reverse),
+  subsidiarity between brains, and an identity other brains can address.
+  Brainpick reads it through frontmatter only — the folders are the
+  template's, so the format can evolve without breaking older brains.
+- **Brainpick for agents** compiles any bundle into the tiers below and
+  serves them over MCP and the CLI. Deterministic tiers need nothing;
+  vectors need an embedding model; every tier degrades to the one beneath.
+- **Brainpick for humans** renders the same compiled graph as a live
+  holographic brain — a window, never a dependency.
+
+Read it bottom-up as adoption: govern a folder → make it OKF → shape it as a
+brain → give it to your agent → look at it. Read it top-down as
+dependency: nothing above depends on anything more than the layer below.
 
 
 ## The tiers
@@ -91,10 +145,12 @@ compiles the brain, and wires itself to it. Paste this to the agent:
 
 > Install brainpick (`uv tool install brainpick`, or `pipx install
 > brainpick`). In the repo that holds (or should hold) the
-> markdown knowledge base, run `brainpick init` — it detects the bundle
-> (offering henxels' `okf-llm-wiki` scaffold if the folder is empty),
+> markdown knowledge base, run `brainpick init` — it detects the bundle,
 > detects an embedding backend if one is reachable, writes the config, and
-> compiles tier 1. Then run `brainpick integrate claude-code` (or
+> compiles tier 1. If there is no bundle yet, it hands off to henxels:
+> `uvx henxels init --template brainpick-brain` for a brain (an agent's
+> memory in `_brain/`) or `uvx henxels init --template okf-llm-wiki` for a
+> plain wiki (`_wiki/`); then run `brainpick init` again. Then run `brainpick integrate claude-code` (or
 > `opencode`, or `agents-md`) to install the Agent Skill and print the
 > MCP snippet — wire it into the harness config. From then on, consult the
 > brain before grepping: `brain_overview` first, then `brain_search`,
@@ -121,13 +177,18 @@ One-shot flavor works too: `uvx brainpick init`.
 
 ### No wiki yet, or a messy one? henxels drives
 
-A brand-new brain — [henxels](https://github.com/benquemax/henxels)
-scaffolds a governed OKF wiki and installs the contract that keeps every
-future write true to the format:
+A brand-new brain or wiki — [henxels](https://github.com/benquemax/henxels)
+scaffolds it and installs the contract that keeps every future write true
+to the format:
 
 ```bash
-henxels init --template okf-llm-wiki --wiki-dir docs   # scaffold + govern docs/
+uvx henxels init --template brainpick-brain    # a brain: _brain/ + contract + brainpick.toml
+uvx henxels init --template okf-llm-wiki       # a wiki: _wiki/ + contract (--wiki-dir docs to govern docs/)
 ```
+
+Say to your agent "install brainpick here, I want a brain" (or "a wiki") and
+these are the two commands it runs; `brainpick init` names them whenever it
+finds no bundle.
 
 An existing folder of markdown: `henxels init` installs the contract and
 `henxels check --all` prints your migration checklist — instructive, one

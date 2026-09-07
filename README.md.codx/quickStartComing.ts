@@ -10,10 +10,12 @@ compiles the brain, and wires itself to it. Paste this to the agent:
 
 > Install brainpick (\`uv tool install brainpick\`, or \`pipx install
 > brainpick\`). In the repo that holds (or should hold) the
-> markdown knowledge base, run \`brainpick init\` — it detects the bundle
-> (offering henxels' \`okf-llm-wiki\` scaffold if the folder is empty),
+> markdown knowledge base, run \`brainpick init\` — it detects the bundle,
 > detects an embedding backend if one is reachable, writes the config, and
-> compiles tier 1. Then run \`brainpick integrate claude-code\` (or
+> compiles tier 1. If there is no bundle yet, it hands off to henxels:
+> \`uvx henxels init --template brainpick-brain\` for a brain (an agent's
+> memory in \`_brain/\`) or \`uvx henxels init --template okf-llm-wiki\` for a
+> plain wiki (\`_wiki/\`); then run \`brainpick init\` again. Then run \`brainpick integrate claude-code\` (or
 > \`opencode\`, or \`agents-md\`) to install the Agent Skill and print the
 > MCP snippet — wire it into the harness config. From then on, consult the
 > brain before grepping: \`brain_overview\` first, then \`brain_search\`,
@@ -40,13 +42,18 @@ One-shot flavor works too: \`uvx brainpick init\`.
 
 ### No wiki yet, or a messy one? henxels drives
 
-A brand-new brain — [henxels](https://github.com/benquemax/henxels)
-scaffolds a governed OKF wiki and installs the contract that keeps every
-future write true to the format:
+A brand-new brain or wiki — [henxels](https://github.com/benquemax/henxels)
+scaffolds it and installs the contract that keeps every future write true
+to the format:
 
 \`\`\`bash
-henxels init --template okf-llm-wiki --wiki-dir docs   # scaffold + govern docs/
+uvx henxels init --template brainpick-brain    # a brain: _brain/ + contract + brainpick.toml
+uvx henxels init --template okf-llm-wiki       # a wiki: _wiki/ + contract (--wiki-dir docs to govern docs/)
 \`\`\`
+
+Say to your agent "install brainpick here, I want a brain" (or "a wiki") and
+these are the two commands it runs; \`brainpick init\` names them whenever it
+finds no bundle.
 
 An existing folder of markdown: \`henxels init\` installs the contract and
 \`henxels check --all\` prints your migration checklist — instructive, one
@@ -119,7 +126,8 @@ export const validate = async () => {
   // app), henxels' scaffold (a new brain) and check (migration).
   for (const anchor of [
     'github.com/benquemax/brainpick/releases',
-    'henxels init --template okf-llm-wiki',
+    'uvx henxels init --template okf-llm-wiki',
+    'uvx henxels init --template brainpick-brain',
     'henxels check --all',
   ]) {
     if (!content.includes(anchor)) {

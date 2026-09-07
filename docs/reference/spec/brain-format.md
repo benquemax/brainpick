@@ -4,7 +4,7 @@ about: concept
 title: "Spec: brain format"
 description: "The normative contract for a brain — the fixed _brain/ root, the five memory-type folders, the engine-consumed frontmatter keys and their additive-only policy, inline grounding, the data flow's folder order, the [brain] config section, the brain:// link syntax and the format version with its migration rule."
 tags: [spec, brain-format]
-timestamp: 2026-09-07T11:30:00Z
+timestamp: 2026-09-07T16:00:00Z
 ---
 
 # Spec: brain format
@@ -16,12 +16,19 @@ committed content and would hurt to change later.
 - **Bundle root.** `_brain/` at the repository root — fixed, because other
   brains' links and registries name it. `_temp/` is always excluded;
   project management (`_todo.md`) stays beside the brain.
-- **Folders are memory types.** `knowledge/` (semantic), `skills/`
-  (procedural, with generated `skilltree.md`), `journal/` (episodic,
-  `YYYY-MM-DD-slug.md` plus `log.md`), `vision/` (a book with an `index.md`
-  contents page) and `plans/` (decided work). The five are sufficient: a
-  new memory type is a `type` value or a sub-folder, never a sixth sibling.
-  Engines tolerate any of them being absent.
+- **Folders are memory types — for the template.** `knowledge/`
+  (semantic), `skills/` (procedural, `type: playbook`, with generated
+  `skilltree.md`), `journals/` (episodic — one file per month `YYYY-MM.md`,
+  a `## YYYY-MM-DD` section per day newest first, earlier months in
+  `journals/archive/`), `vision/` (a book with an `index.md` contents page)
+  and `plans/` (decided work), plus `raw/` for undistilled source material
+  that is excluded from the compiled brain via `[bundle] exclude`. The five
+  memory types are sufficient: a new one is a `type` value or a sub-folder,
+  never a seventh sibling. Engines never interpret folder names — they read
+  the root, frontmatter and reserved names only, so the table is normative
+  for the template and informative for engines
+  ([Structure agnosticism](../../structure-agnosticism.md)); the month roll
+  is the agent's act, not an engine command.
 - **Frontmatter.** OKF's fields are OKF's. The format adds only keys the
   engine consumes: `depends_on` (skill edges) and `export: agent-skill`
   (write the skill out as a harness `SKILL.md`). Additive-only: never
@@ -47,7 +54,9 @@ committed content and would hurt to change later.
   dry-run diff) and keeps every earlier format servable.
 - **Conformance class `brain`.** `[brain]` parsing with defaults, env and
   the audience warning in both engines; `brain://` extraction; a minimal
-  fixture brain whose overview lists `skills/` first.
+  fixture brain whose overview lists `type: playbook` docs first and whose
+  manifest holds nothing from `raw/`; `[bundle] exclude` honoured by every
+  scan in both engines.
 
 The reasoning is on [Data flow architecture](../../data-flow-architecture.md),
 [Grounding](../../grounding.md) and [Brain subsidiarity](../../brain-subsidiarity.md);

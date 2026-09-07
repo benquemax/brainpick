@@ -122,6 +122,13 @@ def _generator() -> dict:
     return {"impl": "python", "name": "brainpick", "version": __version__}
 
 
+def _scan_bundle(root: Path, config: Config):
+    """The bundle as [bundle] include/exclude define it (spec/80) — the one scan
+    every tier and the freshness check share, so an excluded file is invisible
+    everywhere at once (raw material in a brain, say: greppable, never compiled)."""
+    return scan(root, include=tuple(config.bundle.include), exclude=tuple(config.bundle.exclude))
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -146,12 +153,12 @@ def run_compile(
         return _compile_t3_only(root, bp, config, full=full, sample=sample)
 
     warnings: list[str] = []
-    docs = scan(root)
+    docs = _scan_bundle(root, config)
     index_text, disk_index = _prospective_index(root, docs)
     index_changed = index_text != disk_index
     if index_changed:
         _atomic_write(root / INDEX_FILE, index_text.encode("utf-8"))
-        docs = scan(root)  # the bundle now includes the index as written
+        docs = _scan_bundle(root, config)  # the bundle now includes the index as written
 
     graph = build_graph(docs)
     graph_text = canonical_json(graph)
@@ -376,7 +383,7 @@ def check_fresh(root: str | Path, config: Config | None = None) -> Freshness:
     if not (bp / "manifest.json").is_file():
         return Freshness(False, "never compiled — run: brainpick compile")
 
-    docs = scan(root)
+    docs = _scan_bundle(root, config)
     index_text, disk_index = _prospective_index(root, docs)
     if index_text != disk_index:
         return Freshness(False, "stale — run: brainpick compile")

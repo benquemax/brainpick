@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
@@ -134,4 +134,24 @@ test("delta carries cause paths and seq after a change", async () => {
   expect(result.delta!.seq).toBe(2);
   expect(result.delta!.cause).toEqual({ paths: ["index.md", "komeetta.md"], tier: "t1" });
   expect(result.delta!.removed.nodes).toEqual(["komeetta.md"]);
+});
+
+test("compile honours [bundle] exclude", async () => {
+  // spec/80: excluded files are out of the manifest, the graph and freshness alike —
+  // a brain's raw/ material stays greppable but never compiles.
+  const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), '[bundle]\nexclude = ["raw/*"]\n', "utf8");
+  mkdirSync(join(root, "raw"));
+  writeFileSync(join(root, "raw", "dump.md"), "# dump\n\nSee [kuu](../kuu.md).\n", "utf8");
+
+  await runCompile(root);
+
+  const manifest = JSON.parse(read(join(root, ".brainpick", "manifest.json")));
+  expect(Object.keys(manifest.files)).not.toContain("raw/dump.md");
+  expect(Object.keys(manifest.files)).toContain("kuu.md");
+  const graph = JSON.parse(read(join(root, ".brainpick", "t1", "graph.json")));
+  expect(graph.nodes.map((n: { id: string }) => n.id)).not.toContain("raw/dump.md");
+  expect(checkFresh(root).fresh).toBe(true);
+  writeFileSync(join(root, "raw", "more.md"), "# more\n", "utf8");
+  expect(checkFresh(root).fresh).toBe(true); // excluded files never stale the brain
 });

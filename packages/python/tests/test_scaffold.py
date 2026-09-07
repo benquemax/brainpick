@@ -127,8 +127,9 @@ def test_init_empty_dir_hands_the_scaffold_to_henxels(tmp_path, capsys):
     empty.mkdir()
     assert run_init(empty, env={}, probes=NO_BACKENDS) == 1
     out = capsys.readouterr().out
-    assert "uv tool install henxels" in out
-    assert "henxels init --template okf-llm-wiki --wiki-dir ." in out
+    assert "uvx henxels init --template brainpick-brain" in out  # one-shot, no install step
+    assert "uvx henxels init --template okf-llm-wiki" in out
+    assert out.index("brainpick-brain") < out.index("okf-llm-wiki")  # the brain is the primary path
     assert list(empty.iterdir()) == []  # never reimplement the wiki template
 
 
@@ -457,5 +458,5 @@ def test_init_is_silent_about_brains_for_a_plain_wiki(kotiaurinko, capsys):
 def test_init_handoff_offers_the_brain_template(tmp_path, capsys):
     assert run_init(tmp_path, env={}, probes=NO_BACKENDS) == 1
     out = capsys.readouterr().out
-    assert "henxels init --template okf-llm-wiki" in out
-    assert "henxels init --template brainpick-brain" in out
+    assert "uvx henxels init --template okf-llm-wiki" in out
+    assert "uvx henxels init --template brainpick-brain" in out

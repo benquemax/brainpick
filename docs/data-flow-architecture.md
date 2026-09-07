@@ -4,7 +4,7 @@ about: concept
 title: "Data flow architecture"
 description: "How information moves through a brain — episodes in the journal distil into evergreen knowledge and then into actionable skills, retrieval runs the mirror path from most distilled to least, and each layer points upward instead of repeating — the principle that makes a brain memory rather than a pile of pages."
 tags: [brain-format]
-timestamp: 2026-09-07T11:30:00Z
+timestamp: 2026-09-07T16:00:00Z
 ---
 
 # Data flow architecture
@@ -17,12 +17,15 @@ and that symmetry is the whole design.
 ## The write path: distillation
 
 ```
-journal/  ──►  knowledge/  ──►  skills/
-episodic       semantic         procedural
-"what happened" "what is true"  "what to do"
+raw/  ──►  journals/  ──►  knowledge/  ──►  skills/
+source     episodic        semantic          procedural
+"as found"  "what happened" "what is true"    "what to do"
 ```
 
-Information enters the brain as **episodes**: a dated journal entry that
+Before an episode there may be **raw material** — a transcript, an export,
+a clipping dropped into `raw/`. It is kept greppable for grounding and
+distillation but excluded from the compiled brain, because it is noisy by
+nature. Information enters the brain proper as **episodes**: a journal entry that
 records what was tried, decided or observed. When an episode (or several)
 settles into something evergreen — a fact, a mechanism, a tradeoff — it is
 **distilled** into a `knowledge/` concept page. When knowledge becomes a
@@ -59,24 +62,28 @@ that brainpick's [Knowledge graph tier](knowledge-graph-tier.md) can read.
 ## The read path: most distilled first
 
 ```
-skills/  ──►  knowledge/  ──►  journal/
+skills/  ──►  knowledge/  ──►  journals/  ──►  (grep raw/)
 ```
 
 An agent looking for an answer reads in the **reverse** order of the write
 path: skills first, because a skill is the most actionable, tested and pure
 form the brain has; then knowledge, for the concept behind the skill or a
-fact no skill covers yet; and only then the journal, for raw episodes when
-nothing distilled exists. With several brains, the closest brain comes
-before any of this — see [Brain subsidiarity](brain-subsidiarity.md).
+fact no skill covers yet; then the journals, for episodes when nothing
+distilled exists; and `raw/` only by grep, to check a source or to distil
+something new. With several brains, the closest brain comes before any of
+this — see [Brain subsidiarity](brain-subsidiarity.md).
 
-The spec asks brainpick to reflect the read path in `brain_overview` (list
-`skills/` first) and permits folder as a ranking signal in `brain_search`
-([Search modes](search-modes.md)); the folder order is normative, the
-ranking is an engine detail.
+The spec asks brainpick to reflect the read path in `brain_overview` by
+listing `type: playbook` docs first — the *type*, never the folder, because
+brainpick does not read folder names
+([Structure agnosticism](structure-agnosticism.md)) — and permits `type` as
+a ranking signal in `brain_search` ([Search modes](search-modes.md)). The
+order is normative for the template and the first skill; the ranking is an
+engine detail.
 
 ## The nudge: improve as you go
 
-A read that finds nothing in `skills/` but something in `journal/` is not a
+A read that finds nothing in `skills/` but something in `journals/` is not a
 failure — it is a **distillation opportunity**. The template's first skill
 tells the agent so: when you reach a less distilled layer, consider whether
 what you found should be promoted, and promote it. The brain is the best

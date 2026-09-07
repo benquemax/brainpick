@@ -1,12 +1,22 @@
 # The brain format — an opinionated OKF bundle for agents
 
 A **wiki** is a collection of information. A **brain** is a wiki that is
-meant to be the memory of an agent: an OKF bundle with a fixed folder
+meant to be the memory of an agent: an OKF bundle with a recommended folder
 layout, a declared **data flow architecture** (how raw episodes become
 evergreen knowledge become actionable skills), inline grounding for every
 claim, and an identity other brains can address. brainpick serves any
 well-formed OKF bundle; a brain is the shape brainpick *recommends*, and
 the shape the henxels `brainpick-brain` starter template produces.
+
+**The layout belongs to the template, never to the engine.** Engines read
+the bundle root (spec/80), frontmatter and OKF's reserved file names; they
+MUST NOT interpret folder names. Everything an engine does for a brain is
+keyed on frontmatter (`type`, `depends_on`, `export`) and on `[brain]`
+config, so a brain scaffolded under any version of the template — or laid
+out by hand — keeps working with every later engine as long as the
+frontmatter contract holds (principle 14: a thin view, not a format owner).
+The folder table below is therefore *informative* for engines and
+*normative* for the template.
 
 This section fixes what both engines and the template must agree on: the
 folder layout, the frontmatter keys the engine consumes, the `[brain]`
@@ -30,15 +40,29 @@ an episode — `_todo.md`, scratch — stays **beside** the brain, not in it.
 | Folder | Memory type | Holds | Reserved files |
 |---|---|---|---|
 | `knowledge/` | semantic | evergreen concept docs, one concept per page | — |
-| `skills/` | procedural | distilled, actionable procedures | `skilltree.md` (generated) |
-| `journal/` | episodic | dated entries, `YYYY-MM-DD-slug.md` | `log.md` (running log) |
+| `skills/` | procedural | distilled, actionable procedures (`type: playbook`) | `skilltree.md` (generated) |
+| `journals/` | episodic | one file per month, `YYYY-MM.md`, a `## YYYY-MM-DD` section per day, newest first; only the current month at the top level, earlier months in `journals/archive/` | `index.md` |
 | `vision/` | direction | the northstar as a book; `index.md` is its table of contents | `index.md` |
 | `plans/` | decided work | one plan per page; undecided ideas do not belong here | `index.md` |
+| `raw/` | *(not a memory type)* | undistilled source material — transcripts, exports, clippings — that knowledge grounds on; no frontmatter, kebab-case, listed in its index, **excluded from the compiled brain** via `[bundle] exclude = ["raw/*"]` | `index.md` |
 
-Every folder MAY hold sub-folders. The five names are **sufficient**: a
-memory type that does not fit is a `type` value or a sub-folder, never a
-sixth sibling. Engines MUST tolerate brains that omit any of the five (an
-empty memory type is simply empty).
+Every folder MAY hold sub-folders. The five memory types are
+**sufficient**: a memory type that does not fit is a `type` value or a
+sub-folder, never a seventh sibling. Engines MUST tolerate brains that omit
+any folder (an empty memory type is simply empty) and MUST NOT depend on
+any being present.
+
+Journals are logs, not concept docs: no frontmatter, every heading an ISO
+date. A month per file caps the length forever; the **month roll** — moving
+last month's file into `archive/` before the first entry of a new month —
+is the agent's act (taught by the first skill) and the contract's check
+(the template allows one file at the top of `journals/`), never an engine
+command: the engine does not know the layout.
+
+Raw material stays greppable (T0) and is what claims ground on, but it
+never enters T1–T3: it is noisy by nature and would drown the distilled
+layers. Agents keep it orderly — named for what it is, indexed, pruned once
+distilled.
 
 The root `index.md` is generated (`[index] mode = "section"`, spec/20) and
 never hand-edited; `log.md` files are date-sectioned, newest first (OKF).
@@ -67,8 +91,10 @@ Wikipedia-style: a plain link where the claim is made, no citation
 template. What matters is the *kind* of source, which the link target
 carries by construction:
 
-- a journal entry (`../journal/2026-09-07-chose-lancedb.md`) — a decision or
+- a journal section (`../journals/2026-09.md#2026-09-07`) — a decision or
   observation this brain made;
+- raw material (`../raw/customer-call-2026-09-07.md`) — a source this brain
+  holds but does not compile;
 - an external URL — a page outside the brain;
 - another brain (`brain://…`, below) — knowledge that lives closer to its
   implementation;
@@ -81,15 +107,17 @@ in a brain, an *ungrounded* orphan; the template's contract fails it.
 
 ## Data flow architecture
 
-The **write path** promotes: `journal/` → `knowledge/` → `skills/`. When a
-more distilled doc is written, the less distilled one gains a pointer to it
-("now covered by [skill]") rather than a copy — DRY by pointer, in the
-direction of distillation.
+The **write path** promotes: `raw/` → `journals/` → `knowledge/` →
+`skills/`. When a more distilled doc is written, the less distilled one
+gains a pointer to it ("now covered by [skill]") rather than a copy — DRY
+by pointer, in the direction of distillation.
 
 The **read path** is the mirror: `skills/` first, then `knowledge/`, then
-`journal/`. Engines SHOULD reflect this in `brain_overview` (list `skills/`
-first) and MAY use folder as a ranking signal in `brain_search` (spec/70).
-Ranking is engine-side and advisory; the order of folders is normative.
+`journals/`, and `raw/` only by grep, to ground or to distil. Engines
+SHOULD reflect this in `brain_overview` by listing `type: playbook` docs
+first — the *type*, not the folder — and MAY use `type` as a ranking signal
+in `brain_search` (spec/70). Ranking is engine-side and advisory; the
+order is normative for the template and the first skill.
 
 ## `[brain]` config
 
@@ -170,6 +198,9 @@ Class `brain`:
   `audience` warns (both engines).
 - `brain://` links are extracted with `kind: "brain"`, `brain_id` and `path`,
   and excluded from ghosts.
-- A fixture brain (`spec/fixtures/brain-minimal/`) with the five folders
-  compiles to golden T1 artifacts in which `skills/` precedes `knowledge/`
-  in the overview folder order.
+- A fixture brain (`spec/fixtures/brain-minimal/`) with the template's
+  layout compiles to golden T1 artifacts in which `type: playbook` docs
+  precede the rest in the overview, and nothing under `raw/` appears in the
+  manifest.
+- `[bundle] exclude` is honoured by every scan — manifest, graph, freshness
+  (spec/80) — in both engines.

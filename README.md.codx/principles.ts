@@ -41,14 +41,21 @@ export const content = `## Principles
 13. **The family eats its own dog food.** This repo is governed by henxels
     and codumented from day one, and every feature is exercised on a real
     brain — bugs in any sibling tool surface at home first.
+14. **A thin view, not a format owner.** Brainpick renders whatever is
+    correctly fronted under a root: it reads frontmatter and OKF's reserved
+    names, never folder layout. The layout belongs to the template and its
+    henxels contract, so a brain born on any version keeps working with
+    every later brainpick — the keys it reads are additive-only, never
+    renamed, never newly required. A wiki, a brain, or something in between
+    all compile the same way.
 `;
 
 export const validate = async () => {
   const root = path.join(__dirname, '..');
 
   const numbered = content.match(/^\s{0,3}\d+\.\s+\*\*/gm) ?? [];
-  if (numbered.length !== 13) {
-    throw new Error(`The section must list exactly 13 principles; it lists ${numbered.length}`);
+  if (numbered.length !== 14) {
+    throw new Error(`The section must list exactly 14 principles; it lists ${numbered.length}`);
   }
 
   // Principle 9: CLAUDE.md is exactly "@AGENTS.md", AGENTS.md is the one agent doc
@@ -65,6 +72,16 @@ export const validate = async () => {
     throw new Error('Principle 13 claims this repo is governed by henxels but henxels.yaml is missing');
   }
 
+  // Principle 14: a thin view — the engines never key on folder names and the
+  // additive-only key policy is written down in the spec.
+  const spec85 = fs.readFileSync(path.join(root, 'spec', '85-brain-format.md'), 'utf-8');
+  if (!/MUST NOT interpret folder names/.test(spec85) || !/additive-only/.test(spec85)) {
+    throw new Error('Principle 14 claims structure agnosticism and additive-only keys, but spec/85 does not state them');
+  }
+  if (!fs.existsSync(path.join(root, 'docs', 'structure-agnosticism.md'))) {
+    throw new Error('Principle 14 has no concept page (docs/structure-agnosticism.md)');
+  }
+
   // Principle 2: compiled artifacts are disposable, so .brainpick/ must be gitignored
   const gitignore = fs.readFileSync(path.join(root, '.gitignore'), 'utf-8');
   if (!gitignore.split('\n').some((l) => l.trim() === '.brainpick/')) {
@@ -75,9 +92,10 @@ export const validate = async () => {
 export const errorContent = `
 [Validation Failed] The "Principles" section drifted from reality.
 
-The thirteen principles are this project's constitution — fix the repo, not
+The fourteen principles are this project's constitution — fix the repo, not
 the principle: CLAUDE.md must contain exactly "@AGENTS.md" (principle 9),
 henxels.yaml must govern this repo (principle 13), and .gitignore must ignore
-.brainpick/ (principle 2). Changing a principle itself is Tom's call: discuss
+.brainpick/ (principle 2), and spec/85 plus docs/structure-agnosticism.md must
+carry principle 14. Changing a principle itself is Tom's call: discuss
 first, then update README.md.codx/principles.ts.
 `;

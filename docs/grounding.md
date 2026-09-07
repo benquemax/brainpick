@@ -4,7 +4,7 @@ about: concept
 title: "Grounding"
 description: "Every claim in a brain's knowledge and skills says where it came from — inline, Wikipedia-style, with a plain link to a journal entry, an external page, another brain, or an admitted assumption — so the kind of source is readable at the claim and provenance never needs a citation template or a frontmatter key."
 tags: [brain-format]
-timestamp: 2026-09-07T11:30:00Z
+timestamp: 2026-09-07T16:00:00Z
 ---
 
 # Grounding
@@ -28,7 +28,8 @@ construction:
 
 | Link target | Source kind | Reads as |
 |---|---|---|
-| a journal entry (`../journal/2026-09-07-chose-lancedb.md`) | a decision or observation this brain made | "we decided / we saw" |
+| a journal section (`../journals/2026-09.md#2026-09-07`) | a decision or observation this brain made | "we decided / we saw" |
+| raw material (`../raw/customer-call-2026-09-07.md`) | a source this brain holds but does not compile | "the transcript says" |
 | an external URL | a page outside the brain | "according to" |
 | another brain (`brain://…`) | knowledge that lives closer to its implementation | "the project brain says" |
 | nothing, and the text says so | an admitted assumption | "assumed", "untested" |
@@ -42,8 +43,10 @@ confident sentence with an unmarked origin.
 - `knowledge/` and `skills/` — always. They are the distilled layers of the
   [Data flow architecture](data-flow-architecture.md), and distillation
   without provenance is how a brain drifts from what actually happened.
-- `journal/` — never. Journal entries *are* the primary sources; they record
-  what happened and link forward to what they changed.
+- `journals/` — never. Journal entries *are* the primary sources; they
+  record what happened and link forward to what they changed.
+- `raw/` — never, and it needs no links at all. It is source material, kept
+  orderly and greppable precisely so the layers above can point at it.
 - `vision/` and `plans/` — as far as they make claims. A vision may be
   unfounded by nature; a plan that rests on a fact links to it.
 
