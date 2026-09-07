@@ -26,6 +26,7 @@ from brainpick.federation import (
 )
 from brainpick.llm import make_chat
 from brainpick.merge import find_base, resolve
+from brainpick.query.keyword import tokenize
 from brainpick.query.router import KNOWN_MODES, run_search
 from brainpick.serve.state import ServeState, bfs_neighborhood, jsonable, resolve_doc
 from brainpick.serve.watcher import recompile_and_broadcast
@@ -106,6 +107,25 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
 # -- brain_search ------------------------------------------------------------------
 
 
+def _matched_terms(query: str, *fields: str) -> list[str]:
+    """The query tokens that actually occur in the given fields, in query order,
+    de-duplicated. Uses the same tokenizer keyword search uses, so 'why' reports
+    what really matched instead of echoing the whole query string (issue #2)."""
+    field_tokens = set()
+    for field in fields:
+        if field:
+            field_tokens.update(tokenize(field))
+    seen: dict[str, None] = {}
+    for token in tokenize(query):
+        if token in field_tokens and token not in seen:
+            seen[token] = None
+    return list(seen)
+
+
+def _quote_terms(terms: list[str]) -> str:
+    return ", ".join(f"'{t}'" for t in terms)
+
+
 def _why(hit: dict, query: str) -> str:
     lowered = query.lower()
     if lowered in str(hit["title"]).lower():
@@ -116,7 +136,20 @@ def _why(hit: dict, query: str) -> str:
         return f"semantically close to '{query}'"
     if hit.get("source") == "graph":
         return f"connected in the entity graph to '{query}'"
-    return f"body mentions '{query}'" if hit.get("snippet") else "keyword match"
+    # Keyword-ish hit: name the query tokens that actually occur, and where, rather
+    # than claiming the whole query appears verbatim (issue #2).
+    total = len(dict.fromkeys(tokenize(query)))
+    title_terms = _matched_terms(query, str(hit.get("title") or ""))
+    desc_terms = _matched_terms(query, hit.get("description") or "")
+    body_terms = _matched_terms(query, hit.get("snippet") or "")
+    if title_terms:
+        return f"title mentions {_quote_terms(title_terms)}"
+    if desc_terms:
+        return f"description mentions {_quote_terms(desc_terms)}"
+    if body_terms:
+        suffix = f" ({len(body_terms)}/{total} terms)" if total > 1 else ""
+        return f"body mentions {_quote_terms(body_terms)}{suffix}"
+    return "keyword match"
 
 
 def _single_search(state: ServeState, query: str, mode: str = "auto", limit: int = 8,

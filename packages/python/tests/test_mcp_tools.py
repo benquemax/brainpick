@@ -102,6 +102,22 @@ def test_search_hits_have_why_not_bodies(kotiaurinko):
     assert result["truncated"] is False
 
 
+def test_search_why_names_matched_terms_not_whole_query(kotiaurinko):
+    """issue #2: a multi-word query must not claim the WHOLE query appears in a
+    doc that only matched some of its terms. The 'why' names the tokens that
+    actually occur, never a term (like 'banana') that appears nowhere."""
+    result = search_payload(make_state(kotiaurinko), "aurinko komeetta banana")
+    assert result["hits"], "expected keyword hits for a partially-matching query"
+    for hit in result["hits"]:
+        why = hit["why"]
+        # never echo the full query, and never claim a non-existent term matched
+        assert "aurinko komeetta banana" not in why
+        assert "banana" not in why
+        # a keyword-ish 'mentions' reason must quote the actual matched token(s)
+        if "mentions" in why:
+            assert "aurinko" in why or "komeetta" in why
+
+
 def test_search_budget_trims_hits(kotiaurinko):
     state = make_state(kotiaurinko)
     full = search_payload(state, "aurinko")
