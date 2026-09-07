@@ -1,5 +1,7 @@
 {{ intro }}
 
+{{ listen }}
+
 {{ hypothesis }}
 
 {{ principles }}

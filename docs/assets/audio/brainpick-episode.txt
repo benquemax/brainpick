@@ -1,0 +1,41 @@
+Hi. This is a short episode about brainpick, and about a bet.
+
+Here is the bet. Take an agent that runs on a small model. A twenty-seven B model, on your own machine. Give it frictionless access to knowledge and skills that evolve in real time. What you get is a self-improving agent. Not merely as capable as an agent on a huge frontier model. Better. Because the frontier model's knowledge was frozen the day its training ended. The brain's knowledge is corrected the moment any agent notices it was wrong.
+
+That is the whole idea. Keep just enough intelligence inside the model. Reading, reasoning, using tools. And keep the knowledge and the skills outside it, in a brain. A brain that any agent can read, ground, and improve as it works.
+
+Three things follow. Less VRAM and compute, because skills and facts are not baked into weights, so learning something new is a commit, not a fine tune. A better and more current understanding of the world, because a brain is corrected in real time by everyone who uses it, and every claim in it says where it came from. And more intelligence per kilowatt hour, because the second time a small model meets a problem, the answer is already a skill.
+
+So what is a brain?
+
+A brain is a folder of markdown files in a git repository. That is it. Plain files, with a little frontmatter on top. A type, a title, a description, a timestamp. Links between the files. You can read it with any editor. You can grep it. You can diff it, review it, revert it, fork it, and merge it, because it is a repository.
+
+The files are organised as a data flow. Raw material goes in at the bottom. What happened today goes in the journal. When an episode settles, it becomes knowledge, an evergreen concept. When a concept has been carried out and it works, it becomes a skill, a tested procedure. And an agent reads in the opposite direction. Skills first, because a skill is the most distilled and most tested thing the brain has. Then knowledge. Then journals. And raw only by grep, to check a source.
+
+Nothing is repeated. When something gets distilled, the less distilled page gets a pointer to the more distilled one. Never a copy. Every claim is grounded inline, Wikipedia style, with a link to where it came from. And if you have several brains, your own, your team's, the project's, the closest one wins when they disagree.
+
+Now, the part that makes this different from every knowledge graph you have seen.
+
+The associations are made at write time, by the author. When an agent writes to the brain, it already has the relevant pages in its context. It just read them, to ground what it is about to say. So the links come for free. It links the pages, it tags the document, and a contract refuses the write if it did not. That contract is henxels. Henxels is a git hook that holds the brain to its rules. No orphan pages. No link that lands nowhere. No document without a type. To break a rule, you change the contract. There is no other way.
+
+Then brainpick compiles the graph from what the files already carry. Links, backlinks, tags, entities. Algorithmically. In under a second. On every commit. Vectors cover the semantic connections nobody wrote. And a gap detector joins the two, and points out pages that should be linked but are not.
+
+Compare that with the usual approach. A model reads your whole corpus afterwards, without the author's context, and guesses at associations the author already had. It is expensive, so it runs once in a while. It is out of date from day one. And every pass starts from zero, so nothing an agent learns today makes tomorrow's graph better. We ran LightRAG. We retired it. A graph the brain's own authors build as they write is a graph the brain evolves with. A graph extracted from it afterwards is just a snapshot.
+
+And brainpick itself? Brainpick is the thin view on top. It compiles the tiers. A deterministic index and link graph. Vector search, if you have an embedding model. An entity graph. It serves them to agents over MCP, five tools, small enough for a small model to drive. Search, read, neighbours, overview, write. And it serves them to humans as a live, three dimensional brain in the browser that updates as agents write. Brainpick never owns the format. It reads the frontmatter and the links, never the folder names. Delete everything it compiled, and you have lost nothing. The files are the brain.
+
+One more thing that matters. The brain is not the truth. It is the best knowledge available at the moment. Everything in it is provisional. When you notice a flaw, you fix the brain. You do not route around it.
+
+Here is how you start.
+
+Open a terminal in your project. Run: u v x henxels init, dash dash template, brainpick dash brain. That scaffolds the brain. The folders, the first skill, the contract, and the git hooks. Then run: u v x brainpick init. That mints the brain's identity, compiles it, and wires the MCP server into the agent tools it finds on your machine. Then tell your agent: use the brain. It reads the first skill, and it knows what to do. Pull first. Read skills first. Ground every claim. Journal what happened. Distil upward. Push.
+
+That is the whole onboarding. Two commands, and a sentence.
+
+Brainpick is open source, in Python and in Node, one spec, two native engines, tested against the same fixtures. Its own documentation is a brain, compiled and served by brainpick itself, and you can browse it live. The links are in the readme.
+
+The hypothesis is testable. We intend to test it. Same tasks. A small model with a brain, against a large model without one. Measured in outcomes, and in watt hours.
+
+Until then, this is the bet. Give a small model a brain, and let the brain do the remembering.
+
+Thanks for listening.

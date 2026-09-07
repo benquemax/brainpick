@@ -30,6 +30,17 @@ It is a window into the brain, never a dependency of it — see the
 docs compiled and served by brainpick itself.
 
 
+## Listen instead
+
+Five minutes, one voice, no slides: the bet, what a brain is, why the
+associations are made at write time, and the two commands that get you
+started. Synthesized from the transcript beside it — no human was recorded.
+
+**▶ [Play the episode (mp3, 5 min)](https://benquemax.github.io/brainpick/assets/audio/brainpick-episode.mp3)**
+· [transcript](https://github.com/benquemax/brainpick/blob/main/docs/assets/audio/brainpick-episode.txt)
+
+
+
 ## The hypothesis
 
 A small model with **frictionless access to knowledge and skills that
