@@ -2,6 +2,11 @@
 
 ## 2026-09-07
 
+- Released 0.4.0: `brain_search`'s `why` now names the query tokens that
+  actually matched (and where) instead of echoing the whole query (#2), and
+  `brainpick integrate dsh` wires a brain into a DeepSeek Harness web profile
+  by printing the `@deepseek-ai/dsh-mcp-client` cordis insert with the
+  resolved absolute root (#3).
 - Released 0.3.1 (the README ships in the PyPI package; this release
   carries the new one).
 - Released 0.3.2: the README gained a five-minute spoken episode
