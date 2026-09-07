@@ -4,6 +4,9 @@
 
 - Released 0.3.1 (the README ships in the PyPI package; this release
   carries the new one).
+- Released 0.3.2: the README gained a five-minute spoken episode
+  (`docs/assets/audio/brainpick-episode.mp3`, TTS from a committed
+  transcript) served from Pages; the tag deploys it.
 - Added: the hypothesis — a small model with frictionless access to
   knowledge and skills that evolve in real time becomes a self-improving
   agent that beats a large model without such access, at a fraction of the
