@@ -2,9 +2,9 @@
 type: article
 about: concept
 title: The hypothesis
-description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
+description: "The bet brainpick is built on — a small model with frictionless access to knowledge and skills that evolve in real time becomes a self-improving agent that outperforms a large model without such access, at a fraction of the VRAM, compute and energy; the sub-hypothesis that the graph must be regenerated from the repository so associations evolve and knowledge is always rebased; why the brain format is what makes outside memory trustworthy, and how the bet gets tested."
 tags: [brain, design, vision]
-timestamp: 2026-09-07T18:00:00Z
+timestamp: 2026-09-07T18:30:00Z
 ---
 
 # The hypothesis
@@ -64,6 +64,31 @@ weights, and read as *cheaply*. That is what the brain format is for:
   in a handful of tools ([MCP tools](mcp-tools.md)) small enough for a small
   model to drive: the model never has to *remember*, only to *look*.
 
+## Sub-hypothesis: generate the graph from the repository
+
+The knowledge graph must be a **derived artifact regenerated from the
+repository**, never an accumulated store. Everything under `.brainpick/` is
+compiled from the files and disposable ([Spec: overview](reference/spec/overview.md));
+`brainpick compile --full` ([compile](reference/cli/compile.md)) or plain
+`rm -rf .brainpick/` rebuilds it from nothing, and doing so on a schedule —
+once a week from scratch — is a habit, not a recovery.
+
+Two things follow that an accumulating store cannot offer:
+
+- **Associations evolve.** When a doc is distilled, split, merged or
+  corrected, its links, backlinks, vectors and entities are recomputed from
+  what the repository says *now* ([Compile pipeline](compile-pipeline.md)).
+  A hand-tended index, an incrementally fed vector database, or weights
+  fine-tuned on last month's facts each carry every stale association
+  forward; a regenerated graph carries none.
+- **Knowledge and skills are rebased.** Because the brain is a repository,
+  what the LLM reads is always rebased onto the current state — pulled,
+  diffed, reverted, merged like code — and the agent gets that
+  frictionlessly, without a retraining or a re-indexing step it has to
+  remember to run. This is [principle 2](https://github.com/benquemax/brainpick/blob/main/README.md)
+  (the files are the brain) and [principle 4](https://github.com/benquemax/brainpick/blob/main/README.md)
+  (agents never tend the index) seen from the hypothesis's side.
+
 ## What would falsify it
 
 The hypothesis is testable and meant to be tested: the same tasks, a small
@@ -73,5 +98,8 @@ cannot *use* what it reads — if reasoning, not knowledge, was the
 bottleneck all along. It also fails if the brain cannot stay trustworthy
 under agent writes, which is why every layer of the stack that guards
 trust (henxels, grounding, the data flow) exists before any that adds
-cleverness. Results belong in this wiki when they exist; until then this
+cleverness. The sub-hypothesis fails on its own if a regenerated graph
+turns out *worse* than an accumulated one — if associations the compile
+cannot recover from the files (a curator's judgement, say) matter more
+than the stale ones regeneration sheds. Results belong in this wiki when they exist; until then this
 page is the bet, stated plainly, per [Wiki conventions](wiki-conventions.md).

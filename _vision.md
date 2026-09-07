@@ -69,6 +69,14 @@ memory earns the trust a model would otherwise need weights for. The bet
 is testable, and testing it (same tasks, small model with a brain against
 large model without, in outcomes and watt-hours) is on the roadmap.
 
+A sub-hypothesis: the knowledge graph should be *generated from the
+repository* — derived, disposable, rebuilt from scratch on demand (once a
+week from nothing is a fine habit) — never accumulated. That is what lets
+the associations evolve with the content instead of fossilising, and what
+makes it possible to hand the LLM knowledge and skills that are always
+rebased onto the current state of the repository, frictionlessly, the
+way code is.
+
 ## Who it is for
 
 Small local models are first-class citizens: the target profile is a
