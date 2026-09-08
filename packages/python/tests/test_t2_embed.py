@@ -137,6 +137,24 @@ def test_make_embedder_maps_kinds():
         make_embedder("teleport", "http://x", "m")
 
 
+def test_http_embedders_carry_the_configured_batch_timeout():
+    from brainpick.embed import DEFAULT_TIMEOUT_S
+
+    assert make_embedder("ollama", "http://x", "m").timeout.read == DEFAULT_TIMEOUT_S
+    assert make_embedder("ollama", "http://x", "m", timeout=42).timeout.read == 42.0
+    assert make_embedder("openai-compatible", "http://x/v1", "m", timeout=7).timeout.read == 7.0
+    # connect stays tight so a dead endpoint still fails fast
+    assert make_embedder("ollama", "http://x", "m", timeout=42).timeout.connect == 5.0
+    # non-positive is "unset", never "wait forever"
+    assert make_embedder("ollama", "http://x", "m", timeout=0).timeout.read == DEFAULT_TIMEOUT_S
+
+
+def test_embedding_config_has_a_generous_default_timeout():
+    from brainpick.config import EmbeddingConfig
+
+    assert EmbeddingConfig().timeout == 1800
+
+
 def test_make_embedder_fastembed_is_import_guarded():
     fastembed = pytest.importorskip("fastembed", reason="[vectors-local] extra not installed")
     assert fastembed is not None

@@ -168,6 +168,16 @@ def test_embedding_env_overrides(tmp_path):
     assert cfg.models.embedding.kind == "mock"
 
 
+def test_embedding_timeout_defaults_generous_reads_toml_and_env(tmp_path):
+    assert load_config(tmp_path).models.embedding.timeout == 1800
+    (tmp_path / "brainpick.toml").write_text(
+        '[models.embedding]\nkind = "ollama"\ntimeout = 3600\n', encoding="utf-8",
+    )
+    assert load_config(tmp_path).models.embedding.timeout == 3600
+    cfg = load_config(tmp_path, env={"BRAINPICK_MODELS_EMBEDDING_TIMEOUT": "90"})
+    assert cfg.models.embedding.timeout == 90
+
+
 def test_unknown_embedding_keys_warn_not_error(tmp_path):
     (tmp_path / "brainpick.toml").write_text(
         "[models.embedding]\nturbo = true\n[models.future]\nx = 1\n", encoding="utf-8",

@@ -226,7 +226,10 @@ def _read_json(path: Path) -> dict | None:
 
 def _sync_vectors(bp: Path, chunks: list[dict], embedding, full: bool) -> bool:
     kind, endpoint, model = _normalized_backend(embedding)
-    embedder = make_embedder(kind, endpoint, model, api_key=os.environ.get("OPENAI_API_KEY", ""))
+    embedder = make_embedder(
+        kind, endpoint, model, api_key=os.environ.get("OPENAI_API_KEY", ""),
+        timeout=float(getattr(embedding, "timeout", 0) or 0),
+    )
     store = VectorStore(bp / "t2" / "lancedb")
 
     old = _read_json(bp / "t2" / "embedding.json")

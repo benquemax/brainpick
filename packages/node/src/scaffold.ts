@@ -88,6 +88,7 @@ const LOCAL_CONFIG_TEMPLATE = `# brainpick.local.toml — machine-local override
 kind = "{kind}"
 endpoint = "{endpoint}"
 model = "{model}"
+# timeout = 1800                  # seconds per 64-text batch; raise it for a slow or shared backend
 `;
 
 export type Print = (line: string) => void;

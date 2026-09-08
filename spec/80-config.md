@@ -130,7 +130,8 @@ the enabling instruction.
 
 ## Model sections
 
-`[models.embedding]` (T2 — spec/30: kind, endpoint, model) and
+`[models.embedding]` (T2 — spec/30: kind, endpoint, model, `timeout` in
+whole seconds per batch, default 1800) and
 `[models.extraction]` (kind = `ollama | openai-compatible`, endpoint,
 model, `api_key_env` naming an env var, never a key) — the extraction
 model powers T3 and doubles as the merge resolver (spec/70 brain_write).

@@ -114,6 +114,7 @@ class EmbeddingConfig:
     endpoint: str = ""
     model: str = ""
     dim: int = 0        # 0 = unknown; discovered from the first embedding response
+    timeout: int = 1800  # whole seconds per batch — a slow backend is still a backend (spec/30)
 
 
 @dataclass

@@ -25,7 +25,10 @@ export function localModelCacheDir(): string {
 }
 // Same boundaries as keyword search (spec/50): Python [^\W_]+ with re.UNICODE.
 const TOKEN = /[\p{L}\p{N}]+/gu;
-const HTTP_TIMEOUT_MS = 120_000; // the first call may load a model
+export const DEFAULT_TIMEOUT_S = 1800; // spec/30: per-batch timeout — a slow backend is still a backend
+// fetch() has no separate connect phase, so unlike the Python engine (5 s
+// connect + this read timeout) the whole request shares one budget here; a
+// refused connection still fails immediately because the socket errors, not times out.
 
 /** The backend cannot embed right now — the message is a one-line instruction. */
 export class EmbeddingUnavailable extends Error {}
@@ -77,13 +80,19 @@ export class MockEmbedder implements Embedder {
 
 abstract class HttpEmbedder implements Embedder {
   protected readonly endpoint: string;
+  protected readonly timeoutMs: number;
 
+  /** `timeoutS` is the per-batch read timeout ([models.embedding] timeout). A
+   * batch can take minutes on a shared or CPU-bound backend and a slow answer
+   * is still an answer; non-positive values fall back to the default. */
   constructor(
     endpoint: string,
     protected readonly model: string,
     protected readonly apiKey = "",
+    timeoutS: number = DEFAULT_TIMEOUT_S,
   ) {
     this.endpoint = endpoint.replace(/\/+$/, "");
+    this.timeoutMs = (Number.isFinite(timeoutS) && timeoutS > 0 ? timeoutS : DEFAULT_TIMEOUT_S) * 1000;
   }
 
   async embed(texts: string[]): Promise<number[][]> {
@@ -102,7 +111,7 @@ abstract class HttpEmbedder implements Embedder {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return (await response.json()) as Record<string, unknown>;
@@ -232,11 +241,17 @@ export class LocalEmbedder implements Embedder {
 }
 
 /** The [models.embedding] record → a client. Unknown kinds are instructions. */
-export function makeEmbedder(kind: string, endpoint = "", model = "", apiKey = ""): Embedder {
+export function makeEmbedder(
+  kind: string,
+  endpoint = "",
+  model = "",
+  apiKey = "",
+  timeoutS: number = DEFAULT_TIMEOUT_S,
+): Embedder {
   if (kind === "mock") return new MockEmbedder();
-  if (kind === "ollama") return new OllamaEmbedder(endpoint, model);
+  if (kind === "ollama") return new OllamaEmbedder(endpoint, model, "", timeoutS);
   if (kind === "openai-compatible" || kind === "openai") {
-    return new OpenAICompatEmbedder(endpoint, model, apiKey);
+    return new OpenAICompatEmbedder(endpoint, model, apiKey, timeoutS);
   }
   if (kind === "local") return new LocalEmbedder(model || DEFAULT_LOCAL_MODEL);
   if (kind === "fastembed") {

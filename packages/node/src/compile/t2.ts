@@ -299,7 +299,7 @@ async function syncVectors(
   full: boolean,
 ): Promise<boolean> {
   const [kind, endpoint, model] = normalizedBackend(embedding);
-  const embedder = makeEmbedder(kind, endpoint, model, process.env["OPENAI_API_KEY"] ?? "");
+  const embedder = makeEmbedder(kind, endpoint, model, process.env["OPENAI_API_KEY"] ?? "", embedding.timeout);
   const store = new VectorStore(join(bp, "t2", "lancedb"));
 
   const old = readJson(join(bp, "t2", "embedding.json"));

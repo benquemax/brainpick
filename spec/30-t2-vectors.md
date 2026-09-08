@@ -62,7 +62,11 @@ chunk id), `doc` (utf8), `ord` (int32), `text` (utf8), `vector`
 (fixed-size list of float32, length = `dim`). Engines use the official
 LanceDB SDK of their runtime; the on-disk Lance dataset is the
 interoperability point — either engine may compile, either may query.
-Embedding requests are batched (≤ 64 texts per call).
+Embedding requests are batched (≤ 64 texts per call). Engines wait for
+each batch as long as `[models.embedding] timeout` allows (seconds, default
+1800): a slow backend — a shared LAN Ollama under load, a CPU with no GPU —
+is still a backend, and cutting it off would silently degrade T2 to keyword
+search. Only a connection that cannot be opened fails fast.
 
 ## Detection ladder (normative order)
 

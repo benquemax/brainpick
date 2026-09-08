@@ -13,7 +13,17 @@ import httpx
 BATCH_SIZE = 64  # spec/30: embedding requests are batched (≤ 64 texts per call)
 MOCK_DIM = 16
 _TOKEN = re.compile(r"[^\W_]+", re.UNICODE)  # same boundaries as keyword search (spec/50)
-_HTTP_TIMEOUT = httpx.Timeout(120.0, connect=5.0)  # first call may load a model
+DEFAULT_TIMEOUT_S = 1800.0  # spec/30: per-batch read timeout; connect stays tight (5 s)
+_CONNECT_TIMEOUT_S = 5.0
+
+
+def _http_timeout(seconds: float) -> httpx.Timeout:
+    """A batch can take minutes on a shared or CPU-bound backend (a LAN Ollama
+    under load, a laptop with no GPU) and a slow answer is still an answer —
+    only a dead endpoint should fail, and that is what the connect timeout is
+    for. Non-positive values fall back to the default rather than disabling."""
+    read = seconds if seconds > 0 else DEFAULT_TIMEOUT_S
+    return httpx.Timeout(read, connect=_CONNECT_TIMEOUT_S)
 
 
 class EmbeddingUnavailable(Exception):
@@ -56,10 +66,11 @@ class MockEmbedder:
 
 
 class _HttpEmbedder:
-    def __init__(self, endpoint: str, model: str, api_key: str = ""):
+    def __init__(self, endpoint: str, model: str, api_key: str = "", timeout: float = DEFAULT_TIMEOUT_S):
         self.endpoint = endpoint.rstrip("/")
         self.model = model
         self.api_key = api_key
+        self.timeout = _http_timeout(timeout)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
@@ -70,7 +81,7 @@ class _HttpEmbedder:
     def _post(self, url: str, payload: dict) -> dict:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         try:
-            response = httpx.post(url, json=payload, headers=headers, timeout=_HTTP_TIMEOUT)
+            response = httpx.post(url, json=payload, headers=headers, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
         except Exception as error:
@@ -132,14 +143,18 @@ class FastembedEmbedder:
         return vectors
 
 
-def make_embedder(kind: str, endpoint: str = "", model: str = "", api_key: str = "") -> Embedder:
-    """The [models.embedding] record → a client. Unknown kinds are instructions."""
+def make_embedder(
+    kind: str, endpoint: str = "", model: str = "", api_key: str = "",
+    timeout: float = DEFAULT_TIMEOUT_S,
+) -> Embedder:
+    """The [models.embedding] record → a client. Unknown kinds are instructions.
+    `timeout` is the per-batch read timeout in seconds ([models.embedding] timeout)."""
     if kind == "mock":
         return MockEmbedder()
     if kind == "ollama":
-        return OllamaEmbedder(endpoint, model)
+        return OllamaEmbedder(endpoint, model, timeout=timeout)
     if kind in ("openai-compatible", "openai"):
-        return OpenAICompatEmbedder(endpoint, model, api_key=api_key)
+        return OpenAICompatEmbedder(endpoint, model, api_key=api_key, timeout=timeout)
     if kind == "fastembed":
         return FastembedEmbedder(model)
     raise EmbeddingUnavailable(

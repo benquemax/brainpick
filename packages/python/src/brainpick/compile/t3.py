@@ -152,7 +152,8 @@ def run_t3_stage(
 
     changed_files = _write_export(t3, entities, relations, meta)
     _write_json(t3 / _STATE_FILE, {"fingerprint": fingerprint, "chunks": current})
-    _maybe_embed_entities(bp, entities, embedding_record)
+    _maybe_embed_entities(bp, entities, embedding_record,
+                          timeout=float(getattr(config.models.embedding, "timeout", 0) or 0))
 
     summary = None
     if sample is not None:
@@ -364,7 +365,9 @@ def _write_export(t3: Path, entities: list[dict], relations: list[dict], meta: d
     return e_changed or r_changed or m_changed
 
 
-def _maybe_embed_entities(bp: Path, entities: list[dict], embedding_record: dict | None) -> None:
+def _maybe_embed_entities(
+    bp: Path, entities: list[dict], embedding_record: dict | None, timeout: float = 0.0,
+) -> None:
     """Advisory (spec/40): embed `name — description` into a LanceDB `entities`
     table when T2 recorded a backend. Best-effort — its absence is tolerated, so a
     failure (backend down, lancedb missing) never touches the export or the tier."""
@@ -385,7 +388,7 @@ def _maybe_embed_entities(bp: Path, entities: list[dict], embedding_record: dict
 
         embedder = make_embedder(
             record["kind"], record.get("endpoint", ""), record.get("model", ""),
-            api_key=os.environ.get("OPENAI_API_KEY", ""),
+            api_key=os.environ.get("OPENAI_API_KEY", ""), timeout=timeout,
         )
         texts = [f'{e["name"]} — {e["description"]}' for e in entities]
         vectors = embedder.embed(texts)

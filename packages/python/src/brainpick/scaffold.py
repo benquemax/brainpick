@@ -101,6 +101,7 @@ _LOCAL_CONFIG_TEMPLATE = """\
 kind = "{kind}"
 endpoint = "{endpoint}"
 model = "{model}"
+# timeout = 1800                  # seconds per 64-text batch; raise it for a slow or shared backend
 """
 
 GITIGNORE_LINES = (".brainpick/", "brainpick.local.toml")

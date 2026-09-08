@@ -178,6 +178,14 @@ test("embedding env overrides", () => {
   expect(cfg.models.embedding.kind).toBe("mock");
 });
 
+test("embedding timeout defaults generous, reads toml and env", () => {
+  expect(load(tempDir()).cfg.models.embedding.timeout).toBe(1800);
+  const root = withToml('[models.embedding]\nkind = "ollama"\ntimeout = 3600\n');
+  expect(load(root).cfg.models.embedding.timeout).toBe(3600);
+  const { cfg } = load(root, { BRAINPICK_MODELS_EMBEDDING_TIMEOUT: "90" });
+  expect(cfg.models.embedding.timeout).toBe(90);
+});
+
 test("unknown embedding keys warn, not error", () => {
   const root = withToml("[models.embedding]\nturbo = true\n[models.future]\nx = 1\n");
   const { cfg, warnings } = load(root);

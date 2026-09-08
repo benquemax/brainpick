@@ -75,6 +75,7 @@ export interface EmbeddingConfig {
   endpoint: string;
   model: string;
   dim: number; // 0 = unknown; discovered from the first embedding response
+  timeout: number; // whole seconds per batch — a slow backend is still a backend (spec/30)
 }
 
 export interface ExtractionConfig {
@@ -124,7 +125,7 @@ export function defaultConfig(): Config {
     index: { mode: "section", file: "index.md" },
     modules: { vectors: "auto", graph: "on", similarity_gaps: "auto", ui: true },
     models: {
-      embedding: { kind: "", endpoint: "", model: "", dim: 0 },
+      embedding: { kind: "", endpoint: "", model: "", dim: 0, timeout: 1800 },
       extraction: { kind: "", endpoint: "", model: "", api_key_env: "" },
     },
     serve: {

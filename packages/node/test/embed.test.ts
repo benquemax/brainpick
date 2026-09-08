@@ -8,6 +8,7 @@ import { describe, expect, test } from "vitest";
 import {
   BATCH_SIZE,
   DEFAULT_LOCAL_MODEL,
+  DEFAULT_TIMEOUT_S,
   EmbeddingUnavailable,
   fnv1a,
   LocalEmbedder,
@@ -135,6 +136,34 @@ test("http embedder failure raises EmbeddingUnavailable", async () => {
 test("empty input never calls the backend", async () => {
   const embedder = new OllamaEmbedder("http://127.0.0.1:9", "nomic-embed-text");
   expect(await embedder.embed([])).toEqual([]);
+});
+
+test("http embedders honour the configured per-batch timeout, in seconds", async () => {
+  let held: Promise<void> | undefined;
+  const slow = createServer((_req, res) => {
+    held = new Promise((resolve) => setTimeout(() => { res.end("{}"); resolve(); }, 2_000));
+  });
+  await new Promise<void>((resolve) => slow.listen(0, "127.0.0.1", resolve));
+  const port = (slow.address() as AddressInfo).port;
+  try {
+    const impatient = new OllamaEmbedder(`http://127.0.0.1:${port}`, "m", "", 0.1);
+    const started = Date.now();
+    await expect(impatient.embed(["kuu"])).rejects.toThrow(EmbeddingUnavailable);
+    expect(Date.now() - started).toBeLessThan(1_500); // cut off well before the 2 s reply
+  } finally {
+    await held; // let the delayed response finish before closing the server
+    slow.close();
+  }
+});
+
+test("makeEmbedder defaults the timeout generously and treats non-positive as unset", () => {
+  expect(DEFAULT_TIMEOUT_S).toBe(1800);
+  const dflt = makeEmbedder("ollama", "http://x", "m") as unknown as { timeoutMs: number };
+  const explicit = makeEmbedder("ollama", "http://x", "m", "", 42) as unknown as { timeoutMs: number };
+  const zero = makeEmbedder("openai-compatible", "http://x/v1", "m", "", 0) as unknown as { timeoutMs: number };
+  expect(dflt.timeoutMs).toBe(1800_000);
+  expect(explicit.timeoutMs).toBe(42_000);
+  expect(zero.timeoutMs).toBe(1800_000);
 });
 
 // -- the factory ---------------------------------------------------------------------

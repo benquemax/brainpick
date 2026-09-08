@@ -1,5 +1,17 @@
 # Update log
 
+## 2026-09-08
+
+- Fixed: the embedding HTTP timeout was hardcoded at 120 s per batch in both
+  engines, so a slow-but-alive backend (a shared LAN Ollama under load, a
+  laptop CPU with no GPU) silently degraded T2 to keyword search on every
+  compile. It is now `[models.embedding] timeout` (whole seconds per ≤64-text
+  batch, default 1800, env `BRAINPICK_MODELS_EMBEDDING_TIMEOUT`); only a
+  connection that cannot be opened still fails fast. Documented in
+  [models.embedding](reference/config/models-embedding.md); spec/30 and
+  spec/80 updated; `brainpick init` writes the key commented out into
+  `brainpick.local.toml`.
+
 ## 2026-09-07
 
 - Released 0.4.0: `brain_search`'s `why` now names the query tokens that
