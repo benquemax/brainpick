@@ -2,6 +2,7 @@
 
 ## 2026-09-08
 
+- Released 0.4.1: the configurable embedding timeout below.
 - Fixed: the embedding HTTP timeout was hardcoded at 120 s per batch in both
   engines, so a slow-but-alive backend (a shared LAN Ollama under load, a
   laptop CPU with no GPU) silently degraded T2 to keyword search on every
