@@ -216,6 +216,7 @@ export {
   detectBundle,
   detectHenxels,
   detectLinkStyle,
+  findHenxels,
   findRepoRoot,
   henxelsOnPath,
   openaiKeyPresent,

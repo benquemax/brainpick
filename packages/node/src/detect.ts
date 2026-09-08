@@ -5,6 +5,7 @@
  * detection never raises and never stalls the choreography. Ports detect.py.
  */
 import { accessSync, constants, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 
 import { ALWAYS_EXCLUDED_DIRS } from "./core/bundle";
@@ -282,4 +283,40 @@ function isExecutableFile(path: string): boolean {
 
 export function henxelsOnPath(env: Env = process.env): boolean {
   return which("henxels", env) !== null;
+}
+
+/** Where `uv tool install` / `pipx install` drop launchers when the caller's
+ * PATH does not say — `~/.local/bin` (XDG_BIN_HOME first) on POSIX, the
+ * Python `Scripts` dirs on Windows. These are the places a harness that
+ * spawned `brainpick mcp` with a minimal PATH tends to have forgotten. */
+function userBinDirs(env: Env): string[] {
+  const dirs: string[] = [];
+  const xdg = env["XDG_BIN_HOME"];
+  if (xdg) dirs.push(xdg);
+  const home = env["HOME"] ?? env["USERPROFILE"] ?? homedir();
+  dirs.push(join(home, ".local", "bin"));
+  if (process.platform === "win32") {
+    const appdata = env["APPDATA"];
+    if (appdata) dirs.push(join(appdata, "Python", "Scripts"));
+    const local = env["LOCALAPPDATA"];
+    if (local) dirs.push(join(local, "Programs", "Python", "Scripts"));
+  }
+  return dirs;
+}
+
+/** The henxels executable: PATH first, then the per-user launcher dirs.
+ *
+ * The MCP server is often spawned by a harness with a stripped PATH
+ * (`/usr/bin:/bin`) in which a `uv tool install henxels` is invisible, and
+ * a guard that silently accepts every write in that case is worse than no
+ * guard — so look where the launcher actually lives before giving up.
+ * Ports detect.find_henxels. */
+export function findHenxels(env: Env = process.env): string | null {
+  const onPath = which("henxels", env);
+  if (onPath !== null) return onPath;
+  for (const dir of userBinDirs(env)) {
+    const found = which("henxels", { ...env, PATH: dir });
+    if (found !== null) return found;
+  }
+  return null;
 }

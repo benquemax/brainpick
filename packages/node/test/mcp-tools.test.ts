@@ -1,7 +1,7 @@
 /** MCP tool payloads (spec/70): budget shaping, forgiving resolution, guarded
  * writes, base_sha conflicts (the twin of packages/python/tests/test_mcp_tools.py). */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
@@ -18,7 +18,16 @@ import {
   writePayload,
 } from "../src/mcp";
 import { ServeState } from "../src/serve/state";
-import { cleanup, copyBundle, prependPath, stageFakeHenxels, stageT3Export, tempDir } from "./helpers";
+import {
+  FIXTURE_BUNDLES,
+  cleanup,
+  copyBundle,
+  isolateUserBin,
+  prependPath,
+  stageFakeHenxels,
+  stageT3Export,
+  tempDir,
+} from "./helpers";
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
@@ -35,8 +44,15 @@ function git(cwd: string, ...args: string[]): void {
 }
 
 const savedPath = process.env["PATH"];
+const USER_BIN_ENV = ["HOME", "USERPROFILE", "XDG_BIN_HOME", "APPDATA", "LOCALAPPDATA"] as const;
+const savedUserBinEnv = Object.fromEntries(USER_BIN_ENV.map((k) => [k, process.env[k]]));
 afterEach(() => {
   process.env["PATH"] = savedPath;
+  for (const key of USER_BIN_ENV) {
+    const saved = savedUserBinEnv[key];
+    if (saved === undefined) delete process.env[key];
+    else process.env[key] = saved;
+  }
   cleanup();
 });
 
@@ -397,11 +413,63 @@ test("write henxels missing warns", async () => {
   const empty = join(tempDir(), "emptybin");
   mkdirSync(empty, { recursive: true });
   process.env["PATH"] = empty;
+  isolateUserBin(join(tempDir(), "nohome"));
   const state = await makeState(root);
   const result = await writePayload(state, "uusi-kivi.md", NEW_DOC);
   expect(result["ok"]).toBe(true);
   expect(result["warning"]).toBeTruthy();
   expect(statSync(join(root, "uusi-kivi.md")).isFile()).toBe(true);
+});
+
+test("write henxels found in user bin when PATH is stripped", async () => {
+  // A harness that spawns `brainpick mcp` with PATH=/usr/bin:/bin hides a
+  // `uv tool install henxels` (~/.local/bin) — the guard used to shrug and
+  // accept every write with a warning. It must look there itself.
+  const root = copyBundle();
+  writeFileSync(join(root, "henxels.yaml"), "henxels: []\n", "utf8");
+  const home = join(tempDir(), "home");
+  stageFakeHenxels(join(home, ".local", "bin"), "found in user bin");
+  const empty = join(tempDir(), "emptybin");
+  mkdirSync(empty, { recursive: true });
+  process.env["PATH"] = empty;
+  isolateUserBin(home);
+  const state = await makeState(root);
+
+  const result = await writePayload(state, "uusi-kivi.md", NEW_DOC);
+  expect(result["ok"]).toBe(false);
+  expect((result["instruction"] as string).trim()).toBe("found in user bin");
+  expect(exists(join(root, "uusi-kivi.md"))).toBe(false);
+});
+
+test("write henxels contract at repo root governs the bundle", async () => {
+  // The brain-template layout: henxels.yaml beside _brain/, not inside it.
+  // The guard used to look only at the bundle root, find nothing, and skip
+  // the referee entirely — every write passed. It must find the repo-root
+  // contract and run the check from there with a repo-relative path.
+  const repo = join(tempDir(), "repo");
+  mkdirSync(join(repo, ".git"), { recursive: true });
+  const bundle = join(repo, "_brain");
+  cpSync(join(FIXTURE_BUNDLES, "kotiaurinko"), bundle, { recursive: true });
+  writeFileSync(join(repo, "henxels.yaml"), "henxels: []\n", "utf8");
+
+  const bin = join(tempDir(), "bin");
+  mkdirSync(bin, { recursive: true });
+  if (process.platform === "win32") {
+    writeFileSync(join(bin, "henxels.bat"), "@echo off\r\necho %cd% %2\r\nexit /b 1\r\n", "utf8");
+  } else {
+    const fake = join(bin, "henxels");
+    writeFileSync(fake, '#!/bin/sh\necho "$(pwd) $2"\nexit 1\n', "utf8");
+    chmodSync(fake, 0o755);
+  }
+  process.env["PATH"] = prependPath(savedPath, bin);
+  const state = await makeState(bundle);
+
+  const result = await writePayload(state, "uusi-kivi.md", NEW_DOC);
+  expect(result["ok"]).toBe(false);
+  const [cwd, checked] = (result["instruction"] as string).trim().split(" ");
+  expect(realpathSync(cwd!)).toBe(realpathSync(repo)); // ran from the contract's dir
+  expect(checked!.replace(/\\/g, "/")).toBe("_brain/uusi-kivi.md"); // repo-relative target
+  expect(exists(join(bundle, "uusi-kivi.md"))).toBe(false);
 });
 
 // -- base_sha (spec/70 optimistic concurrency, detection half) ----------------------

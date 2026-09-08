@@ -5,9 +5,9 @@ a transport; create_mcp_server() wraps them in a FastMCP for stdio and /mcp alik
 """
 from __future__ import annotations
 
+import os
 import posixpath
 import re
-import shutil
 import subprocess
 from datetime import datetime, timezone
 
@@ -16,6 +16,7 @@ from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER, top_ghosts
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
 from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
+from brainpick.detect import detect_henxels, find_henxels
 from brainpick.federation import (
     BrainSet,
     parse_scope,
@@ -415,17 +416,24 @@ def _run_henxels(state: ServeState, rel: str) -> tuple[str | None, str | None]:
     if mode == "never":
         return None, None
     root = state.root
-    has_contract = (root / "henxels.yaml").is_file() or (root / ".henxels").exists()
+    # The contract may sit at the bundle root OR at the repo root above it
+    # (the brain-template layout: henxels.yaml beside _brain/). Run the check
+    # from the contract's own directory so henxels resolves the same rules
+    # the pre-commit hook would.
+    contract = detect_henxels(root)
+    has_contract = contract is not None or (root / ".henxels").exists()
     if mode != "always" and not has_contract:
         return None, None
-    executable = shutil.which("henxels")
+    executable = find_henxels()
     if executable is None:
         if mode == "always":
             return "[validate] henxels = \"always\" but the henxels CLI is not installed", None
         return None, "henxels not installed — write accepted without contract validation"
+    cwd = contract.parent if contract is not None else root
+    target = os.path.relpath(root / rel, cwd)
     try:
         proc = subprocess.run(
-            [executable, "check", rel], cwd=root, capture_output=True, text=True, timeout=60,
+            [executable, "check", target], cwd=cwd, capture_output=True, text=True, timeout=60,
         )
     except subprocess.TimeoutExpired:
         return "henxels check timed out after 60s — the write was rolled back", None

@@ -78,6 +78,19 @@ export function stageFakeHenxels(binDir: string, message: string, exitCode = 1):
 /** `binDir` + the existing PATH, joined with the platform separator — CI-2:
  * the existing call sites hardcoded `:`, invisible-broken on Windows (`;`)
  * even once the fake executable itself was fixed. */
+/** Point every per-user launcher dir the write-guard falls back to
+ * (`findHenxels`) at `home`, so a developer's real `~/.local/bin/henxels`
+ * cannot leak into a test that asserts the CLI is absent. Restored by the
+ * caller's afterEach via `savedEnv`. */
+export function isolateUserBin(home: string): void {
+  mkdirSync(home, { recursive: true });
+  process.env["HOME"] = home;
+  process.env["USERPROFILE"] = home;
+  process.env["XDG_BIN_HOME"] = join(home, ".local", "bin");
+  process.env["APPDATA"] = join(home, "AppData", "Roaming");
+  process.env["LOCALAPPDATA"] = join(home, "AppData", "Local");
+}
+
 export function prependPath(envPath: string | undefined, binDir: string): string {
   return `${binDir}${delimiter}${envPath ?? ""}`;
 }

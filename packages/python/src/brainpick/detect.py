@@ -213,3 +213,43 @@ def detect_henxels(root: str | Path) -> Path | None:
 
 def henxels_on_path() -> bool:
     return shutil.which("henxels") is not None
+
+
+def _user_bin_dirs() -> list[Path]:
+    """Where `uv tool install` / `pipx install` drop launchers when the caller's
+    PATH does not say — `~/.local/bin` (XDG_BIN_HOME first) on POSIX, the
+    Python `Scripts` dir on Windows. These are the places the harness that
+    spawned `brainpick mcp` with a minimal PATH tends to have forgotten."""
+    dirs: list[Path] = []
+    xdg = os.environ.get("XDG_BIN_HOME")
+    if xdg:
+        dirs.append(Path(xdg))
+    home = Path.home()
+    dirs.append(home / ".local" / "bin")
+    if os.name == "nt":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            dirs.append(Path(appdata) / "Python" / "Scripts")
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            dirs.append(Path(local) / "Programs" / "Python" / "Scripts")
+    return dirs
+
+
+def find_henxels(env: Mapping[str, str] | None = None) -> str | None:
+    """The henxels executable: PATH first, then the per-user launcher dirs.
+
+    The MCP server is often spawned by a harness with a stripped PATH
+    (`/usr/bin:/bin`) in which a `uv tool install henxels` is invisible,
+    and a guard that silently accepts every write in that case is worse
+    than no guard — so look where the launcher actually lives before
+    giving up."""
+    path = None if env is None else env.get("PATH")
+    found = shutil.which("henxels", path=path)
+    if found:
+        return found
+    for candidate_dir in _user_bin_dirs():
+        found = shutil.which("henxels", path=str(candidate_dir))
+        if found:
+            return found
+    return None

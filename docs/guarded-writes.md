@@ -4,7 +4,7 @@ about: concept
 title: Guarded writes
 description: brain_write lets agents add knowledge through MCP, but nothing touches the brain without passing the henxels contract first.
 tags: [writes, governance]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-08T22:06:59Z
 ---
 
 # Guarded writes
@@ -20,7 +20,11 @@ enters the brain unvalidated. The flow is deliberately boring:
 1. Resolve the target to a kebab-case bundle path (create, replace, or
    append-section mode).
 2. Write atomically, then run the henxels contract against exactly that
-   path.
+   path — the `henxels.yaml` at the bundle root or, failing that, at the
+   git root above it (a brain checked out as `henxels.yaml` beside
+   `_brain/`), run from the contract's own directory. The `henxels` CLI is
+   found on PATH or, when the harness that spawned the server stripped it,
+   in the usual per-user launcher dirs (`~/.local/bin` and friends).
 3. On violation: roll back and return henxels' instruction *verbatim* — the
    agent gets steering ("one concept per page, `type` from this list"), not
    a stack trace.

@@ -17,7 +17,7 @@ from brainpick.mcp_server import (
 )
 from brainpick.serve.state import ServeState
 
-from conftest import prepend_path, stage_fake_henxels, stage_t3_export
+from conftest import isolate_user_bin, prepend_path, stage_fake_henxels, stage_t3_export
 
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
@@ -476,11 +476,64 @@ def test_write_henxels_missing_warns(kotiaurinko, monkeypatch, tmp_path):
     empty = tmp_path / "emptybin"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
+    isolate_user_bin(monkeypatch, tmp_path / "nohome")
     state = make_state(kotiaurinko)
     result = write_payload(state, "uusi-kivi.md", NEW_DOC)
     assert result["ok"] is True
     assert "warning" in result
     assert (kotiaurinko / "uusi-kivi.md").is_file()
+
+
+def test_write_henxels_found_in_user_bin_when_path_is_stripped(kotiaurinko, monkeypatch, tmp_path):
+    """A harness that spawns `brainpick mcp` with PATH=/usr/bin:/bin hides a
+    `uv tool install henxels` (~/.local/bin) — the guard used to shrug and
+    accept every write with a warning. It must look there itself."""
+    (kotiaurinko / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
+    home = tmp_path / "home"
+    stage_fake_henxels(home / ".local" / "bin", "found in user bin")
+    empty = tmp_path / "emptybin"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    isolate_user_bin(monkeypatch, home)
+    state = make_state(kotiaurinko)
+
+    result = write_payload(state, "uusi-kivi.md", NEW_DOC)
+    assert result["ok"] is False
+    assert result["instruction"].strip() == "found in user bin"
+    assert not (kotiaurinko / "uusi-kivi.md").exists()
+
+
+def test_write_henxels_contract_at_repo_root_governs_bundle(monkeypatch, tmp_path):
+    """The brain-template layout: henxels.yaml beside _brain/, not inside it.
+    The guard used to look only at the bundle root, find nothing, and skip
+    the referee entirely — every write passed. It must find the repo-root
+    contract and run the check from there with a repo-relative path."""
+    import shutil as _shutil
+    from conftest import FIXTURE_BUNDLES
+
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    bundle = repo / "_brain"
+    _shutil.copytree(FIXTURE_BUNDLES / "kotiaurinko", bundle)
+    (repo / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    if os.name == "nt":  # pragma: no cover - mirrors stage_fake_henxels
+        (bin_dir / "henxels.bat").write_text("@echo off\r\necho %cd% %2\r\nexit /b 1\r\n")
+    else:
+        fake = bin_dir / "henxels"
+        fake.write_text('#!/bin/sh\necho "$(pwd) $2"\nexit 1\n')
+        fake.chmod(0o755)
+    monkeypatch.setenv("PATH", prepend_path(os.environ["PATH"], bin_dir))
+    state = make_state(bundle)
+
+    result = write_payload(state, "uusi-kivi.md", NEW_DOC)
+    assert result["ok"] is False
+    cwd, _, checked = result["instruction"].strip().partition(" ")
+    assert os.path.realpath(cwd) == os.path.realpath(repo)      # ran from the contract's dir
+    assert checked.replace("\\", "/") == "_brain/uusi-kivi.md"  # repo-relative target
+    assert not (bundle / "uusi-kivi.md").exists()
 
 
 # -- brain_show (spec/95): the 6th tool — ephemeral presentations, not write-gated --

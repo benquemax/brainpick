@@ -1,5 +1,23 @@
 # Update log
 
+## 2026-09-09
+
+- Released 0.4.2: the write-guard fix below.
+- Fixed: `brain_write` (and `PUT /api/docs`) silently skipped the henxels
+  referee in the two most common real-world setups, accepting docs with no
+  frontmatter and no links that the pre-commit hook would then reject.
+  (a) The guard only looked for `henxels.yaml` at the bundle root, so a
+  brain laid out as `henxels.yaml` beside `_brain/` (the template layout)
+  counted as "no contract" — it now uses `detect_henxels` (bundle root, then
+  repo root) and runs `henxels check` from the contract's directory with a
+  contract-relative path. (b) It resolved the CLI with a bare PATH lookup,
+  so a harness spawning `brainpick mcp` with `PATH=/usr/bin:/bin` hid a
+  `uv tool install henxels` in `~/.local/bin` and the write went through
+  with only a warning — `find_henxels` now falls back to `$XDG_BIN_HOME`,
+  `~/.local/bin` and the Windows Python `Scripts` dirs. Both engines;
+  regression tests for both cases; spec/70 and
+  [guarded writes](guarded-writes.md) updated.
+
 ## 2026-09-08
 
 - Released 0.4.1: the configurable embedding timeout below.

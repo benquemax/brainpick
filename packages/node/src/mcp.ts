@@ -8,7 +8,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync, statSync, unlinkSync } from "node:fs";
-import { basename, join, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -22,7 +22,7 @@ import { BrainSet, parseScope, qualify, qualifyPaths, relativeRoot, splitQualifi
 import type { Brain } from "./federation";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
-import { needsShellForScript, which } from "./detect";
+import { detectHenxels, findHenxels, needsShellForScript } from "./detect";
 import { makeChat } from "./llm";
 import { findBase, resolve as resolveMerge } from "./merge";
 import { KNOWN_MODES, runSearch } from "./query/router";
@@ -480,12 +480,12 @@ function runHenxels(state: ServeState, rel: string): [string | null, string | nu
   const mode = state.config.validate.henxels;
   if (mode === "never") return [null, null];
   const root = state.root;
-  let hasContract = false;
-  try {
-    hasContract = statSync(join(root, "henxels.yaml")).isFile();
-  } catch {
-    hasContract = false;
-  }
+  // The contract may sit at the bundle root OR at the repo root above it
+  // (the brain-template layout: henxels.yaml beside _brain/). Run the check
+  // from the contract's own directory so henxels resolves the same rules
+  // the pre-commit hook would.
+  const contract = detectHenxels(root);
+  let hasContract = contract !== null;
   if (!hasContract) {
     try {
       statSync(join(root, ".henxels"));
@@ -495,15 +495,17 @@ function runHenxels(state: ServeState, rel: string): [string | null, string | nu
     }
   }
   if (mode !== "always" && !hasContract) return [null, null];
-  const executable = which("henxels");
+  const executable = findHenxels();
   if (executable === null) {
     if (mode === "always") {
       return ['[validate] henxels = "always" but the henxels CLI is not installed', null];
     }
     return [null, "henxels not installed — write accepted without contract validation"];
   }
-  const proc = spawnSync(executable, ["check", rel], {
-    cwd: root,
+  const cwd = contract !== null ? dirname(contract) : root;
+  const target = relative(cwd, join(root, rel));
+  const proc = spawnSync(executable, ["check", target], {
+    cwd,
     encoding: "utf8",
     timeout: 60_000,
     // .bat/.cmd henxels shims (and the win32 test fixture) hit Node's

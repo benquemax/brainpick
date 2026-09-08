@@ -58,8 +58,16 @@ write path:
 
 1. Resolve `doc` to a bundle-relative kebab-case `.md` path (reject
    traversal outside the bundle).
-2. Write atomically (temp + rename), then run the bundle's henxels
-   contract against that path (when a contract exists).
+2. Write atomically (temp + rename), then run the henxels contract that
+   governs the bundle against that path (when one exists). The contract is
+   `henxels.yaml` at the bundle root, or else at the git repository root
+   above it (the brain-template layout, `henxels.yaml` beside `_brain/`);
+   `henxels check` runs from the contract's directory with the target path
+   relative to it, so the referee resolves the same rules the pre-commit
+   hook does. The `henxels` executable is looked up on PATH first, then in
+   the per-user launcher dirs (`$XDG_BIN_HOME`, `~/.local/bin`, the Python
+   `Scripts` dirs on Windows), because a harness frequently spawns the MCP
+   server with a stripped PATH that hides a `uv tool install henxels`.
 3. Violations → restore the previous state and return `{"ok": false,
    "instruction": "<henxels output verbatim>"}`.
 4. Pass → bump frontmatter `timestamp` (creating it if absent), trigger an

@@ -58,6 +58,18 @@ def stage_fake_henxels(bin_dir: Path, message: str, exit_code: int = 1) -> Path:
     return bin_dir
 
 
+def isolate_user_bin(monkeypatch, home: Path) -> None:
+    """Point every per-user launcher dir the write-guard falls back to
+    (`find_henxels`) at `home`, so a developer's real `~/.local/bin/henxels`
+    cannot leak into a test that asserts the CLI is absent."""
+    home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("XDG_BIN_HOME", str(home / ".local" / "bin"))
+    monkeypatch.setenv("APPDATA", str(home / "AppData" / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(home / "AppData" / "Local"))
+
+
 def prepend_path(env_path: str, bin_dir: Path) -> str:
     """`bin_dir` + the existing PATH, joined with the platform separator —
     CI-2: the existing call sites hardcoded `:`, invisible-broken on
