@@ -575,38 +575,87 @@ def _single_write(state: ServeState, doc: str, content: str, mode: str = "create
 # -- brain_show ----------------------------------------------------------------------
 
 
-def show_hint(presentation: dict, dropped: list[str]) -> str:
-    """The 'what to do next' line for brain_show (spec/95 small-LLM ergonomics)."""
-    cleared = (not presentation["nodes"] and presentation["focus"] is None
-               and presentation["mode"] is None and presentation["annotation"] is None)
+NO_SERVER_CAVEAT = (" No brainpick serve is running for this bundle, so nothing is actually "
+                    "visible yet — start one with `brainpick serve --root <bundle>`.")
+
+
+def show_hint(shown: int, dropped: list[str], cleared: bool, server_reachable: bool = True) -> str:
+    """The 'what to do next' line for brain_show (spec/95 small-LLM ergonomics).
+    `server_reachable` is False only for the local-fallback path (no running
+    `brainpick serve` answered) — the one case where "live in every open UI" would
+    otherwise be a flat lie, so it earns an honest caveat."""
     if cleared:
-        return "cleared — every open UI dropped its spotlight and caption."
-    shown = len(presentation["nodes"])
-    if shown == 0 and dropped:
-        return ("nothing resolved — no name matched a doc or entity; "
+        base = "cleared — every open UI dropped its spotlight and caption."
+    elif shown == 0 and dropped:
+        base = ("nothing resolved — no name matched a doc or entity; "
                 "check them with brain_search, then brain_show again.")
-    base = (f"showing {shown} node(s) live in every open UI — "
-            "call brain_show again to change it, or with clear:true to dismiss.")
-    if dropped:
-        base += f" (dropped {len(dropped)}: {', '.join(dropped)})"
+    else:
+        base = (f"showing {shown} node(s) live in every open UI — "
+                "call brain_show again to change it, or with clear:true to dismiss.")
+        if dropped:
+            base += f" (dropped {len(dropped)}: {', '.join(dropped)})"
+    if not server_reachable:
+        base += NO_SERVER_CAVEAT
     return base
+
+
+def _proxy_show(state: ServeState, body: dict) -> dict | None:
+    """Try to hand this presentation to an already-running `brainpick serve` for
+    the same bundle root, the same way `brainpick show` (the CLI) already does —
+    it broadcasts to a REAL UI, unlike the stdio MCP process's own private,
+    unattached ServeState. Returns the server's result (with our hint attached),
+    an error dict if a server answered but rejected the request, or None if no
+    server answered at all — the caller's cue to fall back to the local, UI-less
+    presentation (spec/95 follow-up: this proxy is Python-engine-only for now,
+    the Node twin still only does the local fallback — see NO_SERVER_CAVEAT)."""
+    from brainpick.cli import connectable_host, post_show
+
+    base_url = f"http://{connectable_host(state.config.serve.host)}:{state.config.serve.port}"
+    token = state.config.serve.token or None
+    result, error, unreachable = post_show(base_url, body, token)
+    if result is not None:
+        result["hint"] = show_hint(result["shown"], result["dropped"], cleared=bool(body.get("clear")))
+        return result
+    if unreachable:
+        return None
+    return {"ok": False, "dropped": [], "error": error,
+            "hint": "a brainpick serve is running but rejected the presentation — fix the error above, then try again."}
 
 
 def _single_show(state: ServeState, nodes: list[str] | None = None, focus: str | None = None,
                  mode: str | None = None, annotation: str | None = None,
                  clear: bool = False) -> dict:
-    """brain_show's MCP result (spec/95): resolve + broadcast a presentation, then
-    report {ok, shown, dropped, seq, hint}. Never writes — not behind [serve]
-    writes, only the normal auth. Forgiving: unresolved nodes are dropped, listed."""
+    """brain_show's MCP result (spec/95): proxy to a running `brainpick serve` when
+    one answers (it does the real resolving + broadcasting); otherwise fall back to
+    resolving + broadcasting on this process's own orphaned state, honestly caveated
+    since nothing is actually watching it. Never writes — not behind [serve] writes,
+    only the normal auth. Forgiving: unresolved nodes are dropped, listed."""
+    body: dict = {}
+    if nodes is not None:
+        body["nodes"] = nodes
+    if focus is not None:
+        body["focus"] = focus
+    if mode is not None:
+        body["mode"] = mode
+    if annotation is not None:
+        body["annotation"] = annotation
+    if clear:
+        body["clear"] = True
+    proxied = _proxy_show(state, body)
+    if proxied is not None:
+        return proxied
+
     presentation, dropped = state.present(
         nodes=nodes, focus=focus, mode=mode, annotation=annotation, clear=clear,
     )
+    cleared = (not presentation["nodes"] and presentation["focus"] is None
+               and presentation["mode"] is None and presentation["annotation"] is None)
     return {
         "ok": True,
         "shown": len(presentation["nodes"]),
         "dropped": dropped,
         "seq": presentation["seq"],
-        "hint": show_hint(presentation, dropped),
+        "hint": show_hint(len(presentation["nodes"]), dropped, cleared, server_reachable=False),
     }
 
 

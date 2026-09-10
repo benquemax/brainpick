@@ -229,10 +229,24 @@ def _cmd_integrate(args: argparse.Namespace) -> int:
     return run_integrate(args.target, Path(args.root), dry_run=args.dry_run)
 
 
-def post_show(base_url: str, body: dict, token: str | None = None) -> tuple[dict | None, str | None]:
+def connectable_host(host: str) -> str:
+    """A server may bind 0.0.0.0/:: (everywhere); a client must connect via a
+    real address — shared by the CLI's `show` and brain_show's server-proxy
+    attempt (mcp_server.py) so both resolve a running `brainpick serve` the
+    same way."""
+    return "127.0.0.1" if host in ("0.0.0.0", "::") else host
+
+
+def post_show(base_url: str, body: dict,
+              token: str | None = None) -> tuple[dict | None, str | None, bool]:
     """POST a presentation body to a running server's /api/show (spec/95). Returns
-    (response, None) or (None, instruction) — the CLI is a client here, never
-    resolving locally: the live server resolves and broadcasts to open UIs."""
+    (response, None, False) on success, or (None, instruction, unreachable) — the
+    caller is a client here, never resolving locally: the live server resolves and
+    broadcasts to open UIs. `unreachable` is True only when nothing answered at all
+    (connection refused/DNS/timeout) — a caller that wants to fall back to a local,
+    UI-less presentation must check it, so a server that's up but REJECTS the
+    request (bad auth, bad body) is never mistaken for "no server running" and
+    silently papered over."""
     import json
     import urllib.error
     import urllib.request
@@ -244,17 +258,17 @@ def post_show(base_url: str, body: dict, token: str | None = None) -> tuple[dict
     request = urllib.request.Request(f"{base_url}/api/show", data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 (localhost control-plane)
-            return json.loads(response.read().decode("utf-8")), None
+            return json.loads(response.read().decode("utf-8")), None, False
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
         try:
             message = json.loads(detail).get("error", detail)
         except (ValueError, AttributeError):
             message = detail
-        return None, f"the server rejected the presentation ({error.code}): {message}"
+        return None, f"the server rejected the presentation ({error.code}): {message}", False
     except urllib.error.URLError as error:
         return None, (f"no brainpick server at {base_url} — start one with 'brainpick serve' "
-                      f"({error.reason})")
+                      f"({error.reason})"), True
 
 
 def _cmd_show(args: argparse.Namespace) -> int:
@@ -265,7 +279,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     config = load_config(root)
     host = args.host or config.serve.host
     port = args.port or config.serve.port
-    display_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    display_host = connectable_host(host)
     base_url = f"http://{display_host}:{port}"
     token = args.token or (config.serve.token or None)
 
@@ -279,7 +293,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
     if args.clear:
         body["clear"] = True
 
-    result, error = post_show(base_url, body, token)
+    result, error, _unreachable = post_show(base_url, body, token)
     if error is not None:
         if args.json:
             print(to_json({"error": error, "hint": "start the server with: brainpick serve"}))

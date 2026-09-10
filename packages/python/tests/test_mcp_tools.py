@@ -539,9 +539,21 @@ def test_write_henxels_contract_at_repo_root_governs_bundle(monkeypatch, tmp_pat
 # -- brain_show (spec/95): the 6th tool — ephemeral presentations, not write-gated --
 
 
-def test_show_payload_reports_shown_dropped_seq_and_hint(kotiaurinko):
+def _no_server(monkeypatch, reason="[Errno 111] Connection refused"):
+    """Make brain_show's proxy attempt behave as if no `brainpick serve` is
+    listening — every existing local-fallback test needs this so it doesn't
+    silently depend on whatever happens to be bound to 127.0.0.1:4747 on the
+    machine running the suite (spec/95 follow-up: the stdio MCP process has no
+    server of its own to ask, so it must genuinely try one over HTTP first)."""
+    def fake_post_show(base_url, body, token=None):
+        return None, f"no brainpick server at {base_url} — start one with 'brainpick serve' ({reason})", True
+    monkeypatch.setattr("brainpick.cli.post_show", fake_post_show)
+
+
+def test_show_payload_reports_shown_dropped_seq_and_hint(kotiaurinko, monkeypatch):
     from brainpick.mcp_server import show_payload
 
+    _no_server(monkeypatch)
     state = make_state(kotiaurinko)
     queue = state.subscribe()
     result = show_payload(state, nodes=["aurinko.md", "ei-ole"], annotation="hi")
@@ -549,25 +561,111 @@ def test_show_payload_reports_shown_dropped_seq_and_hint(kotiaurinko):
     assert result["shown"] == 1
     assert result["dropped"] == ["ei-ole"]
     assert result["seq"] == 1
-    # the exact hint — pinned so the Node twin stays byte-identical (cross-engine parity)
+    # the exact hint — pinned so the Node twin stays byte-identical (cross-engine parity),
+    # aside from the trailing no-server caveat (Python-only for now, see mcp_server.py)
     assert result["hint"] == (
         "showing 1 node(s) live in every open UI — "
         "call brain_show again to change it, or with clear:true to dismiss. (dropped 1: ei-ole)"
+        " No brainpick serve is running for this bundle, so nothing is actually visible yet"
+        " — start one with `brainpick serve --root <bundle>`."
     )
-    # it broadcasts (the open UIs light up), and never writes / compiles
+    # local fallback still updates its own (UI-less) state so the CLI/tests can introspect it
     assert [name for name, _, _ in drain(queue)] == ["brain.show"]
     assert state.seq == 1
 
 
-def test_show_payload_clear_has_a_dedicated_hint(kotiaurinko):
+def test_show_payload_clear_has_a_dedicated_hint(kotiaurinko, monkeypatch):
     from brainpick.mcp_server import show_payload
 
+    _no_server(monkeypatch)
     state = make_state(kotiaurinko)
     result = show_payload(state, clear=True)
     assert result == {
         "ok": True, "shown": 0, "dropped": [], "seq": 1,
-        "hint": "cleared — every open UI dropped its spotlight and caption.",
+        "hint": ("cleared — every open UI dropped its spotlight and caption."
+                 " No brainpick serve is running for this bundle, so nothing is actually visible yet"
+                 " — start one with `brainpick serve --root <bundle>`."),
     }
+
+
+def test_show_payload_proxies_to_a_running_server_and_never_touches_local_state(kotiaurinko, monkeypatch):
+    """The actual bug fix: when a `brainpick serve` answers, brain_show must use
+    ITS response (a real broadcast to a real UI) and leave the stdio process's
+    own orphaned state untouched — no local seq bump, no local broadcast."""
+    from brainpick.mcp_server import show_payload
+
+    calls = []
+
+    def fake_post_show(base_url, body, token=None):
+        calls.append((base_url, body, token))
+        return {"ok": True, "shown": 2, "dropped": [], "seq": 7}, None, False
+
+    monkeypatch.setattr("brainpick.cli.post_show", fake_post_show)
+    state = make_state(kotiaurinko)
+    queue = state.subscribe()
+
+    result = show_payload(state, nodes=["aurinko.md", "kuu"], annotation="hi", mode="brain")
+
+    assert result == {
+        "ok": True, "shown": 2, "dropped": [], "seq": 7,
+        "hint": "showing 2 node(s) live in every open UI — "
+                "call brain_show again to change it, or with clear:true to dismiss.",
+    }
+    assert len(calls) == 1
+    base_url, body, token = calls[0]
+    assert base_url == "http://127.0.0.1:4747"  # the bundle's default [serve] config
+    assert body == {"nodes": ["aurinko.md", "kuu"], "annotation": "hi", "mode": "brain"}
+    assert token is None  # no token configured for this fixture bundle
+    # the orphaned local state was never touched — the real server did the broadcasting
+    assert drain(queue) == []
+    assert state.presentation_seq == 0
+
+
+def test_show_payload_normalizes_a_wildcard_bind_to_a_connectable_host(kotiaurinko, monkeypatch):
+    """A server can bind 0.0.0.0 (everywhere); a client can't connect TO that
+    address — must resolve to 127.0.0.1 before POSTing, same as `brainpick show`."""
+    from brainpick.config import load_config
+    from brainpick.mcp_server import show_payload
+    from brainpick.serve.state import ServeState
+
+    calls = []
+    monkeypatch.setattr(
+        "brainpick.cli.post_show",
+        lambda base_url, body, token=None: (calls.append(base_url), ({"ok": True, "shown": 0, "dropped": [], "seq": 1}, None, False))[1],
+    )
+    config = load_config(kotiaurinko)
+    config.serve.host = "0.0.0.0"
+    state = ServeState(kotiaurinko, config)
+    state.load()
+
+    show_payload(state, clear=True)
+
+    assert calls == ["http://127.0.0.1:4747"]
+
+
+def test_show_payload_reports_a_server_side_rejection_without_touching_local_state(kotiaurinko, monkeypatch):
+    """A running server that REJECTS the presentation (e.g. a bad bearer token
+    on a non-local bind) must surface as an error, never silently paper over it
+    by falling back to updating the orphaned local state — that would hide a
+    real misconfiguration behind a false 'ok'."""
+    from brainpick.mcp_server import show_payload
+
+    def fake_post_show(base_url, body, token=None):
+        return None, "the server rejected the presentation (401): auth required", False
+
+    monkeypatch.setattr("brainpick.cli.post_show", fake_post_show)
+    state = make_state(kotiaurinko)
+    queue = state.subscribe()
+
+    result = show_payload(state, nodes=["aurinko.md"])
+
+    assert result == {
+        "ok": False, "dropped": [],
+        "error": "the server rejected the presentation (401): auth required",
+        "hint": "a brainpick serve is running but rejected the presentation — fix the error above, then try again.",
+    }
+    assert drain(queue) == []
+    assert state.presentation_seq == 0
 
 
 def test_brain_show_registered_as_sixth_tool_even_when_writes_refused(kotiaurinko):

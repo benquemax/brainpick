@@ -2,6 +2,7 @@
 import asyncio
 import json
 import re
+import socket
 import sys
 
 import pytest
@@ -103,6 +104,13 @@ async def _scenario(root):
 
 
 def test_mcp_stdio_roundtrip(kotiaurinko):
+    # brain_show now tries a real `brainpick serve` first (spec/95 follow-up) — pin
+    # it to a port nothing binds, so this doesn't depend on whatever else happens to
+    # be listening on the default :4747 on the machine running the suite.
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        free_port = probe.getsockname()[1]
+    (kotiaurinko / "brainpick.toml").write_text(f"[serve]\nport = {free_port}\n", encoding="utf-8")
     run_compile(kotiaurinko)
     _run_scenario(_scenario(kotiaurinko))
     text = (kotiaurinko / "uusi-kivi.md").read_text(encoding="utf-8")

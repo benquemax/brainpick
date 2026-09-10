@@ -17,7 +17,7 @@ the brain comes up short.
 
 Start every session with one call to get oriented, then search.
 
-## The five MCP tools
+## The six MCP tools
 
 Call these if a `brainpick` MCP server is connected (tools are named `brain_*`):
 
@@ -26,6 +26,7 @@ Call these if a `brainpick` MCP server is connected (tools are named `brain_*`):
 - `brain_read({doc})` — open one doc. `doc` is forgiving: a path (`kuu.md`), a bare stem (`kuu`), or an approximate title. Pass `sections:["Heading"]` to read just parts.
 - `brain_neighbors({doc})` — walk the links around a doc (`depth` 1–3). Find what connects to what.
 - `brain_write({doc, content})` — add a doc, guarded by the repo's contract. See "Writing" below.
+- `brain_show({nodes})` — spotlight a subgraph live in an open brainpick UI: highlight nodes, fly the camera, caption it. "Let me explain" becomes "let me show you." See "Showing the brain" below — **it needs a running `brainpick serve`, unlike the other five.**
 
 Every result carries a `hint` naming a sensible next call. Follow it.
 
@@ -61,6 +62,26 @@ federated:
   disambiguation.
 - `brain_write` with a bare target writes to the project you are in; qualify it to
   write elsewhere. It never guesses.
+
+## Showing the brain (brain_show)
+
+Use `brain_show` when explaining beats showing — "let me show you" instead of a
+wall of text. It highlights nodes, flies the camera, and drops a caption into
+every **connected** brainpick UI. It never writes the brain.
+
+**It needs a running `brainpick serve`.** The other five tools work over a plain
+stdio MCP connection (`claude mcp add brainpick -- brainpick mcp --root <bundle>`,
+the common setup) because they only read compiled artifacts. `brain_show`
+broadcasts to a live browser — and a stdio-connected MCP server has none attached;
+it builds its own private, unshared state. Call it over stdio today and you get
+back `{"ok": true, "shown": N}` while nothing appears anywhere — a false positive,
+not a "no UI open" signal.
+
+To actually see it: start `brainpick serve --root <bundle>` first (a browser tab
+open to it, or `POST /api/show` with the same body, both work), or connect your
+MCP client over HTTP to that server's `/mcp` endpoint instead of stdio. If you
+called `brain_show` and the human says they saw nothing, don't trust the `"ok"`
+— ask what's actually running before repeating the call.
 
 ## Writing knowledge back (brain_write)
 

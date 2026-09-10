@@ -352,7 +352,11 @@ def test_write_targets_here_or_declines(tmp_path):
     assert result["ok"] is True and result["path"] == "aurinko:uusi-kivi.md"
 
 
-def test_show_targets_one_brain_and_drops_the_rest(tmp_path):
+def test_show_targets_one_brain_and_drops_the_rest(tmp_path, monkeypatch):
+    # no running `brainpick serve` here — pin brain_show to its local fallback so
+    # this doesn't silently depend on whatever happens to be on :4747 (spec/95 follow-up)
+    monkeypatch.setattr("brainpick.cli.post_show",
+                        lambda base_url, body, token=None: (None, "no server", True))
     brain_set = make_set(tmp_path)
     result = show_payload(brain_set, nodes=["kirja:kahvi.md", "aurinko:kuu.md"])
     assert result["shown"] == 1 and result["dropped"] == ["aurinko:kuu.md"]
