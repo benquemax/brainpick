@@ -43,6 +43,34 @@ def test_flags_are_registered(capsys):
     assert "--root" in capsys.readouterr().out
 
 
+def test_serve_root_may_be_a_repo_root_above_the_bundle(tmp_path, monkeypatch):
+    """spec/80, same as compile/doctor/mcp: --root can be the repo root, with
+    brainpick.toml's [bundle] root pointing down at the actual bundle — not
+    just the bundle directory itself. Regression for the 2026-09-10 incident:
+    `brainpick serve --root <bundle>` silently never read the repo-root
+    brainpick.toml (no exclude, no [brain] config), while every other
+    subcommand resolved it correctly via the same resolve_bundle."""
+    (tmp_path / "brainpick.toml").write_text(
+        '[bundle]\nroot = "_brain"\nexclude = ["raw/*"]\n', encoding="utf-8",
+    )
+    bundle = tmp_path / "_brain"
+    bundle.mkdir()
+    (bundle / "index.md").write_text("# Brain\n", encoding="utf-8")
+    (bundle / "raw").mkdir()
+    (bundle / "raw" / "notes.md").write_text("scratch\n", encoding="utf-8")
+
+    calls = []
+    monkeypatch.setattr("brainpick.serve.app.build_app", lambda root, config: calls.append((root, config)))
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: None)
+
+    main(["serve", "--root", str(tmp_path), "--port", "0"])
+
+    assert len(calls) == 1
+    resolved_root, config = calls[0]
+    assert resolved_root == bundle.resolve()  # descended into _brain/, not tmp_path itself
+    assert config.bundle.exclude == ["raw/*"]  # the repo-root brainpick.toml was actually read
+
+
 # -- the four query mirrors (spec/70 payloads in the terminal) --------------------
 
 

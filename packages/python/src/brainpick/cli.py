@@ -69,11 +69,10 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     import uvicorn
 
-    from brainpick.config import load_config
+    from brainpick.config import resolve_bundle
     from brainpick.serve.app import build_app
 
-    root = Path(args.root).resolve()
-    config = load_config(root)
+    root, config = resolve_bundle(args.root)  # --root may be a repo root above the bundle (spec/80)
     if args.host is not None:
         config.serve.host = args.host
     if args.port is not None:
