@@ -46,7 +46,7 @@ def make_set(tmp_path, here=None):
     a = copy_bundle(tmp_path, "kotiaurinko")
     k = copy_bundle(tmp_path, "kotikirja")
     brains = [Brain(alias="aurinko", root=a, here=(here == "aurinko")),
-              Brain(alias="kirja", root=k, role="user", here=(here == "kirja"))]
+              Brain(alias="kirja", root=k, role="cortex", here=(here == "kirja"))]
     return BrainSet(brains)
 
 
@@ -103,7 +103,41 @@ def test_register_writes_canonical_toml_and_round_trips(tmp_path):
     # registering the same root again updates in place — never a duplicate
     register_brain(root, registry, alias="sun", user=True)
     loaded = load_registry(registry)
-    assert len(loaded) == 1 and loaded[0]["alias"] == "sun" and loaded[0]["role"] == "user"
+    # --user is the deprecated spelling: accepted on the way in, written as cortex
+    assert len(loaded) == 1 and loaded[0]["alias"] == "sun" and loaded[0]["role"] == "cortex"
+
+
+def test_legacy_user_role_still_reads_as_the_cortex(tmp_path):
+    """A registry written before the rename keeps working, unmigrated (spec/75)."""
+    a = copy_bundle(tmp_path, "kotiaurinko")
+    k = copy_bundle(tmp_path, "kotikirja")
+    legacy = BrainSet([Brain(alias="aurinko", root=a),
+                       Brain(alias="kirja", root=k, role="user")])
+    assert legacy.cortex is not None and legacy.cortex.alias == "kirja"
+    assert parse_scope(legacy, "me")[0] == [legacy.by_alias("kirja")]
+    # and an unqualified write falls back to it, exactly as a "cortex" entry would
+    assert write_payload(legacy, "uusi-kivi", NEW_DOC)["path"] == "kirja:uusi-kivi.md"
+
+
+def test_one_cortex_only_newest_claim_wins(tmp_path):
+    registry = tmp_path / "brains.toml"
+    first = copy_bundle(tmp_path, "kotiaurinko", under="first")
+    second = copy_bundle(tmp_path, "kotikirja", under="second")
+    register_brain(first, registry, alias="first", role="cortex")
+    register_brain(second, registry, alias="second", role="cortex")
+    loaded = load_registry(registry)
+    assert [e.get("role") for e in loaded] == [None, "cortex"]
+
+
+def test_implant_role_round_trips_and_allows_many(tmp_path):
+    registry = tmp_path / "brains.toml"
+    a = copy_bundle(tmp_path, "kotiaurinko", under="a")
+    b = copy_bundle(tmp_path, "kotikirja", under="b")
+    register_brain(a, registry, alias="a", role="implant")
+    register_brain(b, registry, alias="b", role="implant")
+    loaded = load_registry(registry)
+    assert [e.get("role") for e in loaded] == ["implant", "implant"]
+    assert 'role = "implant"' in registry.read_text(encoding="utf-8")
 
 
 def test_register_uses_the_bundle_id_when_it_has_one(tmp_path):
@@ -159,7 +193,7 @@ def test_registry_union_here_orders_here_then_user_then_rest(tmp_path):
     me = copy_bundle(tmp_path, "kotikirja", under="me")
     other = copy_bundle(tmp_path, "kotikirja", under="other")
     register_brain(other, registry, alias="other")
-    register_brain(me, registry, alias="mine", user=True)
+    register_brain(me, registry, alias="mine", role="cortex")
     gone = tmp_path / "gone"
     gone.mkdir()
     register_brain(gone, registry, alias="gone")
@@ -167,7 +201,7 @@ def test_registry_union_here_orders_here_then_user_then_rest(tmp_path):
 
     brains = resolve_brain_set([], cwd=here / "saaret", registry_path=registry).brains
     assert [b.alias for b in brains] == ["here-2", "mine", "other"]  # 'here' is reserved → suffixed
-    assert brains[0].here is True and brains[1].role == "user"
+    assert brains[0].here is True and brains[1].role == "cortex"
 
 
 def test_here_matching_a_registered_brain_is_not_duplicated(tmp_path):
@@ -273,7 +307,7 @@ def test_federated_overview_lists_brains_and_focuses_here(tmp_path):
     result = overview_payload(brain_set)
     assert [b["alias"] for b in result["brains"]] == ["aurinko", "kirja"]
     kirja = result["brains"][1]
-    assert kirja["here"] is True and kirja["role"] == "user" and kirja["docs"] == 3
+    assert kirja["here"] is True and kirja["role"] == "cortex" and kirja["docs"] == 3
     assert kirja["tiers"]["t1"] == "fresh"
     assert result["bundle"] == "kirja"
     assert result["counts"]["docs"] == 3  # index.md counts, as in the single-brain overview
@@ -339,17 +373,38 @@ def test_neighbors_are_qualified(tmp_path):
                for e in result["edges"])
 
 
-def test_write_targets_here_or_declines(tmp_path):
-    brain_set = make_set(tmp_path)  # no here
-    declined = write_payload(brain_set, "uusi-kivi", NEW_DOC)
-    assert declined["ok"] is False and "aurinko" in declined["instruction"]
-    written = write_payload(brain_set, "kirja:uusi-kivi", NEW_DOC)
-    assert written["ok"] is True and written["path"] == "kirja:uusi-kivi.md"
-    assert (brain_set.by_alias("kirja").root / "uusi-kivi.md").is_file()
+def test_write_targets_here_then_cortex_then_declines(tmp_path):
+    # no here → the cortex takes the write rather than declining (spec/75)
+    brain_set = make_set(tmp_path)
+    fell_back = write_payload(brain_set, "uusi-kivi", NEW_DOC)
+    assert fell_back["ok"] is True and fell_back["path"] == "kirja:uusi-kivi.md"
 
+    written = write_payload(brain_set, "aurinko:toinen-kivi", NEW_DOC)
+    assert written["ok"] is True and written["path"] == "aurinko:toinen-kivi.md"
+    assert (brain_set.by_alias("aurinko").root / "toinen-kivi.md").is_file()
+
+    # here wins over the cortex
     with_here = make_set(tmp_path / "second", here="aurinko")
     result = write_payload(with_here, "uusi-kivi", NEW_DOC)
     assert result["ok"] is True and result["path"] == "aurinko:uusi-kivi.md"
+
+
+def test_write_declines_with_neither_here_nor_cortex(tmp_path):
+    # implants only: nothing to fall back to, so a write never guesses (spec/75)
+    brain_set = make_set(tmp_path)
+    for brain in brain_set.brains:
+        brain.role = "implant"
+    declined = write_payload(brain_set, "uusi-kivi", NEW_DOC)
+    assert declined["ok"] is False and "aurinko" in declined["instruction"]
+
+
+def test_implants_are_writable(tmp_path):
+    brain_set = make_set(tmp_path)
+    brain_set.by_alias("aurinko").role = "implant"
+    written = write_payload(brain_set, "aurinko:implantti", NEW_DOC)
+    assert written["ok"] is True and written["path"] == "aurinko:implantti.md"
+    assert (brain_set.by_alias("aurinko").root / "implantti.md").is_file()
+    assert [b.alias for b in brain_set.implants] == ["aurinko"]
 
 
 def test_show_targets_one_brain_and_drops_the_rest(tmp_path, monkeypatch):

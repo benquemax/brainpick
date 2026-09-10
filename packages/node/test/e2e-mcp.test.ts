@@ -242,7 +242,7 @@ test("mcp stdio federated", { timeout: 120_000 }, async () => {
     const overview = await call(client, "brain_overview", {});
     expect(overview.brains.map((b: { alias: string }) => b.alias)).toEqual(["aurinko", "kirja"]);
     expect(overview.brains[0].here).toBe(true);
-    expect(overview.brains[1].role).toBe("user");
+    expect(overview.brains[1].role).toBe("cortex");
     expect(overview.bundle).toBe("aurinko");
 
     const search = await call(client, "brain_search", { query: "kuu", mode: "keyword" });

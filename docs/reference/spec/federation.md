@@ -20,7 +20,7 @@ brains so both engines agree byte-for-byte on what an agent sees.
   than one brain; brains load lazily.
 - **The registry.** The daemon's `brains.toml` — `[[brain]]` tables with `id`,
   `repo`, `bundle_path`, `port`, `enabled`, `host` — gains two optional keys,
-  `alias` and `role = "user"`, written by
+  `alias` and `role = "cortex"`, written by
   [brainpick register](../cli/register.md). Unknown keys survive a round trip.
 - **Aliases.** Slugs `[a-z0-9-]`; `all`, `here`, `me` are reserved; collisions
   take `-2`, `-3` in set order. Every path from a federated server is

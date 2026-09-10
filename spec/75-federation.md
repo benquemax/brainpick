@@ -14,6 +14,15 @@ every tool payload), the bundle root, an optional role and whether it is the
 brain of the current working directory. The set is assembled at server
 start, in this order:
 
+Anatomically the set is one **cortex** plus any number of **implants**. The
+cortex is the agent's own memory — `role = "cortex"`, at most one in a set,
+the brain scope `me` names and the fallback an unqualified write lands in.
+An implant is a repository's bundle plugged into the same server —
+`role = "implant"`, any number — queried alongside the cortex and, like it,
+writable. Both are ordinary brains: the roles order the set and decide where
+an unqualified write goes, nothing more. A brain with no role is neither,
+and behaves exactly as it always did.
+
 1. **Explicit roots** — `brainpick mcp --root [ALIAS=]PATH` repeated. When
    any `--root` is given the set is exactly those roots, in the order
    given (the registry is NOT consulted — an explicit list is explicit).
@@ -29,8 +38,7 @@ start, in this order:
      served directly (`repo/bundle_path`); a remote `repo` is served from
      its clone under `$XDG_DATA_HOME/brainpick/brains/<id>/<bundle_path>`
      when that clone exists, else skipped — federation never clones.
-   - Order: here first, then the `user`-role brain, then the rest in
-     registry order.
+   - Order: here first, then the cortex, then the rest in registry order.
 3. An empty set falls back to the working directory as a single brain, so
    `brainpick mcp` with no registry behaves exactly as it always has.
 
@@ -57,12 +65,25 @@ port = 4750
 enabled = true
 host = "127.0.0.1"
 alias = "me"              # optional — the federation address
-role = "user"             # optional — "user" marks the personal brain (scope "me")
+role = "cortex"           # optional — "cortex" marks the agent's own brain (scope "me");
+                          # "implant" marks an attached repository bundle
 ```
 
-`brainpick register [PATH] [--alias A] [--user] [--remove]` adds (or, with
-`--remove`, drops) the bundle at PATH; with no PATH it lists the registry
-(`brainpick register .` is the explicit form for the working directory).
+`role` is one of `cortex`, `implant`, or absent. **`user` is the former name
+of `cortex`** and MUST still be read as one; writers emit `cortex`, so a
+registry migrates the first time `register` rewrites an entry. An unknown
+role value is preserved on a round trip but treated as absent.
+
+At most ONE brain in a set carries `cortex`. `register --cortex` clears the
+role from any other entry — the newest claim wins — and a hand-edited
+registry with several is read as: the first in registry order is the cortex,
+the rest are treated as absent (a `hint` names the conflict; it is never an
+error).
+
+`brainpick register [PATH] [--alias A] [--cortex|--implant] [--remove]` adds
+(or, with `--remove`, drops) the bundle at PATH; with no PATH it lists the
+registry (`brainpick register .` is the explicit form for the working
+directory). `--user` is accepted as a deprecated spelling of `--cortex`.
 Writers emit keys in the order above, TOML basic strings, atomically (temp +
 rename); readers drop a malformed entry and keep the rest. Unknown keys
 survive a round trip — and every OTHER writer of this file (the daemon)
@@ -122,9 +143,15 @@ paths. An exact hit in one brain therefore wins over a fuzzy title in
 another — `brain_read 'video-generation'` opens `me:video-generation.md`
 even when a project brain has a page titled "Video generation notes".
 Nothing in any tier is a miss with up to five qualified suggestions. `brain_write` is the exception: an
-unqualified doc writes to `here` when there is one, else declines with
-`{"ok": false, "instruction": …}` naming the aliases — a write never
-guesses its target.
+unqualified doc writes to `here` when there is one, else to the cortex, else
+declines with `{"ok": false, "instruction": …}` naming the aliases — a write
+falls back to the agent's own memory, and never guesses between implants.
+
+Every brain in the set is writable, implants included; a write is refused
+only by the target bundle's own `[serve] writes` setting or by ITS OWN
+henxels contract — the contract that governs the repository being written
+to, never the cortex's. Guarded writes (spec/70) are therefore evaluated per
+brain, and a rejection names the offending brain's alias.
 
 ## Scope
 
@@ -132,7 +159,7 @@ guesses its target.
 
 - `all` — every brain in the set
 - `here` — the working directory's brain
-- `me` — the `user`-role brain
+- `me` — the cortex
 - a comma-separated list of aliases (`acme,me`)
 
 Unknown or unavailable names are dropped and named in `hint` (never an

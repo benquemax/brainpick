@@ -241,7 +241,8 @@ def test_cli_register_add_list_remove(kotiaurinko, tmp_path, monkeypatch, capsys
     assert main(["register", str(kotiaurinko), "--alias", "sun", "--user"]) == 0
     out = capsys.readouterr().out
     assert "sun" in out and "registered" in out and str(registry) in out
-    assert 'role = "user"' in registry.read_text(encoding="utf-8")
+    # --user is accepted, but the canonical role is written (spec/75)
+    assert 'role = "cortex"' in registry.read_text(encoding="utf-8")
 
     assert main(["register"]) == 0  # no PATH → list
     listing = capsys.readouterr().out

@@ -9,7 +9,7 @@ timestamp: 2026-09-06T16:00:00Z
 
 # brainpick register
 
-`brainpick register [PATH] [--alias ALIAS] [--user] [--remove]` (and
+`brainpick register [PATH] [--alias ALIAS] [--cortex|--implant] [--remove]` (and
 `--from-hosts [--dry-run]`) maintains the
 federation registry, `~/.config/brainpick/brains.toml` — the same file
 [the daemon](../../daemon.md) keeps, so a brain registered here is one the
@@ -22,12 +22,17 @@ daemon can supervise and a brain the daemon added is one agents can query
   repo above the bundle and `bundle_path` the bundle's place inside it.
 - `--alias ALIAS` sets the brain's address in tool payloads (`alias:path`);
   the default is the git repo's name, or the directory name outside a repo.
-- `--user` marks it as your personal brain — the `me` scope. There is exactly
-  one; the newest claim wins.
+- `--cortex` marks it as the agent's own brain — the `me` scope. There is exactly
+  one; the newest claim wins. `--user` is the deprecated spelling, and a
+  registry written with `role = "user"` is still read as the cortex.
+- `--implant` marks it as an attached repository bundle — any number. An
+  implant is queried alongside the cortex and, like it, writable; a write is
+  refused only by the implant's own `[serve] writes` setting and its own
+  henxels contract.
 - `--remove` drops PATH from the registry.
 - `brainpick register` with no PATH lists the registry: alias, root, and
-  `(me)`, `(disabled)` or `(missing)` marks (`brainpick register .` is the
-  explicit form for the working directory).
+  `(me)`, `(implant)`, `(disabled)` or `(missing)` marks (`brainpick register .`
+  is the explicit form for the working directory).
 - `--from-hosts` is the migration from the pre-federation shape. It scans the
   agent host configs under `$HOME` — `~/.claude.json` (user and per-project
   `mcpServers`), `~/.config/opencode/opencode.json`, `~/.codex/config.toml`,

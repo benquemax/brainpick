@@ -48,7 +48,7 @@ Wire the MCP server into your host with `brainpick mcp` — e.g.
 ## Several brains at once (federation)
 
 One server can front many brains: `brainpick register <bundle>` once per brain
-(`--user` for your personal one), then a single user-scope entry with no
+(`--cortex` for the agent's own one), then a single user-scope entry with no
 `--root` — `claude mcp add brainpick --scope user -- uvx brainpick mcp`. Every
 registered brain plus the project you are in answers. When the server is
 federated:

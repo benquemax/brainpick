@@ -259,7 +259,7 @@ async def _federated_scenario(aurinko, kirja, registry):
             overview = await _call(session, "brain_overview", {})
             assert [b["alias"] for b in overview["brains"]] == ["aurinko", "kirja"]
             assert overview["brains"][0]["here"] is True
-            assert overview["brains"][1]["role"] == "user"
+            assert overview["brains"][1]["role"] == "cortex"
             assert overview["bundle"] == "aurinko"
 
             search = await _call(session, "brain_search", {"query": "kuu", "mode": "keyword"})

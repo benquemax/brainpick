@@ -32,7 +32,7 @@ the pip and npm engines' own subcommands, and the daemon is neither.
   `brainpick mcp` fronts every brain listed here ([federation](federation.md)),
   and [brainpick register](reference/cli/register.md) adds to it from the
   command line, with two optional keys the daemon ignores — `alias` and
-  `role = "user"`.
+  `role = "cortex"`.
 - **The Supervisor** — one `brainpick serve` child process per enabled
   brain (process isolation; the engine itself is unmodified). A crashed
   process restarts on a bounded exponential backoff; a brain that keeps

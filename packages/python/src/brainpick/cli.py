@@ -327,8 +327,11 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
 def _cmd_register(args: argparse.Namespace) -> int:
     """spec/75: add, remove, or list the brains one `brainpick mcp` fronts."""
     from brainpick.federation import (
+        CORTEX,
+        IMPLANT,
         alias_for_repo,
         entry_root,
+        is_cortex,
         load_registry,
         register_brain,
         registry_path,
@@ -349,7 +352,8 @@ def _cmd_register(args: argparse.Namespace) -> int:
             return 0
         for entry in entries:
             root = entry_root(entry)
-            marks = "".join([" (me)" if entry.get("role") == "user" else "",
+            marks = "".join([" (me)" if is_cortex(entry.get("role")) else
+                             " (implant)" if entry.get("role") == IMPLANT else "",
                              "" if entry.get("enabled", True) else " (disabled)",
                              "" if root else " (missing)"])
             shown = str(root) if root else f"{entry['repo']}/{entry['bundle_path']}".rstrip("/")
@@ -367,9 +371,12 @@ def _cmd_register(args: argparse.Namespace) -> int:
     if not root.is_dir() or not any(root.rglob("*.md")):
         print(f"{root} holds no markdown — a brain is an OKF bundle of .md files", file=sys.stderr)
         return 1
-    entry = register_brain(root, registry, alias=args.alias, user=args.user)
+    role = CORTEX if (args.cortex or args.user) else IMPLANT if args.implant else None
+    entry = register_brain(root, registry, alias=args.alias, role=role)
     label = shown_alias(entry)
-    print(f"registered {label}{' (me)' if entry.get('role') == 'user' else ''} → {root}")
+    mark = (" (me)" if is_cortex(entry.get("role")) else
+            " (implant)" if entry.get("role") == IMPLANT else "")
+    print(f"registered {label}{mark} → {root}")
     print(f"registry: {registry}")
     print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.")
     return 0
@@ -414,7 +421,7 @@ def _register_from_hosts(args: argparse.Namespace, registry, env, shown_alias) -
         print(f"\nreplace the per-project entries with ONE user-scope entry:\n"
               f"  claude mcp add brainpick --scope user -- {cmd} mcp\n"
               "(the old --root entries keep working until you remove them; "
-              "brainpick register ~/brain --user marks your personal brain.)")
+              "brainpick register ~/brain --cortex marks the agent's own brain.)")
     return 0
 
 
@@ -457,7 +464,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_register.add_argument("path", nargs="?", default=None, metavar="PATH",
                             help="bundle root to register (omit to list the registry)")
     p_register.add_argument("--alias", default=None, help="the brain's address in tool payloads")
-    p_register.add_argument("--user", action="store_true", help="mark it as your personal brain (scope 'me')")
+    p_register.add_argument("--cortex", action="store_true",
+                            help="mark it as the agent's own brain — at most one (scope 'me')")
+    p_register.add_argument("--implant", action="store_true",
+                            help="mark it as an attached repository bundle — any number")
+    p_register.add_argument("--user", action="store_true", help=argparse.SUPPRESS)  # former --cortex
     p_register.add_argument("--remove", action="store_true", help="drop PATH from the registry")
     p_register.add_argument("--from-hosts", action="store_true",
                             help="register every `mcp --root DIR` found in agent host configs (spec/75 migration)")

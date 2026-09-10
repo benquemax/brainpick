@@ -21,6 +21,17 @@ import type { DocRecord } from "./compile/t1";
 import { resolveDoc, resolveDocExact, resolveDocFuzzy, ServeState } from "./serve/state";
 
 export const RESERVED_ALIASES = ["all", "here", "me"] as const;
+/** The agent's own brain — at most one per set (spec/75). */
+export const CORTEX = "cortex";
+/** An attached repository bundle — any number. */
+export const IMPLANT = "implant";
+const LEGACY_CORTEX = "user"; // the former name of "cortex"; still read, never written
+
+/** True for the cortex role, including its deprecated spelling `user` (spec/75). */
+export function isCortex(role: string | null | undefined): boolean {
+  return role === CORTEX || role === LEGACY_CORTEX;
+}
+
 const QUALIFIED = /^([a-z0-9][a-z0-9-]*):(.+)$/;
 const KEY_ORDER = ["id", "repo", "bundle_path", "port", "enabled", "host", "alias", "role"] as const;
 export const DEFAULT_PORT_BASE = 4750; // mirrors the daemon's registry (packages/desktop)
@@ -240,7 +251,9 @@ function bundleId(root: string): string {
 
 export interface RegisterOptions {
   alias?: string | null;
+  /** Deprecated spelling of `role: "cortex"` (spec/75). */
   user?: boolean;
+  role?: string | null;
 }
 
 /** Add the bundle at `root` to the registry (or update its entry in place when the
@@ -258,10 +271,13 @@ export function registerBrain(root: string, path: string = registryPath(), optio
     ? { ...existing }
     : { id: bundleId(resolved), repo, bundle_path: bundlePath, port, enabled: true, host: DEFAULT_HOST };
   if (options.alias) entry.alias = slugifyAlias(options.alias);
-  if (options.user) {
-    entry.role = "user";
-    for (const other of entries) {
-      if (other !== existing && other.role === "user") delete other.role; // one personal brain — the newest claim wins
+  const role = options.role ?? (options.user ? CORTEX : null); // --user is the deprecated --cortex
+  if (role) {
+    entry.role = role;
+    if (role === CORTEX) {
+      for (const other of entries) {
+        if (other !== existing && isCortex(other.role)) delete other.role; // one cortex — the newest claim wins
+      }
     }
   }
   if (existing === null) entries.push(entry);
@@ -356,8 +372,18 @@ export class BrainSet {
     return this.brains.find((b) => b.here) ?? null;
   }
 
+  /** The agent's own brain — scope `me`, and the fallback for an unqualified write. */
+  get cortex(): Brain | null {
+    return this.brains.find((b) => isCortex(b.role)) ?? null;
+  }
+
+  /** Deprecated alias of `cortex` (spec/75). */
   get user(): Brain | null {
-    return this.brains.find((b) => b.role === "user") ?? null;
+    return this.cortex;
+  }
+
+  get implants(): Brain[] {
+    return this.brains.filter((b) => b.role === IMPLANT);
   }
 
   /** The brain single-brain-shaped payloads describe: here, else the first. */
@@ -492,7 +518,7 @@ export function resolveBrainSet(roots: string[], options: ResolveOptions = {}): 
   }
   if (here !== null && !brains.some((b) => b.here)) brains.unshift(new Brain({ alias: null, root: here, here: true }));
   if (brains.length === 0) return new BrainSet([new Brain({ alias: null, root: cwd, here: true })]);
-  const rank = (b: Brain) => (b.here ? 0 : b.role === "user" ? 1 : 2);
+  const rank = (b: Brain) => (b.here ? 0 : isCortex(b.role) ? 1 : 2);
   const ordered = brains.map((b, i) => [b, i] as const).sort((x, y) => rank(x[0]) - rank(y[0]) || x[1] - y[1]);
   return new BrainSet(ordered.map(([b]) => b));
 }
@@ -538,7 +564,7 @@ export function parseScope(set: BrainSet, scope: unknown): [Brain[], string[]] {
       chosen = [...set.brains];
       continue;
     }
-    const brain = name === "here" ? set.here : name === "me" ? set.user : set.byAlias(name);
+    const brain = name === "here" ? set.here : name === "me" ? set.cortex : set.byAlias(name);
     if (brain === null) dropped.push(name);
     else if (!chosen.includes(brain)) chosen.push(brain);
   }
@@ -706,7 +732,7 @@ function registerFromHosts(registry: string, options: RegisterRunOptions, print:
   return 0;
 }
 
-/** `brainpick register [PATH] [--alias A] [--user] [--remove]` — no PATH lists. */
+/** `brainpick register [PATH] [--alias A] [--cortex|--implant] [--remove]` — no PATH lists. */
 export function runRegister(path: string | null, options: RegisterRunOptions = {}): number {
   const print = options.print ?? ((line: string) => console.log(line));
   const printErr = options.printErr ?? ((line: string) => console.error(line));
@@ -721,7 +747,8 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
     for (const entry of entries) {
       const root = entryRoot(entry);
       const marks =
-        (entry.role === "user" ? " (me)" : "") + (entry.enabled ? "" : " (disabled)") + (root ? "" : " (missing)");
+        (isCortex(entry.role) ? " (me)" : entry.role === IMPLANT ? " (implant)" : "") +
+        (entry.enabled ? "" : " (disabled)") + (root ? "" : " (missing)");
       const shown = root ?? `${entry.repo}/${entry.bundle_path}`.replace(/\/+$/, "");
       print(`  ${shownAlias(entry).padEnd(20)} ${shown}${marks}`);
     }
@@ -741,8 +768,13 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
     printErr(`${root} holds no markdown — a brain is an OKF bundle of .md files`);
     return 1;
   }
-  const entry = registerBrain(root, registry, { alias: options.alias ?? null, user: options.user ?? false });
-  print(`registered ${shownAlias(entry)}${entry.role === "user" ? " (me)" : ""} → ${root}`);
+  const entry = registerBrain(root, registry, {
+    alias: options.alias ?? null,
+    user: options.user ?? false,
+    role: options.role ?? null,
+  });
+  const mark = isCortex(entry.role) ? " (me)" : entry.role === IMPLANT ? " (implant)" : "";
+  print(`registered ${shownAlias(entry)}${mark} → ${root}`);
   print(`registry: ${registry}`);
   print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.");
   return 0;

@@ -24,6 +24,16 @@ else:  # pragma: no cover - exercised only on 3.10
 from brainpick.compile.pipeline import _atomic_write
 
 RESERVED_ALIASES = ("all", "here", "me")
+CORTEX = "cortex"       # the agent's own brain — at most one per set (spec/75)
+IMPLANT = "implant"     # an attached repository bundle — any number
+_LEGACY_CORTEX = "user"  # the former name of "cortex"; still read, never written
+
+
+def is_cortex(role: str | None) -> bool:
+    """True for the cortex role, including its deprecated spelling `user` (spec/75)."""
+    return role in (CORTEX, _LEGACY_CORTEX)
+
+
 _SLUG = re.compile(r"[^a-z0-9]+")
 _QUALIFIED = re.compile(r"^([a-z0-9][a-z0-9-]*):(.+)$")
 _KEY_ORDER = ("id", "repo", "bundle_path", "port", "enabled", "host", "alias", "role")
@@ -216,9 +226,13 @@ def _bundle_id(root: Path) -> str:
 
 
 def register_brain(root: str | Path, path: str | Path | None = None, alias: str | None = None,
-                   user: bool = False) -> dict:
+                   user: bool = False, role: str | None = None) -> dict:
     """Add the bundle at `root` to the registry (or update its entry in place when the
-    same root is already registered). Returns the entry written."""
+    same root is already registered). Returns the entry written.
+
+    `role` is "cortex" (at most one in a registry — the newest claim wins) or
+    "implant" (any number). `user=True` is the deprecated spelling of
+    role="cortex" (spec/75)."""
     root = Path(root).resolve()
     entries = load_registry(path)
     repo, bundle_path = _split_root(root)
@@ -233,11 +247,14 @@ def register_brain(root: str | Path, path: str | Path | None = None, alias: str 
     }
     if alias:
         entry["alias"] = slugify_alias(alias)
-    if user:
-        entry["role"] = "user"
-        for other in entries:
-            if other is not existing and other.get("role") == "user":
-                other.pop("role")  # one personal brain — the newest claim wins
+    if user and role is None:
+        role = CORTEX  # --user is the deprecated spelling of --cortex
+    if role is not None:
+        entry["role"] = role
+        if role == CORTEX:
+            for other in entries:
+                if other is not existing and is_cortex(other.get("role")):
+                    other.pop("role")  # one cortex — the newest claim wins
     if existing is None:
         entries.append(entry)
     else:
@@ -306,8 +323,19 @@ class BrainSet:
         return next((b for b in self.brains if b.here), None)
 
     @property
+    def cortex(self) -> Brain | None:
+        """The agent's own brain — scope `me`, and where an unqualified write falls
+        back when there is no `here`. Several claimants: the first in set order wins."""
+        return next((b for b in self.brains if is_cortex(b.role)), None)
+
+    @property
     def user(self) -> Brain | None:
-        return next((b for b in self.brains if b.role == "user"), None)
+        """Deprecated alias of `cortex` (spec/75)."""
+        return self.cortex
+
+    @property
+    def implants(self) -> list[Brain]:
+        return [b for b in self.brains if b.role == IMPLANT]
 
     @property
     def focus(self) -> Brain:
@@ -429,7 +457,7 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
         brains.insert(0, Brain(alias=None, root=here, here=True))
     if not brains:
         return BrainSet([Brain(alias=None, root=cwd.resolve(), here=True)])
-    ordered = sorted(brains, key=lambda b: (0 if b.here else 1 if b.role == "user" else 2))
+    ordered = sorted(brains, key=lambda b: (0 if b.here else 1 if is_cortex(b.role) else 2))
     return BrainSet(ordered)
 
 
@@ -475,7 +503,7 @@ def parse_scope(brain_set: BrainSet, scope) -> tuple[list[Brain], list[str]]:
         if name == "here":
             brain = brain_set.here
         elif name == "me":
-            brain = brain_set.user
+            brain = brain_set.cortex
         else:
             brain = brain_set.by_alias(name)
         if brain is None:
@@ -577,7 +605,8 @@ def scan_hosts(env: Mapping[str, str] | None = None) -> list[HostRoot]:
 
 __all__ = [
     "HostRoot", "scan_hosts",
-    "Brain", "BrainSet", "alias_for", "discover_here", "load_registry", "parse_scope",
+    "Brain", "BrainSet", "CORTEX", "IMPLANT", "alias_for", "discover_here", "is_cortex",
+    "load_registry", "parse_scope",
     "qualify", "qualify_paths", "register_brain", "registry_path", "resolve_brain_set",
     "save_registry", "split_qualified", "unregister_brain",
 ]

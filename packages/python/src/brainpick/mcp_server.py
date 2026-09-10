@@ -19,6 +19,7 @@ from brainpick.core.frontmatter import split_frontmatter
 from brainpick.detect import detect_henxels, find_henxels
 from brainpick.federation import (
     BrainSet,
+    is_cortex,
     parse_scope,
     qualify,
     qualify_paths,
@@ -850,7 +851,9 @@ def write_payload(target, doc: str, content: str, mode: str = "create",
                              content, mode, base_sha, budget_tokens, refusal)
     alias, rel = split_qualified(doc)
     if alias is None:
-        brain = brain_set.here
+        # here, else the cortex — a write falls back to the agent's own memory and
+        # never guesses between implants (spec/75)
+        brain = brain_set.here or brain_set.cortex
         if brain is None:
             aliases = ", ".join(b.alias for b in brain_set.brains)
             return {"ok": False, "instruction": f"qualify the target — brain_write writes to one brain: "
@@ -915,7 +918,7 @@ def _instructions(target) -> str:
     brain_set = _as_set(target)
     if brain_set is None or not brain_set.federated:
         return base
-    aliases = ", ".join(b.alias + (" (here)" if b.here else " (me)" if b.role == "user" else "")
+    aliases = ", ".join(b.alias + (" (here)" if b.here else " (me)" if is_cortex(b.role) else "")
                         for b in brain_set.brains)
     return (f"{len(brain_set.brains)} brains behind one server: {aliases}. brain_search searches "
             "all of them by default (scope narrows to here, me, or aliases); every path is "

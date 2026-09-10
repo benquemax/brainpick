@@ -83,7 +83,7 @@ function makeSet(here: "aurinko" | "kirja" | null = null): BrainSet {
   const k = copyBundle("kotikirja");
   return new BrainSet([
     new Brain({ alias: "aurinko", root: a, here: here === "aurinko" }),
-    new Brain({ alias: "kirja", root: k, role: "user", here: here === "kirja" }),
+    new Brain({ alias: "kirja", root: k, role: "cortex", here: here === "kirja" }),
   ]);
 }
 
@@ -135,11 +135,44 @@ describe("the registry", () => {
     expect(entry["repo"]).toBe(root);
 
     expect(loadRegistry(registry).map((b) => b["alias"])).toEqual(["aurinko"]);
-    registerBrain(root, registry, { alias: "sun", user: true });
+    registerBrain(root, registry, { alias: "sun", user: true }); // deprecated spelling
     const loaded = loadRegistry(registry);
     expect(loaded).toHaveLength(1);
     expect(loaded[0]!["alias"]).toBe("sun");
-    expect(loaded[0]!["role"]).toBe("user");
+    expect(loaded[0]!["role"]).toBe("cortex"); // written canonically (spec/75)
+  });
+
+  test("legacy user role still reads as the cortex", () => {
+    // a registry written before the rename keeps working, unmigrated (spec/75)
+    const a = copyBundle("kotiaurinko");
+    const k = copyBundle("kotikirja");
+    const legacy = new BrainSet([
+      new Brain({ alias: "aurinko", root: a }),
+      new Brain({ alias: "kirja", root: k, role: "user" }),
+    ]);
+    expect(legacy.cortex?.alias).toBe("kirja");
+    expect(parseScope(legacy, "me")[0].map((b) => b.alias)).toEqual(["kirja"]);
+  });
+
+  test("one cortex only — the newest claim wins", () => {
+    const dir = tempDir();
+    const registry = join(dir, "brains.toml");
+    const first = copyBundle("kotiaurinko");
+    const second = copyBundle("kotikirja");
+    registerBrain(first, registry, { alias: "first", role: "cortex" });
+    registerBrain(second, registry, { alias: "second", role: "cortex" });
+    expect(loadRegistry(registry).map((e) => e["role"] ?? null)).toEqual([null, "cortex"]);
+  });
+
+  test("implant role round-trips and allows many", () => {
+    const dir = tempDir();
+    const registry = join(dir, "brains.toml");
+    const a = copyBundle("kotiaurinko");
+    const b = copyBundle("kotikirja");
+    registerBrain(a, registry, { alias: "a", role: "implant" });
+    registerBrain(b, registry, { alias: "b", role: "implant" });
+    expect(loadRegistry(registry).map((e) => e["role"])).toEqual(["implant", "implant"]);
+    expect(readFileSync(registry, "utf8")).toContain('role = "implant"');
   });
 
   test("uses the bundle id when it has one", () => {
@@ -202,7 +235,7 @@ describe("the brain set", () => {
     const me = copyBundle("kotikirja");
     const other = copyBundle("kotikirja");
     registerBrain(other, registry, { alias: "other" });
-    registerBrain(me, registry, { alias: "mine", user: true });
+    registerBrain(me, registry, { alias: "mine", role: "cortex" });
     const gone = join(dir, "gone");
     mkdirSync(gone);
     registerBrain(gone, registry, { alias: "gone" });
@@ -211,7 +244,7 @@ describe("the brain set", () => {
     const set = resolveBrainSet([], { cwd: join(here, "saaret"), registryPath: registry });
     expect(set.brains.map((b) => b.alias)).toEqual(["here-2", "mine", "other"]);
     expect(set.brains[0]!.here).toBe(true);
-    expect(set.brains[1]!.role).toBe("user");
+    expect(set.brains[1]!.role).toBe("cortex");
   });
 
   test("here matching a registered brain is not duplicated", () => {
@@ -315,7 +348,7 @@ describe("federated overview", () => {
     const brains = result["brains"] as Array<Record<string, unknown>>;
     expect(brains.map((b) => b["alias"])).toEqual(["aurinko", "kirja"]);
     expect(brains[1]!["here"]).toBe(true);
-    expect(brains[1]!["role"]).toBe("user");
+    expect(brains[1]!["role"]).toBe("cortex");
     expect(brains[1]!["docs"]).toBe(3);
     expect((brains[1]!["tiers"] as Record<string, string>)["t1"]).toBe("fresh");
     expect(result["bundle"]).toBe("kirja");
@@ -392,20 +425,40 @@ describe("routed read / neighbors / write / show", () => {
     expect(edges.every((e) => e.source.startsWith("aurinko:") && e.target.startsWith("aurinko:"))).toBe(true);
   });
 
-  test("write targets here or declines", async () => {
+  test("write targets here, then the cortex, then declines", async () => {
+    // no here → the cortex takes the write rather than declining (spec/75)
     const set = makeSet();
-    const declined = await writePayload(set, "uusi-kivi", NEW_DOC);
-    expect(declined["ok"]).toBe(false);
-    expect(String(declined["instruction"])).toContain("aurinko");
-    const written = await writePayload(set, "kirja:uusi-kivi", NEW_DOC);
-    expect(written["ok"]).toBe(true);
-    expect(written["path"]).toBe("kirja:uusi-kivi.md");
-    expect(existsSync(join(set.byAlias("kirja")!.root, "uusi-kivi.md"))).toBe(true);
+    const fellBack = await writePayload(set, "uusi-kivi", NEW_DOC);
+    expect(fellBack["ok"]).toBe(true);
+    expect(fellBack["path"]).toBe("kirja:uusi-kivi.md");
 
+    const written = await writePayload(set, "aurinko:toinen-kivi", NEW_DOC);
+    expect(written["ok"]).toBe(true);
+    expect(written["path"]).toBe("aurinko:toinen-kivi.md");
+    expect(existsSync(join(set.byAlias("aurinko")!.root, "toinen-kivi.md"))).toBe(true);
+
+    // here wins over the cortex
     const withHere = makeSet("aurinko");
     const result = await writePayload(withHere, "uusi-kivi", NEW_DOC);
     expect(result["ok"]).toBe(true);
     expect(result["path"]).toBe("aurinko:uusi-kivi.md");
+  });
+
+  test("write declines with neither here nor cortex", async () => {
+    const set = makeSet();
+    for (const brain of set.brains) brain.role = "implant";
+    const declined = await writePayload(set, "uusi-kivi", NEW_DOC);
+    expect(declined["ok"]).toBe(false);
+    expect(String(declined["instruction"])).toContain("aurinko");
+  });
+
+  test("implants are writable", async () => {
+    const set = makeSet();
+    set.byAlias("aurinko")!.role = "implant";
+    const written = await writePayload(set, "aurinko:implantti", NEW_DOC);
+    expect(written["ok"]).toBe(true);
+    expect(written["path"]).toBe("aurinko:implantti.md");
+    expect(set.implants.map((b) => b.alias)).toEqual(["aurinko"]);
   });
 
   test("show targets one brain and drops the rest", async () => {
@@ -456,7 +509,7 @@ describe("the register runner", () => {
 
     expect(runRegister(root, { alias: "sun", user: true, registryPath: registry, print })).toBe(0);
     expect(lines.join("\n")).toContain("registered sun (me)");
-    expect(readFileSync(registry, "utf8")).toContain('role = "user"');
+    expect(readFileSync(registry, "utf8")).toContain('role = "cortex"');
 
     lines.length = 0;
     expect(runRegister(null, { registryPath: registry, print })).toBe(0);

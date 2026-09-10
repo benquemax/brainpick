@@ -340,19 +340,29 @@ program
   .description("add a brain to the federation registry (or list/remove)")
   .argument("[path]", "bundle root to register (omit to list the registry)")
   .option("--alias <alias>", "the brain's address in tool payloads")
-  .option("--user", "mark it as your personal brain (scope 'me')")
+  .option("--cortex", "mark it as the agent's own brain — at most one (scope 'me')")
+  .option("--implant", "mark it as an attached repository bundle — any number")
+  .option("--user", "deprecated spelling of --cortex")
   .option("--remove", "drop PATH from the registry")
   .option("--from-hosts", "register every `mcp --root DIR` found in agent host configs (spec/75 migration)")
   .option("--dry-run", "with --from-hosts: report, don't write")
   .action(
     async (
       path: string | undefined,
-      opts: { alias?: string; user?: boolean; remove?: boolean; fromHosts?: boolean; dryRun?: boolean },
+      opts: {
+        alias?: string;
+        cortex?: boolean;
+        implant?: boolean;
+        user?: boolean;
+        remove?: boolean;
+        fromHosts?: boolean;
+        dryRun?: boolean;
+      },
     ) => {
       const { runRegister } = await import("./federation");
       process.exitCode = runRegister(path ?? null, {
         alias: opts.alias ?? null,
-        user: opts.user,
+        role: opts.cortex || opts.user ? "cortex" : opts.implant ? "implant" : null,
         remove: opts.remove,
         fromHosts: opts.fromHosts,
         dryRun: opts.dryRun,

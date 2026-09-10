@@ -18,7 +18,7 @@ import type { DocRecord, GraphStats } from "./compile/t1";
 import { ALWAYS_EXCLUDED_DIRS, posixDirname, posixNormpath } from "./core/bundle";
 import { cmpStr, sha256Hex } from "./core/canonical";
 import { splitFrontmatter } from "./core/frontmatter";
-import { BrainSet, parseScope, qualify, qualifyPaths, relativeRoot, splitQualified } from "./federation";
+import { BrainSet, isCortex, parseScope, qualify, qualifyPaths, relativeRoot, splitQualified } from "./federation";
 import type { Brain } from "./federation";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
@@ -1092,7 +1092,9 @@ export async function writePayload(
   const [alias, rel] = splitQualified(doc);
   let brain: Brain | null;
   if (alias === null) {
-    brain = target.here;
+    // here, else the cortex — a write falls back to the agent's own memory and
+    // never guesses between implants (spec/75)
+    brain = target.here ?? target.cortex;
     if (brain === null) {
       return {
         ok: false,
@@ -1172,7 +1174,7 @@ function instructionsFor(target: ServeState | BrainSet): string {
     "brain_neighbors, and add knowledge with brain_write.";
   if (!(target instanceof BrainSet) || !target.federated) return base;
   const aliases = target.brains
-    .map((b) => b.alias + (b.here ? " (here)" : b.role === "user" ? " (me)" : ""))
+    .map((b) => b.alias + (b.here ? " (here)" : isCortex(b.role) ? " (me)" : ""))
     .join(", ");
   return (
     `${target.brains.length} brains behind one server: ${aliases}. brain_search searches ` +

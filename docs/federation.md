@@ -25,12 +25,26 @@ the agent asks once.
 
 - **The registry** — the same `~/.config/brainpick/brains.toml` that
   [the daemon](daemon.md) keeps. [brainpick register](reference/cli/register.md)
-  adds a bundle to it once; `--user` marks your personal brain (the `me`
+  adds a bundle to it once; `--cortex` marks the agent's own brain (the `me`
   scope). Federation reads the registry and never clones a remote entry — a
   remote brain only takes part once the daemon has cloned it.
 - **Here** — the bundle the working directory sits in (found by walking up to
   a `brainpick.toml` or a `.brainpick/`). It joins the set even if it was never
   registered, and it is where an unqualified `brain_write` lands.
+
+## Cortex and implants
+
+A set is one **cortex** plus any number of **implants**. The cortex is the
+agent's own memory — `--cortex`, at most one, what scope `me` names, and where
+an unqualified `brain_write` falls back when there is no *here*. An implant is
+a repository's bundle plugged into the same server (`--implant`, any number),
+queried alongside the cortex and — like it — **writable**: a write is refused
+only by the implant's own `[serve] writes` setting and by the henxels contract
+governing *that* repository, never the cortex's.
+
+The roles are ordering and write-routing, nothing more; a brain with no role
+behaves exactly as it always did, and `role = "user"` from an older registry
+is still read as the cortex.
 
 Explicit `--root` flags still win outright — `brainpick mcp --root a --root
 me=b` fronts exactly those two (an `ALIAS=` prefix names one) — and a set of
@@ -90,7 +104,7 @@ enables — one user-scope MCP entry instead of one per project:
 
 ```
 brainpick register ~/Git/acme            # this project
-brainpick register ~/brain --user        # your personal brain
+brainpick register ~/brain --cortex      # the cortex — the agent's own brain
 claude mcp add brainpick --scope user -- brainpick mcp
 ```
 
@@ -107,7 +121,7 @@ working. The migration is opt-in and one command:
 ```
 brainpick register --from-hosts --dry-run   # what it would register, from your host configs
 brainpick register --from-hosts             # register them; prints the single replacement entry
-brainpick register ~/brain --user           # your personal brain, if you have one
+brainpick register ~/brain --cortex         # the cortex, if you have one
 claude mcp add brainpick --scope user -- brainpick mcp
 ```
 
