@@ -1,4 +1,4 @@
 """brainpick — a turn-key brain stack for agents."""
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 SPEC_VERSION = "0.1"

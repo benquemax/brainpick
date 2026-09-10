@@ -1,5 +1,21 @@
 # Update log
 
+## 2026-09-10
+
+- Released 0.4.3: the brain_show fix below.
+- Fixed: `brain_show`, called over the stdio `brainpick mcp` transport (how
+  agent hosts normally connect), resolved and broadcast against that
+  process's own private, unattached state — reporting `{"ok": true}` while
+  no UI anywhere ever saw the presentation. It now tries a running
+  `brainpick serve` for the same bundle first (the same client the `brainpick
+  show` CLI already used) and only falls back to the old local-only
+  presentation, now honestly caveated, when nothing answers; a server that
+  answers but rejects the request surfaces as an error instead of being
+  silently absorbed by that fallback. Python engine only — the Node engine
+  keeps the old local-only behavior for now. Also: the shipped Agent Skill
+  never mentioned `brain_show` existed at all; it now documents it and this
+  transport caveat.
+
 ## 2026-09-09
 
 - Released 0.4.2: the write-guard fix below.
