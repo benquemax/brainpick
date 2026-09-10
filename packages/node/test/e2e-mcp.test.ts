@@ -2,6 +2,7 @@
  * protocol (the twin of test_e2e_mcp.py, plus the spec/70 base_sha round trip). */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -15,6 +16,20 @@ import { registerBrain } from "../src/federation";
 import { cleanup, copyBundle, needsShellForNpm, npmCommand, stageT3Export, tempDir } from "./helpers";
 
 const CLI = join(PACKAGE_ROOT, "dist", "cli.js");
+
+/** A port nothing is bound to right now — brain_show now tries a real
+ * `brainpick serve` first (spec/95 follow-up), so tests must pin it away from
+ * whatever else happens to be listening on the default :4747. */
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const port = (server.address() as { port: number }).port;
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
@@ -59,6 +74,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
 
 test("mcp stdio roundtrip", { timeout: 120_000 }, async () => {
   const root = copyBundle();
+  writeFileSync(join(root, "brainpick.toml"), `[serve]\nport = ${await freePort()}\n`);
   await runCompile(root);
   const kuuSha = sha256Hex(readFileSync(join(root, "kuu.md")));
 

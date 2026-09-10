@@ -29,6 +29,7 @@ import { KNOWN_MODES, runSearch } from "./query/router";
 import type { SearchHit } from "./query/keyword";
 import { bfsNeighborhood, jsonable, resolveDoc, type ServeState } from "./serve/state";
 import { recompileAndBroadcast } from "./serve/watcher";
+import { connectableHost, postShow } from "./show-client";
 import { VERSION } from "./version";
 
 export const WRITES_OFF_REFUSAL =
@@ -715,40 +716,89 @@ async function singleWrite(
 
 // -- brain_show ----------------------------------------------------------------------
 
-/** The 'what to do next' line for brain_show (spec/95 small-LLM ergonomics). */
-export function showHint(presentation: Record<string, unknown>, dropped: string[]): string {
-  const nodes = presentation["nodes"] as string[];
-  const cleared =
-    nodes.length === 0 &&
-    presentation["focus"] === null &&
-    presentation["mode"] === null &&
-    presentation["annotation"] === null;
-  if (cleared) return "cleared — every open UI dropped its spotlight and caption.";
-  const shown = nodes.length;
-  if (shown === 0 && dropped.length > 0) {
-    return (
+export const NO_SERVER_CAVEAT =
+  " No brainpick serve is running for this bundle, so nothing is actually " +
+  "visible yet — start one with `brainpick serve --root <bundle>`.";
+
+/** The 'what to do next' line for brain_show (spec/95 small-LLM ergonomics).
+ * `serverReachable` is false only for the local-fallback path (no running
+ * `brainpick serve` answered) — the one case where "live in every open UI"
+ * would otherwise be a flat lie, so it earns an honest caveat. */
+export function showHint(
+  shown: number,
+  dropped: string[],
+  cleared: boolean,
+  serverReachable = true,
+): string {
+  let base: string;
+  if (cleared) {
+    base = "cleared — every open UI dropped its spotlight and caption.";
+  } else if (shown === 0 && dropped.length > 0) {
+    base =
       "nothing resolved — no name matched a doc or entity; " +
-      "check them with brain_search, then brain_show again."
-    );
+      "check them with brain_search, then brain_show again.";
+  } else {
+    base =
+      `showing ${shown} node(s) live in every open UI — ` +
+      "call brain_show again to change it, or with clear:true to dismiss.";
+    if (dropped.length > 0) base += ` (dropped ${dropped.length}: ${dropped.join(", ")})`;
   }
-  let base =
-    `showing ${shown} node(s) live in every open UI — ` +
-    "call brain_show again to change it, or with clear:true to dismiss.";
-  if (dropped.length > 0) base += ` (dropped ${dropped.length}: ${dropped.join(", ")})`;
+  if (!serverReachable) base += NO_SERVER_CAVEAT;
   return base;
 }
 
-/** brain_show's MCP result (spec/95): resolve + broadcast a presentation, then
- * report {ok, shown, dropped, seq, hint}. Never writes — not behind [serve]
- * writes, only the normal auth. Forgiving: unresolved nodes are dropped, listed. */
-function singleShow(
+/** Try to hand this presentation to an already-running `brainpick serve` for the
+ * same bundle root, the same way `brainpick show` (the CLI) already does — it
+ * broadcasts to a REAL UI, unlike the stdio MCP process's own private,
+ * unattached ServeState. Returns the server's result (with our hint attached),
+ * an error object if a server answered but rejected the request, or null if no
+ * server answered at all — the caller's cue to fall back to the local, UI-less
+ * presentation (spec/95 follow-up, mirrors the Python engine). */
+async function proxyShow(
+  state: ServeState,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const baseUrl = `http://${connectableHost(state.config.serve.host)}:${state.config.serve.port}`;
+  const token = state.config.serve.token || null;
+  const { result, error, unreachable } = await postShow(baseUrl, body, token);
+  if (result !== undefined) {
+    const shown = (result["shown"] as number) ?? 0;
+    const dropped = (result["dropped"] as string[]) ?? [];
+    result["hint"] = showHint(shown, dropped, Boolean(body["clear"]));
+    return result;
+  }
+  if (unreachable) return null;
+  return {
+    ok: false,
+    dropped: [],
+    error,
+    hint: "a brainpick serve is running but rejected the presentation — fix the error above, then try again.",
+  };
+}
+
+/** brain_show's MCP result (spec/95): proxy to a running `brainpick serve` when
+ * one answers (it does the real resolving + broadcasting); otherwise fall back
+ * to resolving + broadcasting on this process's own orphaned state, honestly
+ * caveated since nothing is actually watching it. Never writes — not behind
+ * [serve] writes, only the normal auth. Forgiving: unresolved nodes are
+ * dropped, listed. */
+async function singleShow(
   state: ServeState,
   nodes?: string[] | null,
   focus?: string | null,
   mode?: string | null,
   annotation?: string | null,
   clear = false,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
+  const body: Record<string, unknown> = {};
+  if (nodes != null) body["nodes"] = nodes;
+  if (focus != null) body["focus"] = focus;
+  if (mode != null) body["mode"] = mode;
+  if (annotation != null) body["annotation"] = annotation;
+  if (clear) body["clear"] = true;
+  const proxied = await proxyShow(state, body);
+  if (proxied !== null) return proxied;
+
   const [presentation, dropped] = state.present(
     nodes ?? null,
     focus ?? null,
@@ -756,12 +806,18 @@ function singleShow(
     annotation ?? null,
     clear,
   );
+  const presentedNodes = presentation["nodes"] as string[];
+  const cleared =
+    presentedNodes.length === 0 &&
+    presentation["focus"] === null &&
+    presentation["mode"] === null &&
+    presentation["annotation"] === null;
   return {
     ok: true,
-    shown: (presentation["nodes"] as string[]).length,
+    shown: presentedNodes.length,
     dropped,
     seq: presentation["seq"],
-    hint: showHint(presentation, dropped),
+    hint: showHint(presentedNodes.length, dropped, cleared, false),
   };
 }
 
@@ -1057,29 +1113,13 @@ export async function writePayload(
 }
 
 export function showPayload(
-  state: ServeState,
-  nodes?: string[] | null,
-  focus?: string | null,
-  mode?: string | null,
-  annotation?: string | null,
-  clear?: boolean,
-): Payload;
-export function showPayload(
-  set: BrainSet,
-  nodes?: string[] | null,
-  focus?: string | null,
-  mode?: string | null,
-  annotation?: string | null,
-  clear?: boolean,
-): Promise<Payload>;
-export function showPayload(
   target: ServeState | BrainSet,
   nodes?: string[] | null,
   focus?: string | null,
   mode?: string | null,
   annotation?: string | null,
   clear = false,
-): Payload | Promise<Payload> {
+): Promise<Payload> {
   if (!(target instanceof BrainSet)) return singleShow(target, nodes, focus, mode, annotation, clear);
   return federatedShow(target, nodes, focus, mode, annotation, clear);
 }
@@ -1095,7 +1135,7 @@ async function federatedShow(
   if (!set.federated) {
     const only = await set.stateFor(set.brains[0]!);
     const stripped = nodes ? nodes.map((n) => stripAlias(set, n)) : nodes;
-    return singleShow(only, stripped, focus ? stripAlias(set, focus) : focus, mode, annotation, clear);
+    return await singleShow(only, stripped, focus ? stripAlias(set, focus) : focus, mode, annotation, clear);
   }
   // A presentation is one UI: the brain of the first resolved node (else here, else
   // the first brain) hosts it; nodes from other brains are dropped and listed.
@@ -1116,7 +1156,7 @@ async function federatedShow(
     else foreign.push(token);
   }
   const focusRel = focus ? splitQualified(focus)[1] : focus;
-  const result = singleShow(await set.stateFor(brain), nodes != null ? kept : nodes, focusRel, mode, annotation, clear);
+  const result = await singleShow(await set.stateFor(brain), nodes != null ? kept : nodes, focusRel, mode, annotation, clear);
   result["dropped"] = [...foreign, ...(result["dropped"] as string[])];
   result["brain"] = brain.alias;
   if (foreign.length > 0) {

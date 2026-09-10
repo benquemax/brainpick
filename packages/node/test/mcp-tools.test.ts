@@ -4,8 +4,9 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
+import * as showClientModule from "../src/show-client";
 import { loadConfig } from "../src/config";
 import { sha256Hex } from "../src/core/canonical";
 import {
@@ -28,6 +29,22 @@ import {
   stageT3Export,
   tempDir,
 } from "./helpers";
+
+vi.mock("../src/show-client", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../src/show-client")>();
+  return { ...mod, postShow: vi.fn(mod.postShow) };
+});
+
+/** Make brain_show's proxy attempt behave as if no `brainpick serve` is
+ * listening — every local-fallback test needs this so it doesn't silently
+ * depend on whatever happens to be bound to 127.0.0.1:4747 on the machine
+ * running the suite (spec/95 follow-up: mirrors test_mcp_tools.py's _no_server). */
+function noServer(reason = "connect ECONNREFUSED 127.0.0.1:4747"): void {
+  vi.mocked(showClientModule.postShow).mockResolvedValue({
+    error: `no brainpick server at http://127.0.0.1:4747 — start one with 'brainpick serve' (${reason})`,
+    unreachable: true,
+  });
+}
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
@@ -53,6 +70,7 @@ afterEach(() => {
     if (saved === undefined) delete process.env[key];
     else process.env[key] = saved;
   }
+  vi.mocked(showClientModule.postShow).mockReset();
   cleanup();
 });
 
@@ -580,30 +598,105 @@ test("conflict three-way from a git base", async () => {
 // -- brain_show (spec/95): the 6th tool — ephemeral presentations, not write-gated --
 
 test("showPayload reports shown, dropped, seq, and a hint", async () => {
+  noServer();
   const state = await makeState(copyBundle());
   const queue = state.subscribe();
-  const result = showPayload(state, ["aurinko.md", "ei-ole"], null, null, "hi");
+  const result = await showPayload(state, ["aurinko.md", "ei-ole"], null, null, "hi");
   expect(result["ok"]).toBe(true);
   expect(result["shown"]).toBe(1);
   expect(result["dropped"]).toEqual(["ei-ole"]);
   expect(result["seq"]).toBe(1);
-  // the exact hint — pinned so it stays byte-identical to the Python twin (parity)
+  // the exact hint — pinned so it stays byte-identical to the Python twin (parity),
+  // aside from the trailing no-server caveat (Python-only proxy for now)
   expect(result["hint"]).toBe(
     "showing 1 node(s) live in every open UI — " +
-      "call brain_show again to change it, or with clear:true to dismiss. (dropped 1: ei-ole)",
+      "call brain_show again to change it, or with clear:true to dismiss. (dropped 1: ei-ole)" +
+      " No brainpick serve is running for this bundle, so nothing is actually visible yet" +
+      " — start one with `brainpick serve --root <bundle>`.",
   );
-  expect(queue.drain().map((e) => e[0])).toEqual(["brain.show"]); // the open UIs light up
+  // local fallback still updates its own (UI-less) state so the CLI/tests can introspect it
+  expect(queue.drain().map((e) => e[0])).toEqual(["brain.show"]);
   expect(state.seq).toBe(1); // never writes / compiles
 });
 
 test("showPayload clear has a dedicated hint", async () => {
+  noServer();
   const state = await makeState(copyBundle());
-  const result = showPayload(state, null, null, null, null, true);
+  const result = await showPayload(state, null, null, null, null, true);
   expect(result).toEqual({
     ok: true,
     shown: 0,
     dropped: [],
     seq: 1,
-    hint: "cleared — every open UI dropped its spotlight and caption.",
+    hint: "cleared — every open UI dropped its spotlight and caption." +
+      " No brainpick serve is running for this bundle, so nothing is actually visible yet" +
+      " — start one with `brainpick serve --root <bundle>`.",
   });
+});
+
+test("showPayload proxies to a running server and never touches local state", async () => {
+  // the actual bug fix: when a `brainpick serve` answers, brain_show must use ITS
+  // response (a real broadcast to a real UI) and leave the stdio process's own
+  // orphaned state untouched — no local seq bump, no local broadcast
+  vi.mocked(showClientModule.postShow).mockResolvedValue({
+    result: { ok: true, shown: 2, dropped: [], seq: 7 },
+  });
+  const state = await makeState(copyBundle());
+  const queue = state.subscribe();
+
+  const result = await showPayload(state, ["aurinko.md", "kuu.md"], null, "brain", "hi");
+
+  expect(result).toEqual({
+    ok: true, shown: 2, dropped: [], seq: 7,
+    hint: "showing 2 node(s) live in every open UI — " +
+      "call brain_show again to change it, or with clear:true to dismiss.",
+  });
+  expect(vi.mocked(showClientModule.postShow)).toHaveBeenCalledTimes(1);
+  const [baseUrl, body, token] = vi.mocked(showClientModule.postShow).mock.calls[0]!;
+  expect(baseUrl).toBe("http://127.0.0.1:4747"); // the bundle's default [serve] config
+  expect(body).toEqual({ nodes: ["aurinko.md", "kuu.md"], mode: "brain", annotation: "hi" });
+  expect(token).toBeNull(); // no token configured for this fixture bundle
+  // the orphaned local state was never touched — the real server did the broadcasting
+  expect(queue.drain()).toEqual([]);
+  expect(state.presentationSeq).toBe(0);
+});
+
+test("showPayload normalizes a wildcard bind to a connectable host", async () => {
+  // a server can bind 0.0.0.0 (everywhere); a client can't connect TO that address
+  // — must resolve to 127.0.0.1 before POSTing, same as `brainpick show`
+  vi.mocked(showClientModule.postShow).mockResolvedValue({
+    result: { ok: true, shown: 0, dropped: [], seq: 1 },
+  });
+  const root = copyBundle();
+  const config = loadConfig(root);
+  config.serve.host = "0.0.0.0";
+  const state = new ServeState(root, config);
+  await state.load();
+
+  await showPayload(state, null, null, null, null, true);
+
+  const [baseUrl] = vi.mocked(showClientModule.postShow).mock.calls[0]!;
+  expect(baseUrl).toBe("http://127.0.0.1:4747");
+});
+
+test("showPayload reports a server-side rejection without touching local state", async () => {
+  // a running server that REJECTS the presentation (e.g. a bad bearer token on a
+  // non-local bind) must surface as an error, never silently paper over it by
+  // falling back to updating the orphaned local state — that would hide a real
+  // misconfiguration behind a false 'ok'
+  vi.mocked(showClientModule.postShow).mockResolvedValue({
+    error: "the server rejected the presentation (401): auth required",
+  });
+  const state = await makeState(copyBundle());
+  const queue = state.subscribe();
+
+  const result = await showPayload(state, ["aurinko.md"]);
+
+  expect(result).toEqual({
+    ok: false, dropped: [],
+    error: "the server rejected the presentation (401): auth required",
+    hint: "a brainpick serve is running but rejected the presentation — fix the error above, then try again.",
+  });
+  expect(queue.drain()).toEqual([]);
+  expect(state.presentationSeq).toBe(0);
 });

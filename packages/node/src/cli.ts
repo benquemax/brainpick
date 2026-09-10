@@ -9,7 +9,13 @@ import { Command, Option } from "commander";
 
 import { checkFresh, runCompile, type CompileResult, type Tier } from "./compile/pipeline";
 import { loadConfig } from "./config";
+import { connectableHost, postShow, type ShowResult } from "./show-client";
 import { VERSION } from "./version";
+
+// re-exported so existing importers of `postShow`/`connectableHost` from "./cli"
+// (mcp.ts's proxy attempt, tests) keep working — the implementation lives in
+// show-client.ts to avoid a circular import (see that file's header comment).
+export { connectableHost, postShow, type ShowResult };
 
 function printCompiled(result: CompileResult): void {
   const s = result.stats;
@@ -23,41 +29,6 @@ function intOption(value: string): number {
   const parsed = parseInt(value, 10);
   if (Number.isNaN(parsed)) throw new Error(`not an integer: ${value}`);
   return parsed;
-}
-
-export interface ShowResult {
-  result?: Record<string, unknown>;
-  error?: string;
-}
-
-/** POST a presentation body to a running server's /api/show (spec/95). The CLI is
- * a client here, never resolving locally: the live server resolves and broadcasts
- * to open UIs. Returns the parsed response or a clear instruction (never throws). */
-export async function postShow(
-  baseUrl: string,
-  body: Record<string, unknown>,
-  token?: string | null,
-): Promise<ShowResult> {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (token) headers["authorization"] = `Bearer ${token}`;
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl}/api/show`, { method: "POST", headers, body: JSON.stringify(body) });
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return { error: `no brainpick server at ${baseUrl} — start one with 'brainpick serve' (${reason})` };
-  }
-  const text = await res.text();
-  if (!res.ok) {
-    let message = text;
-    try {
-      message = (JSON.parse(text) as { error?: string }).error ?? text;
-    } catch {
-      /* non-JSON error body — keep the raw text */
-    }
-    return { error: `the server rejected the presentation (${res.status}): ${message}` };
-  }
-  return { result: text === "" ? {} : (JSON.parse(text) as Record<string, unknown>) };
 }
 
 export interface ShowOptions {
@@ -82,8 +53,7 @@ export async function showAction(
   const config = loadConfig(root);
   const host = opts.host ?? config.serve.host;
   const port = opts.port ?? config.serve.port;
-  const displayHost = host === "0.0.0.0" || host === "::" ? "127.0.0.1" : host;
-  const baseUrl = `http://${displayHost}:${port}`;
+  const baseUrl = `http://${connectableHost(host)}:${port}`;
   const token = opts.token ?? (config.serve.token || null);
 
   const body: Record<string, unknown> = { nodes: opts.nodes };

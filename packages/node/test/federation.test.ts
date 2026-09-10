@@ -5,8 +5,9 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import * as showClientModule from "../src/show-client";
 import {
   Brain,
   BrainSet,
@@ -34,6 +35,11 @@ import {
   writePayload,
 } from "../src/mcp";
 import { cleanup, copyBundle, tempDir } from "./helpers";
+
+vi.mock("../src/show-client", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../src/show-client")>();
+  return { ...mod, postShow: vi.fn(mod.postShow) };
+});
 
 /** The pre-federation shape in every known host: one `mcp --root DIR` per project. */
 function writeHosts(home: string, [a, b, gone]: [string, string, string]): void {
@@ -67,6 +73,7 @@ function writeHosts(home: string, [a, b, gone]: [string, string, string]): void 
 }
 
 afterEach(cleanup);
+afterEach(() => vi.mocked(showClientModule.postShow).mockReset());
 
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
@@ -402,6 +409,9 @@ describe("routed read / neighbors / write / show", () => {
   });
 
   test("show targets one brain and drops the rest", async () => {
+    // no running `brainpick serve` here — pin brain_show to its local fallback so
+    // this doesn't silently depend on whatever happens to be on :4747 (spec/95 follow-up)
+    vi.mocked(showClientModule.postShow).mockResolvedValue({ error: "no server", unreachable: true });
     const set = makeSet();
     const result = await showPayload(set, ["kirja:kahvi.md", "aurinko:kuu.md"]);
     expect(result["shown"]).toBe(1);
