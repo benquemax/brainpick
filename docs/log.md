@@ -2,6 +2,15 @@
 
 ## 2026-09-10
 
+- Released 0.4.5: `brainpick serve --root` now accepts a repo root above the
+  bundle (spec/80), the same way `compile`/`doctor`/`mcp`/the query mirrors
+  already did — `_cmd_serve` used a plain `load_config` instead of the shared
+  `resolve_bundle`, despite that resolver's own docstring claiming serve used
+  it too. Passing `--root` at the bundle directory directly (the common,
+  documented invocation) happened to still find the markdown, so a repo-root
+  `brainpick.toml`'s `exclude`/`[brain]` config was silently never read.
+
+
 - Released 0.4.4: the Node engine brain_show fix below.
 - Fixed: the Node engine had the same brain_show/stdio disconnect as 0.4.3's
   Python fix — `singleShow` now proxies to a running `brainpick serve` the
