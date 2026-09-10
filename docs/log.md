@@ -2,6 +2,16 @@
 
 ## 2026-09-10
 
+- Released 0.4.4: the Node engine brain_show fix below.
+- Fixed: the Node engine had the same brain_show/stdio disconnect as 0.4.3's
+  Python fix — `singleShow` now proxies to a running `brainpick serve` the
+  same way, falling back to the local, honestly-caveated presentation only
+  when nothing answers. `postShow`/`connectableHost` moved into a new leaf
+  module (`show-client.ts`) since importing them from `cli.ts` into `mcp.ts`
+  created a real circular reference that broke the bundled CLI outright
+  (`cli.ts` has a top-level await gating its entry point, and `mcp.ts` is
+  already reachable from it via a dynamic import for the `mcp` subcommand) —
+  caught by running the built stdio e2e test, not unit tests against source.
 - Released 0.4.3: the brain_show fix below.
 - Fixed: `brain_show`, called over the stdio `brainpick mcp` transport (how
   agent hosts normally connect), resolved and broadcast against that

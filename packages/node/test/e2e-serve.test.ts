@@ -160,7 +160,7 @@ test("sse frame format", () => {
 test("health", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/health`);
-  expect(body).toEqual({ impl: "node", name: "brainpick", spec_version: "0.1", version: "0.4.3" });
+  expect(body).toEqual({ impl: "node", name: "brainpick", spec_version: "0.1", version: "0.4.4" });
 });
 
 test("status", async () => {
