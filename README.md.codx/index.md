@@ -10,6 +10,8 @@
 
 {{ theTiers }}
 
+{{ cortexAndImplants }}
+
 {{ quickStartComing }}
 
 {{ status }}

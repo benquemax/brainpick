@@ -206,6 +206,45 @@ dependency: nothing above depends on anything more than the layer below.
 | T3 | entity/relation graph (ghosts, tags, co-occurrence) | nothing — derived from links and tags |
 
 
+## One brain: a cortex and its implants
+
+An agent has **one brain** — but a brain is not one bundle. It is a **cortex**
+plus any number of **implants**, fronted by a single MCP server, so the agent
+asks once and every part of its brain answers.
+
+- **The cortex** is the agent's own memory — at most one, marked `--cortex`,
+  and what the `me` scope names. It is the brain that travels with the agent
+  rather than with a project, and where an unqualified write falls back when
+  the agent is not standing in a bundle.
+- **An implant** is a repository's bundle plugged into the same server —
+  `--implant`, any number of them. An implant is queried alongside the cortex
+  and, like it, **writable**: a write is refused only by that repository's own
+  `[serve] writes` setting and its own henxels contract, never the cortex's.
+- **Here** — whatever bundle the working directory sits in — joins the set
+  automatically, registered or not, and is where an unqualified write lands.
+
+Every path an agent sees is qualified as `alias:path`
+(`acme:docs/video-gen.md`) and is accepted back in the same form;
+`brain_search` fans out across the set and merges hits **by rank**, because
+scores are not comparable between a brain with fresh vectors and a T1-only
+one. Brains load lazily, so a registry of twenty projects costs nothing until
+a query actually reaches them.
+
+```bash
+brainpick register ~/Git/acme --implant   # a project's bundle — an implant
+brainpick register ~/brain --cortex       # the agent's own memory — the cortex
+claude mcp add brainpick --scope user -- brainpick mcp   # one entry, every brain
+```
+
+That single user-scope entry replaces the old wiring of one MCP server per
+project; `brainpick register --from-hosts` migrates the existing ones in one
+command, and `brainpick mcp --root DIR` still fronts exactly one brain for
+setups that want it. The roles are ordering and write-routing only — a brain
+registered with no role behaves exactly as it always did. See
+[federation](https://github.com/benquemax/brainpick/blob/main/docs/federation.md)
+for the full shape.
+
+
 ## Quick start
 
 ### Give your agent a brain — paste one prompt
@@ -220,9 +259,12 @@ compiles the brain, and wires itself to it. Paste this to the agent:
 > compiles tier 1. If there is no bundle yet, it hands off to henxels:
 > `uvx henxels init --template brainpick-brain` for a brain (an agent's
 > memory in `_brain/`) or `uvx henxels init --template okf-llm-wiki` for a
-> plain wiki (`_wiki/`); then run `brainpick init` again. Then run `brainpick integrate claude-code` (or
-> `opencode`, or `agents-md`) to install the Agent Skill and print the
-> MCP snippet — wire it into the harness config. From then on, consult the
+> plain wiki (`_wiki/`); then run `brainpick init` again. Then run
+> `brainpick integrate claude-code` (or `opencode`, or `agents-md`) to
+> install the Agent Skill and print the MCP snippet — wire it into the harness
+> config. Register the bundle so a single entry fronts the whole brain:
+> `brainpick register . --implant`, plus `brainpick register ~/brain
+> --cortex` if I have a personal brain of my own. From then on, consult the
 > brain before grepping: `brain_overview` first, then `brain_search`,
 > `brain_read`, `brain_neighbors`. Finally commit the bundle and the
 > brainpick config.
@@ -240,6 +282,7 @@ The same journey by hand:
 uv tool install brainpick        # or: pipx install brainpick
 brainpick init                   # detect bundle + backends, write config, compile T1
 brainpick integrate claude-code  # Agent Skill + the MCP wiring snippet
+brainpick register . --implant   # plug this bundle in (--cortex for your own brain)
 brainpick search "anything"      # the brain answers from the terminal
 ```
 
