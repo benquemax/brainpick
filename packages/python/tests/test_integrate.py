@@ -1,5 +1,6 @@
 """`brainpick integrate` (skill, MCP snippets, the AGENTS.md report) and the
 compile-side report fill. The shipped skill must match the repo-root canonical."""
+import json
 import shutil
 
 import pytest
@@ -62,7 +63,9 @@ def test_integrate_dsh_writes_skill_and_prints_cordis_insert(repo, capsys):
     assert "@deepseek-ai/dsh-mcp-client" in out       # the mcp-client bundle
     assert "cordis.patch.yml" in out                   # where the row goes
     assert "serverName: brainpick" in out
-    assert str(bundle) in out                          # resolved absolute root, not a stale path
+    # The root rides inside a JSON args row, so assert it as the snippet encodes
+    # it — on Windows the raw path and its JSON form differ by every backslash.
+    assert json.dumps(str(bundle)) in out              # resolved absolute root, not a stale path
     assert "claude mcp add" not in out                 # dsh has no such command
 
 

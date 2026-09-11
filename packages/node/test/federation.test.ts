@@ -78,12 +78,22 @@ afterEach(() => vi.mocked(showClientModule.postShow).mockReset());
 const NEW_DOC =
   "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n# Uusi kivi\n\nNear [Kuu](kuu.md).\n";
 
-function makeSet(here: "aurinko" | "kirja" | null = null): BrainSet {
+function makeSet(
+  here: "aurinko" | "kirja" | null = null,
+  // `Brain.role` is readonly (it is registry truth, not a knob), so a test that
+  // wants a different shape asks for it here instead of mutating after the fact.
+  roles: { aurinko?: string | null; kirja?: string | null } = {},
+): BrainSet {
   const a = copyBundle("kotiaurinko");
   const k = copyBundle("kotikirja");
   return new BrainSet([
-    new Brain({ alias: "aurinko", root: a, here: here === "aurinko" }),
-    new Brain({ alias: "kirja", root: k, role: "cortex", here: here === "kirja" }),
+    new Brain({ alias: "aurinko", root: a, role: roles.aurinko ?? null, here: here === "aurinko" }),
+    new Brain({
+      alias: "kirja",
+      root: k,
+      role: roles.kirja === undefined ? "cortex" : roles.kirja,
+      here: here === "kirja",
+    }),
   ]);
 }
 
@@ -445,16 +455,14 @@ describe("routed read / neighbors / write / show", () => {
   });
 
   test("write declines with neither here nor cortex", async () => {
-    const set = makeSet();
-    for (const brain of set.brains) brain.role = "implant";
+    const set = makeSet(null, { aurinko: "implant", kirja: "implant" });
     const declined = await writePayload(set, "uusi-kivi", NEW_DOC);
     expect(declined["ok"]).toBe(false);
     expect(String(declined["instruction"])).toContain("aurinko");
   });
 
   test("implants are writable", async () => {
-    const set = makeSet();
-    set.byAlias("aurinko")!.role = "implant";
+    const set = makeSet(null, { aurinko: "implant" });
     const written = await writePayload(set, "aurinko:implantti", NEW_DOC);
     expect(written["ok"]).toBe(true);
     expect(written["path"]).toBe("aurinko:implantti.md");
