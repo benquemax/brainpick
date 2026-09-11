@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "brainpick"
-version = "0.4.5"
+version = "0.5.0"
 description = "A turn-key brain stack for agents: compile an OKF markdown bundle into a queryable, servable, visualizable brain."
 readme = "README.md"
 requires-python = ">=3.10"

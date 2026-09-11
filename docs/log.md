@@ -1,5 +1,29 @@
 # Update log
 
+## 2026-09-11
+
+- Released 0.5.0: the federation changes below.
+- Added: a brain set now has names for its two roles — one **cortex** plus any
+  number of **implants** (spec/75). The cortex is the agent's own memory: at
+  most one, what scope `me` names, registered with `brainpick register
+  --cortex`. An implant is a repository's bundle plugged into the same server
+  (`--implant`, any number), queried alongside the cortex and — like it —
+  writable, guarded by that repository's own `[serve] writes` setting and its
+  own henxels contract, never the cortex's. The registry `role` gains both
+  values; `role = "user"` from an older registry is still *read* as the cortex
+  and never written again, so deployed registries keep working and migrate the
+  first time `register` rewrites the entry. `--user` survives as a hidden
+  alias.
+- Changed: an unqualified `brain_write` now falls back to the cortex when
+  there is no *here*, instead of declining. It still never guesses between
+  implants — ambiguity is an instruction, not a coin flip.
+- Docs: the README describes the shape it had been missing — "One brain: a
+  cortex and its implants", and a quick start that teaches one user-scope
+  `brainpick mcp` entry instead of one MCP server per project. The section is
+  codumented: its module asserts both engines define `--cortex`/`--implant`,
+  that the role constants still exist on both sides, and that the legacy-role
+  fallback the README promises is still read.
+
 ## 2026-09-10
 
 - Released 0.4.5: `brainpick serve --root` now accepts a repo root above the
