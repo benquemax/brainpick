@@ -54,14 +54,21 @@ one of them.
 
 - Python ≥ 3.10, stdlib-first (argparse, no click/typer); `ruff` is the
   style arbiter; `pytest -q` for tests; `uv` for environments.
-  - Engine dev loop: `cd packages/python && uv sync --extra dev && uv run
-    pytest -q && uv run ruff check .`
+  - Engine dev loop: `cd packages/python && uv sync --extra dev --extra
+    vectors && uv run pytest -q && uv run ruff check .` — `--extra vectors`
+    is not optional: without lancedb, T2 compiles as `off` and ~23 tests fail
+    on an assertion about tier freshness, which reads like a real regression
+    and is not one. CI syncs the same two extras.
   - Conformance goldens are regenerated ONLY via
     `uv run python ../../scripts/regen-golden.py` (from packages/python) and
     the diffs reviewed like code — never hand-edit
     `spec/fixtures/expected/`.
 - Node ≥ 20, TypeScript; `vitest` for tests; npm workspaces
   (`packages/node`, `packages/webui`).
+  - Typecheck as well as test: `npx tsc --noEmit -p packages/node` (and the
+    same in `packages/webui`). vitest strips types, so a `tsc`-only error —
+    assigning a readonly field, say — passes every suite and still fails CI
+    before a single test runs. The push gate runs both.
 - `henxels check --all` must be green before any commit; the contract in
   `henxels.yaml` is the structural truth of this repo — to disobey a rule,
   change the contract (a conscious, reviewable act).
