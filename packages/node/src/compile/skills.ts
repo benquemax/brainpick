@@ -22,6 +22,7 @@ const SKILLTREE_PREAMBLE =
 export interface SkillRecord {
   depends_on: string[];
   description: string | null;
+  export: string[];
   path: string;
   title: string;
   tools: string[];
@@ -63,6 +64,7 @@ export function buildSkills(docs: Document[], root: string): SkillsArtifact {
     skills.push({
       depends_on: [...doc.dependsOn],
       description: doc.description,
+      export: [...doc.export],
       path: doc.path,
       title: doc.title,
       tools: doc.tools.map((t) => resolveTool(doc.path, t, root)),

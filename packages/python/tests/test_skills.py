@@ -121,11 +121,22 @@ def test_skills_json_lists_resolved_prerequisites_and_tools(kotiaivot):
     assert skills == {"skills": [
         {"depends_on": ["skills/veden-keitto.md"],
          "description": "Use when brewing the morning coffee — the whole procedure, kettle to cup.",
+         "export": ["agent-skill"],
          "path": "skills/kahvin-keitto.md", "title": "Kahvin keitto", "tools": ["tools/keita"]},
-        {"depends_on": [],
+        {"depends_on": [], "export": [],
          "description": "Use when you need boiling water — for coffee, tea, or pasta.",
          "path": "skills/veden-keitto.md", "title": "Veden keitto", "tools": []},
     ]}
+
+
+def test_export_wraps_scalars_and_is_ignored_on_non_skills(tmp_path):
+    (tmp_path / "a.md").write_text(
+        "---\ntype: skill\ntitle: A\nexport: [agent-skill]\n---\n# A\n\n[B](b.md)\n", encoding="utf-8")
+    (tmp_path / "b.md").write_text(
+        "---\ntype: concept\ntitle: B\nexport: agent-skill\n---\n# B\n\n[A](a.md)\n", encoding="utf-8")
+    docs = {d.path: d for d in scan(tmp_path)}
+    assert docs["a.md"].export == ["agent-skill"]
+    assert docs["b.md"].export == []
 
 
 def test_tools_resolve_relative_to_the_skill_and_survive_when_missing(tmp_path):

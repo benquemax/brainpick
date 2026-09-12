@@ -18,6 +18,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { runCompile } from "./compile/pipeline";
 import { REPORT_BEGIN_PREFIX, REPORT_END_MARKER } from "./compile/t1";
+import type { SkillRecord, SkillsArtifact } from "./compile/skills";
 import { findRepoRoot } from "./detect";
 import { mcpSnippets, Voice, type Print } from "./scaffold";
 import { PACKAGE_ROOT } from "./version";
@@ -78,6 +79,71 @@ function graphBeforeGrepHook(): string {
   return JSON.stringify(fragment, null, 2);
 }
 
+const STUB_TEMPLATE = `---
+name: {name}
+description: {description}
+---
+
+# {title}
+
+This skill lives in the brain at \`{path}\`. Read it there before acting —
+\`brain_read {path}\` (MCP) or \`brainpick read {path}\` (CLI) — the brain
+copy is canonical and carries its prerequisites and tools.
+
+- Prerequisites: {prerequisites}
+- Tools: {tools}
+`;
+
+function stemOf(path: string): string {
+  return path.split("/").pop()!.replace(/\.md$/, "");
+}
+
+/** The pointer stub for one exported skill (spec/85 *Exported skills*): the
+ * harness loads it on its trigger, the brain stays canonical. */
+export function renderSkillStub(skill: SkillRecord): string {
+  const description = (skill.description || skill.title).replace(/\n/g, " ").trim();
+  const fill: Record<string, string> = {
+    name: stemOf(skill.path),
+    description,
+    title: skill.title,
+    path: skill.path,
+    prerequisites: skill.depends_on.join(", ") || "none",
+    tools: skill.tools.join(", ") || "none",
+  };
+  return STUB_TEMPLATE.replace(/\{(\w+)\}/g, (_m, key: string) => fill[key] ?? "");
+}
+
+/** The skills that declare `export: agent-skill`, from the compiled
+ * t1/skills.json (path order) — empty when the bundle is uncompiled or a wiki. */
+export function exportedSkillStubs(root: string): SkillRecord[] {
+  try {
+    const data = JSON.parse(readFileSync(join(root, ".brainpick", "t1", "skills.json"), "utf8")) as SkillsArtifact;
+    return (data.skills ?? []).filter((s) => (s.export ?? []).includes("agent-skill"));
+  } catch {
+    return [];
+  }
+}
+
+function writeStubs(voice: Voice, root: string, repo: string, target: "claude-code" | "opencode", dryRun: boolean): void {
+  const skillsDir = dirname(dirname(join(repo, SKILL_DESTINATIONS[target])));
+  for (const skill of exportedSkillStubs(root)) {
+    const name = stemOf(skill.path);
+    if (name === "brainpick") {
+      voice.line("!", `exported skill ${skill.path} skipped — its stub would shadow the brainpick skill; rename the doc`);
+      continue;
+    }
+    const dest = join(skillsDir, name, "SKILL.md");
+    if (dryRun) {
+      voice.step(`• write the exported skill stub ${dest}`);
+      continue;
+    }
+    const existed = existsSync(dest);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, renderSkillStub(skill), "utf8");
+    voice.line("✓", `exported skill: ${existed ? "updated" : "wrote"} ${dest} → ${skill.path}`);
+  }
+}
+
 function writeSkill(repo: string, target: "claude-code" | "opencode", dryRun: boolean): [string, boolean] {
   const dest = join(repo, SKILL_DESTINATIONS[target]);
   const existed = existsSync(dest);
@@ -103,6 +169,7 @@ function integrateClaudeCode(voice: Voice, root: string, repo: string, dryRun: b
   const [dest, existed] = writeSkill(repo, "claude-code", dryRun);
   const verb = dryRun ? "would write" : existed ? "updated" : "wrote";
   voice.line("✓", `skill: ${verb} ${dest}`);
+  writeStubs(voice, root, repo, "claude-code", dryRun);
   if (dryRun) {
     voice.step("• print the graph-before-grep PreToolUse hook and the `claude mcp add` snippet");
     return 0;
@@ -120,6 +187,7 @@ function integrateOpencode(voice: Voice, root: string, repo: string, dryRun: boo
   const [dest, existed] = writeSkill(repo, "opencode", dryRun);
   const verb = dryRun ? "would write" : existed ? "updated" : "wrote";
   voice.line("✓", `skill: ${verb} ${dest}`);
+  writeStubs(voice, root, repo, "opencode", dryRun);
   if (dryRun) {
     voice.step("• print the opencode.json MCP snippet");
     return 0;

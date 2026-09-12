@@ -4,7 +4,7 @@ about: concept
 title: "Skills"
 description: "Procedural memory in a brain — a skill is a distilled, tested procedure an agent follows, with its repetitive parts demoted to tools it drives; recognised by type, linked by depends_on, listed first, boosted in search, never executed by brainpick — and why brainpick ships the framework but no skills of its own."
 tags: [brain-format, agents, skills]
-timestamp: 2026-09-12T18:10:00Z
+timestamp: 2026-09-13T11:00:00Z
 ---
 
 # Skills
@@ -132,7 +132,18 @@ structure makes *follow it* one call, [brain_write](reference/mcp/brain-write.md
 in `replace` mode bumps `timestamp` so *improve it* is one call too, and
 `skilltree.md` shows where a new skill sits among the old.
 
-Still to come: `export: agent-skill`, which mirrors a skill out as a
-harness-loaded `SKILL.md` through [Agent integrations](agent-integrations.md),
-and a visual style for `depends_on` edges in the
-[holographic brain](holographic-brain.md).
+## Exported skills
+
+A skill that must fire on its trigger even in a session that never opened
+the brain declares `export: agent-skill`. Compile records it in
+`skills.json` (`"export": ["agent-skill"]`), and `brainpick integrate
+<harness>` writes one **pointer stub** per exported skill beside the
+brainpick skill it installs — `.claude/skills/<stem>/SKILL.md` for Claude
+Code and dsh, `.opencode/skills/<stem>/SKILL.md` for OpenCode
+([Agent integrations](agent-integrations.md)). The stub carries the
+harness front matter (`name`, `description`) and one instruction: read the
+skill in the brain — `brain_read <path>` — because the brain copy is
+canonical and carries the prerequisites and tools. Nothing is copied, so
+nothing drifts; a stem of `brainpick` is skipped with a warning because it
+would shadow the engine's own skill, and `agents-md` writes no stubs.
+Search, overview and `brain_read` ignore the key entirely.

@@ -48,6 +48,7 @@ class Document:
     skill: bool = False                                   # spec/20 Skills and frontmatter edges
     depends_on: list[str] = field(default_factory=list)   # RESOLVED prerequisites, declared order
     tools: list[str] = field(default_factory=list)        # declared tool paths, as written
+    export: list[str] = field(default_factory=list)       # spec/85 export targets (agent-skill)
 
 
 def is_skill(type_value) -> bool:
@@ -200,6 +201,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
         skill = is_skill(meta.get("type")) and not reserved
         depends_on: list[str] = []
         tools: list[str] = []
+        export: list[str] = []
         if skill:
             for declared in _normalize_list(meta.get("depends_on")):
                 resolved = resolve_doc_target(path, declared, file_set)
@@ -210,6 +212,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
                 elif resolved not in depends_on:
                     depends_on.append(resolved)
             tools = _normalize_list(meta.get("tools"))
+            export = _normalize_list(meta.get("export"))
 
         docs.append(Document(
             path=path,
@@ -228,5 +231,6 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             skill=skill,
             depends_on=depends_on,
             tools=tools,
+            export=export,
         ))
     return docs

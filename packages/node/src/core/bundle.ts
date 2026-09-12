@@ -44,6 +44,7 @@ export interface Document {
   skill: boolean; // spec/20 Skills and frontmatter edges
   dependsOn: string[]; // RESOLVED prerequisites, declared order
   tools: string[]; // declared tool paths, as written
+  export: string[]; // spec/85 export targets (agent-skill)
 }
 
 /** A doc is a skill by its `type` — `skill`, trimmed, case-insensitive — never
@@ -303,6 +304,7 @@ export function scan(
     const skill = isSkill(meta["type"]) && !reserved;
     const dependsOn: string[] = [];
     let tools: string[] = [];
+    let exportTargets: string[] = [];
     if (skill) {
       for (const declared of normalizeList(meta["depends_on"])) {
         const resolved = resolveDocTarget(path, declared, fileSet);
@@ -311,6 +313,7 @@ export function scan(
         else if (!dependsOn.includes(resolved)) dependsOn.push(resolved);
       }
       tools = normalizeList(meta["tools"]);
+      exportTargets = normalizeList(meta["export"]);
     }
 
     docs.push({
@@ -331,6 +334,7 @@ export function scan(
       skill,
       dependsOn,
       tools,
+      export: exportTargets,
     });
   }
   return docs;

@@ -78,7 +78,7 @@ not frontmatter — see *Grounding* below.
 |---|---|---|---|
 | `depends_on` | skills | list of doc paths (bundle-relative, `.md`) | skills this skill assumes; `depends_on` edges in T1 (spec/20) and the edges of the generated `skilltree.md` |
 | `tools` | skills | list of file paths (bundle-relative) | the deterministic scripts this skill drives; indexed and pointed at, never executed by an engine |
-| `export` | skills | `agent-skill` | the doc is also exported as a harness-loaded Agent Skill (`SKILL.md`) by `brainpick integrate` |
+| `export` | skills | `agent-skill` (string or list) | the doc is also exported as a harness-loaded Agent Skill (`SKILL.md`) by `brainpick integrate` — see *Exported skills* |
 
 ### Skills
 
@@ -116,6 +116,44 @@ drives — the dependency DAG rendered for a reader. Engines MAY generate it;
 the template's contract excludes it from frontmatter and orphan checks. A
 cycle in `depends_on` is an authoring error the engine reports as a compile
 warning; it never blocks T1.
+
+### Exported skills
+
+A skill the harness should load without being told — a procedure that
+must fire on its trigger even in a session that never opened the brain —
+declares `export: agent-skill`. The engine records it in `t1/skills.json`
+as `"export": ["agent-skill"]` (`[]` otherwise; spec/20) and
+`brainpick integrate <harness>` writes, beside the brainpick skill it
+installs, one **pointer stub** per exported skill under the harness's
+skill convention: `<skills dir>/<stem>/SKILL.md`, where `<stem>` is the
+doc's file stem and `<skills dir>` is the directory the brainpick skill
+lands in (`.claude/skills/` for `claude-code` and `dsh`, `.opencode/skills/`
+for `opencode`). The stub is a pointer, not a copy — the brain stays
+canonical and the stub never drifts from it:
+
+```markdown
+---
+name: <stem>
+description: <description, or the title when there is none>
+---
+
+# <title>
+
+This skill lives in the brain at `<path>`. Read it there before acting —
+`brain_read <path>` (MCP) or `brainpick read <path>` (CLI) — the brain
+copy is canonical and carries its prerequisites and tools.
+
+- Prerequisites: <depends_on, comma-separated, or "none">
+- Tools: <tools, comma-separated, or "none">
+```
+
+Stubs are written in `path` order, overwrite their previous version, and
+are the only files integrate writes for a skill; a stem equal to
+`brainpick` is skipped with a warning (it would shadow the engine's own
+skill). Removing `export` leaves a stale stub in place — the harness
+directory belongs to the repo, not the engine — and integrate says so.
+`agents-md` writes no stubs. Nothing about `export` changes search,
+overview or `brain_read`.
 
 **Additive-only policy.** A brain-format key, once published, is never
 renamed or removed; a newer format adds keys, and every key is optional for

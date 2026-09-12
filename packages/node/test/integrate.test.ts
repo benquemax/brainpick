@@ -7,7 +7,14 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { runCompile } from "../src/compile/pipeline";
 import { REPORT_BEGIN_PREFIX, REPORT_END_MARKER } from "../src/compile/t1";
-import { runIntegrate, SKILL_DESTINATIONS, skillPath, skillText } from "../src/integrate";
+import {
+  exportedSkillStubs,
+  renderSkillStub,
+  runIntegrate,
+  SKILL_DESTINATIONS,
+  skillPath,
+  skillText,
+} from "../src/integrate";
 import { cleanup, FIXTURE_BUNDLES, REPO_ROOT, tempDir } from "./helpers";
 
 afterEach(cleanup);
@@ -120,5 +127,81 @@ describe("the compile-side fill (spec/20 mechanics)", () => {
     const first = readFileSync(agents);
     await runCompile(bundle);
     expect(readFileSync(agents).equals(first)).toBe(true);
+  });
+});
+
+// -- exported skills: pointer stubs beside the brainpick skill (spec/85) ---------
+
+/** A git repo whose bundle is the kotiaivot brain (one skill exports itself). */
+function gitRepoWithBrain(): { repo: string; bundle: string } {
+  const repo = join(tempDir(), "repo");
+  mkdirSync(join(repo, ".git"), { recursive: true });
+  const bundle = join(repo, "brain");
+  cpSync(join(FIXTURE_BUNDLES, "kotiaivot"), bundle, { recursive: true });
+  return { repo, bundle };
+}
+
+describe("exported skills", () => {
+  test("the stub is a pointer, not a copy", () => {
+    const stub = renderSkillStub({
+      depends_on: ["skills/veden-keitto.md"],
+      description: "Use when brewing.",
+      export: ["agent-skill"],
+      path: "skills/kahvin-keitto.md",
+      title: "Kahvin keitto",
+      tools: ["tools/keita"],
+    });
+    expect(stub.startsWith("---\nname: kahvin-keitto\ndescription: Use when brewing.\n---\n")).toBe(true);
+    expect(stub).toContain("# Kahvin keitto");
+    expect(stub).toContain("`brain_read skills/kahvin-keitto.md`");
+    expect(stub).toContain("- Prerequisites: skills/veden-keitto.md");
+    expect(stub).toContain("- Tools: tools/keita");
+    const bare = renderSkillStub({
+      depends_on: [], description: null, export: ["agent-skill"], path: "skills/x.md", title: "X", tools: [],
+    });
+    expect(bare).toContain("description: X\n");
+    expect(bare).toContain("- Prerequisites: none");
+    expect(bare).toContain("- Tools: none");
+  });
+
+  test("stubs come from skills.json in path order", async () => {
+    const { bundle } = gitRepoWithBrain();
+    await runCompile(bundle);
+    expect(exportedSkillStubs(bundle).map((s) => s.path)).toEqual(["skills/kahvin-keitto.md"]);
+  });
+
+  test.each(["claude-code", "opencode"] as const)("%s writes a stub per exported skill", async (target) => {
+    const { repo, bundle } = gitRepoWithBrain();
+    await runCompile(bundle);
+    const lines: string[] = [];
+    expect(await runIntegrate(target, bundle, { print: (l) => lines.push(l) })).toBe(0);
+    const skillsDir = join(repo, SKILL_DESTINATIONS[target], "..", "..");
+    const stub = join(skillsDir, "kahvin-keitto", "SKILL.md");
+    expect(existsSync(stub)).toBe(true);
+    expect(readFileSync(stub, "utf8")).toContain("This skill lives in the brain at `skills/kahvin-keitto.md`");
+    expect(existsSync(join(skillsDir, "veden-keitto"))).toBe(false);
+    expect(lines.join("\n")).toContain("exported skill");
+  });
+
+  test("a stub that would shadow brainpick is skipped", async () => {
+    const { repo, bundle } = gitRepoWithBrain();
+    writeFileSync(
+      join(bundle, "skills", "brainpick.md"),
+      "---\ntype: skill\ntitle: Brainpick\nexport: agent-skill\n---\n# Brainpick\n\n[Kahvin keitto](kahvin-keitto.md)\n",
+    );
+    await runCompile(bundle);
+    const lines: string[] = [];
+    expect(await runIntegrate("claude-code", bundle, { print: (l) => lines.push(l) })).toBe(0);
+    expect(readFileSync(join(repo, SKILL_DESTINATIONS["claude-code"]), "utf8")).toBe(readFileSync(CANONICAL, "utf8"));
+    expect(lines.join("\n")).toContain("shadow");
+  });
+
+  test("dry-run names the stubs without writing", async () => {
+    const { repo, bundle } = gitRepoWithBrain();
+    await runCompile(bundle);
+    const lines: string[] = [];
+    expect(await runIntegrate("claude-code", bundle, { dryRun: true, print: (l) => lines.push(l) })).toBe(0);
+    expect(existsSync(join(repo, ".claude"))).toBe(false);
+    expect(lines.join("\n")).toContain("kahvin-keitto");
   });
 });

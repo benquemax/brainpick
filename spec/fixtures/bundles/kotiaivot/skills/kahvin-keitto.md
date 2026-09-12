@@ -6,6 +6,7 @@ tags: [kahvi]
 timestamp: 2026-07-01T07:10:00Z
 depends_on: [skills/veden-keitto.md]
 tools: [tools/keita]
+export: agent-skill
 ---
 
 # Kahvin keitto

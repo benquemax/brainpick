@@ -127,7 +127,8 @@ re-parses frontmatter:
 {
   "skills": [
     {"depends_on": ["skills/veden-keitto.md"], "description": "Use when brewing the morning coffee.",
-     "path": "skills/kahvin-keitto.md", "title": "Kahvin keitto", "tools": ["tools/keita"]}
+     "export": ["agent-skill"], "path": "skills/kahvin-keitto.md", "title": "Kahvin keitto",
+     "tools": ["tools/keita"]}
   ]
 }
 ```
@@ -135,7 +136,8 @@ re-parses frontmatter:
 Sorted by `path`; `depends_on` holds only the **resolved** prerequisites in
 declared order (ghosts are in `graph.json`); `tools` holds the declared
 tool paths, resolved to bundle-relative form when the file exists, kept as
-declared otherwise. Written on every full compile, `{"skills": []}` when
+declared otherwise; `export` holds the declared export targets (spec/85
+*Exported skills*), `[]` when there are none. Written on every full compile, `{"skills": []}` when
 there are none; part of the freshness comparison like `graph.json`.
 
 ## Generated index.md

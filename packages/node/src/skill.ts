@@ -112,7 +112,7 @@ export function renderSkill(
   return lines.join("\n") + "\n" + body;
 }
 
-export function presentSkills(skills: SkillRecord[]): string {
+export function presentSkills(skills: Omit<SkillRecord, "export">[]): string {
   if (!skills.length) return "no skills — `brainpick skill new <name>` scaffolds the first one";
   const lines = [`${skills.length} skills`];
   for (const skill of skills) {

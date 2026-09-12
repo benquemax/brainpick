@@ -49,6 +49,7 @@ def build_skills(docs: list[Document], root: str | Path) -> dict:
         skills.append({
             "depends_on": list(doc.depends_on),
             "description": doc.description,
+            "export": list(doc.export),
             "path": doc.path,
             "title": doc.title,
             "tools": [resolve_tool(doc.path, t, root) for t in doc.tools],

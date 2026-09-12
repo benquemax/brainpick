@@ -23,7 +23,7 @@ import { overviewPayload, readPayload, searchPayload } from "../src/mcp";
 import { search } from "../src/query/keyword";
 import { ServeState } from "../src/serve/state";
 import { skillList, skillNew } from "../src/skill";
-import { cleanup, copyBundle, makeBundle } from "./helpers";
+import { cleanup, copyBundle, makeBundle, tempDir } from "./helpers";
 
 afterEach(cleanup);
 
@@ -115,6 +115,15 @@ describe("T1: depends_on edges, tools, skills.json", () => {
     expect(buildSkills(docs, root)).toEqual({ skills: [] });
   });
 
+  test("export wraps scalars and is ignored on non-skills", () => {
+    const root = tempDir();
+    writeFileSync(join(root, "a.md"), "---\ntype: skill\ntitle: A\nexport: [agent-skill]\n---\n# A\n\n[B](b.md)\n");
+    writeFileSync(join(root, "b.md"), "---\ntype: concept\ntitle: B\nexport: agent-skill\n---\n# B\n\n[A](a.md)\n");
+    const docs = new Map(scan(root).map((d) => [d.path, d]));
+    expect(docs.get("a.md")!.export).toEqual(["agent-skill"]);
+    expect(docs.get("b.md")!.export).toEqual([]);
+  });
+
   test("skills.json lists resolved prerequisites and tools", () => {
     const root = copyBundle("kotiaivot");
     expect(buildSkills(scan(root, undefined, RAW), root)).toEqual({
@@ -122,6 +131,7 @@ describe("T1: depends_on edges, tools, skills.json", () => {
         {
           depends_on: ["skills/veden-keitto.md"],
           description: "Use when brewing the morning coffee — the whole procedure, kettle to cup.",
+          export: ["agent-skill"],
           path: "skills/kahvin-keitto.md",
           title: "Kahvin keitto",
           tools: ["tools/keita"],
@@ -129,6 +139,7 @@ describe("T1: depends_on edges, tools, skills.json", () => {
         {
           depends_on: [],
           description: "Use when you need boiling water — for coffee, tea, or pasta.",
+          export: [],
           path: "skills/veden-keitto.md",
           title: "Veden keitto",
           tools: [],

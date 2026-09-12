@@ -4,7 +4,7 @@ about: concept
 title: "Spec: brain format"
 description: "The normative contract for a brain — the fixed _brain/ root, the five memory-type folders, the engine-consumed frontmatter keys and their additive-only policy, inline grounding, the data flow's folder order, the [brain] config section, the brain:// link syntax and the format version with its migration rule."
 tags: [spec, brain-format]
-timestamp: 2026-09-12T18:10:00Z
+timestamp: 2026-09-13T11:00:00Z
 ---
 
 # Spec: brain format
@@ -32,8 +32,9 @@ committed content and would hurt to change later.
 - **Frontmatter.** OKF's fields are OKF's. The format adds only keys the
   engine consumes, all on skills: `depends_on` (prerequisite edges, kind
   `depends_on`; unresolved → ghost), `tools` (plain file paths the skill
-  drives — indexed, never executed) and `export: agent-skill` (write the
-  skill out as a harness `SKILL.md`, still to come). Additive-only: never
+  drives — indexed, never executed) and `export: agent-skill` (`brainpick
+  integrate` writes a pointer stub `SKILL.md` under the harness's skill
+  directory — the brain stays canonical). Additive-only: never
   renamed or removed, optional for at least one version after appearing,
   unknown keys ignored.
 - **Skills.** A doc is a skill by `type` alone (`skill`, case-insensitive),

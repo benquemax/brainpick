@@ -7,7 +7,14 @@ import pytest
 
 from brainpick.compile.pipeline import run_compile
 from brainpick.compile.t1 import REPORT_BEGIN_PREFIX, REPORT_END_MARKER
-from brainpick.integrate import SKILL_DESTINATIONS, run_integrate, skill_path, skill_text
+from brainpick.integrate import (
+    SKILL_DESTINATIONS,
+    exported_skill_stubs,
+    render_skill_stub,
+    run_integrate,
+    skill_path,
+    skill_text,
+)
 
 from conftest import FIXTURE_BUNDLES, REPO_ROOT
 
@@ -138,3 +145,71 @@ def test_compile_report_fill_is_idempotent(repo):
     first = agents.read_bytes()
     run_compile(bundle)
     assert agents.read_bytes() == first  # a second compile rewrites nothing
+
+
+# -- exported skills: pointer stubs beside the brainpick skill (spec/85) ---------
+
+
+@pytest.fixture
+def brain_repo(tmp_path):
+    """A git repo whose bundle is the kotiaivot brain (one skill exports itself)."""
+    (tmp_path / ".git").mkdir()
+    bundle = tmp_path / "brain"
+    shutil.copytree(FIXTURE_BUNDLES / "kotiaivot", bundle)
+    return tmp_path, bundle
+
+
+def test_skill_stub_is_a_pointer_not_a_copy():
+    stub = render_skill_stub({
+        "depends_on": ["skills/veden-keitto.md"], "description": "Use when brewing.",
+        "export": ["agent-skill"], "path": "skills/kahvin-keitto.md", "title": "Kahvin keitto",
+        "tools": ["tools/keita"],
+    })
+    assert stub.startswith("---\nname: kahvin-keitto\ndescription: Use when brewing.\n---\n")
+    assert "# Kahvin keitto" in stub
+    assert "`brain_read skills/kahvin-keitto.md`" in stub
+    assert "- Prerequisites: skills/veden-keitto.md" in stub
+    assert "- Tools: tools/keita" in stub
+    bare = render_skill_stub({"depends_on": [], "description": None, "export": ["agent-skill"],
+                              "path": "skills/x.md", "title": "X", "tools": []})
+    assert "description: X\n" in bare and "- Prerequisites: none" in bare and "- Tools: none" in bare
+
+
+def test_exported_skill_stubs_come_from_skills_json_in_path_order(brain_repo):
+    root, bundle = brain_repo
+    run_compile(bundle)
+    stubs = exported_skill_stubs(bundle)
+    assert [s["path"] for s in stubs] == ["skills/kahvin-keitto.md"]  # veden-keitto has no export
+
+
+@pytest.mark.parametrize("target", ["claude-code", "opencode", "dsh"])
+def test_integrate_writes_a_stub_per_exported_skill(brain_repo, target, capsys):
+    root, bundle = brain_repo
+    run_compile(bundle)
+    assert run_integrate(target, bundle) == 0
+    skills_dir = (root / SKILL_DESTINATIONS[target]).parent.parent
+    stub = skills_dir / "kahvin-keitto" / "SKILL.md"
+    assert stub.is_file()
+    assert "This skill lives in the brain at `skills/kahvin-keitto.md`" in stub.read_text(encoding="utf-8")
+    assert not (skills_dir / "veden-keitto").exists()
+    assert "exported skill" in capsys.readouterr().out
+
+
+def test_integrate_skips_a_stub_that_would_shadow_brainpick(brain_repo, capsys):
+    root, bundle = brain_repo
+    (bundle / "skills" / "brainpick.md").write_text(
+        "---\ntype: skill\ntitle: Brainpick\nexport: agent-skill\n---\n# Brainpick\n\n"
+        "[Kahvin keitto](kahvin-keitto.md)\n", encoding="utf-8")
+    run_compile(bundle)
+    assert run_integrate("claude-code", bundle) == 0
+    skill = root / SKILL_DESTINATIONS["claude-code"]
+    assert skill.read_text(encoding="utf-8") == CANONICAL.read_text(encoding="utf-8")
+    assert "shadow" in capsys.readouterr().out
+
+
+def test_integrate_dry_run_names_the_stubs_without_writing(brain_repo, capsys):
+    root, bundle = brain_repo
+    run_compile(bundle)
+    assert run_integrate("claude-code", bundle, dry_run=True) == 0
+    assert not (root / ".claude").exists()
+    assert "kahvin-keitto" in capsys.readouterr().out

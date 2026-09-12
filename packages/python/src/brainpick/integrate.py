@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 from pathlib import Path
 
 from brainpick.compile.pipeline import run_compile
@@ -83,6 +84,63 @@ def _graph_before_grep_hook() -> str:
     return json.dumps(fragment, indent=2)
 
 
+_STUB_TEMPLATE = """---
+name: {name}
+description: {description}
+---
+
+# {title}
+
+This skill lives in the brain at `{path}`. Read it there before acting —
+`brain_read {path}` (MCP) or `brainpick read {path}` (CLI) — the brain
+copy is canonical and carries its prerequisites and tools.
+
+- Prerequisites: {prerequisites}
+- Tools: {tools}
+"""
+
+
+def render_skill_stub(skill: dict) -> str:
+    """The pointer stub for one exported skill (spec/85 *Exported skills*): the
+    harness loads it on its trigger, the brain stays canonical."""
+    name = posixpath.splitext(posixpath.basename(skill["path"]))[0]
+    description = (skill.get("description") or skill["title"]).replace("\n", " ").strip()
+    return _STUB_TEMPLATE.format(
+        name=name, description=description, title=skill["title"], path=skill["path"],
+        prerequisites=", ".join(skill.get("depends_on") or []) or "none",
+        tools=", ".join(skill.get("tools") or []) or "none",
+    )
+
+
+def exported_skill_stubs(root: Path) -> list[dict]:
+    """The skills that declare `export: agent-skill`, from the compiled
+    t1/skills.json (path order) — empty when the bundle is uncompiled or a wiki."""
+    artifact = Path(root) / ".brainpick" / "t1" / "skills.json"
+    try:
+        data = json.loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [s for s in data.get("skills", []) if "agent-skill" in (s.get("export") or [])]
+
+
+def _write_stubs(voice: _Voice, root: Path, repo: Path, target: str, dry_run: bool) -> None:
+    skills_dir = (repo / SKILL_DESTINATIONS[target]).parent.parent
+    for skill in exported_skill_stubs(root):
+        name = posixpath.splitext(posixpath.basename(skill["path"]))[0]
+        if name == "brainpick":
+            voice.line("!", f"exported skill {skill['path']} skipped — its stub would shadow "
+                            "the brainpick skill; rename the doc")
+            continue
+        dest = skills_dir / name / "SKILL.md"
+        if dry_run:
+            voice.step(f"• write the exported skill stub {dest}")
+            continue
+        existed = dest.is_file()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(render_skill_stub(skill), encoding="utf-8")
+        voice.line("✓", f"exported skill: {'updated' if existed else 'wrote'} {dest} → {skill['path']}")
+
+
 def _write_skill(repo: Path, target: str, dry_run: bool) -> tuple[Path, bool]:
     dest = repo / SKILL_DESTINATIONS[target]
     existed = dest.is_file()
@@ -107,6 +165,7 @@ def _integrate_claude_code(voice: _Voice, root: Path, repo: Path, dry_run: bool)
     dest, existed = _write_skill(repo, "claude-code", dry_run)
     verb = "would write" if dry_run else ("updated" if existed else "wrote")
     voice.line("✓", f"skill: {verb} {dest}")
+    _write_stubs(voice, root, repo, "claude-code", dry_run)
     if dry_run:
         voice.step("• print the graph-before-grep PreToolUse hook and the `claude mcp add` snippet")
         return 0
@@ -123,6 +182,7 @@ def _integrate_opencode(voice: _Voice, root: Path, repo: Path, dry_run: bool) ->
     dest, existed = _write_skill(repo, "opencode", dry_run)
     verb = "would write" if dry_run else ("updated" if existed else "wrote")
     voice.line("✓", f"skill: {verb} {dest}")
+    _write_stubs(voice, root, repo, "opencode", dry_run)
     if dry_run:
         voice.step("• print the opencode.json MCP snippet")
         return 0
@@ -137,6 +197,7 @@ def _integrate_dsh(voice: _Voice, root: Path, repo: Path, dry_run: bool) -> int:
     dest, existed = _write_skill(repo, "dsh", dry_run)
     verb = "would write" if dry_run else ("updated" if existed else "wrote")
     voice.line("✓", f"skill: {verb} {dest}")
+    _write_stubs(voice, root, repo, "dsh", dry_run)
     if dry_run:
         voice.step("• print the cordis.patch.yml insert for @deepseek-ai/dsh-mcp-client")
         return 0
