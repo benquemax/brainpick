@@ -182,7 +182,7 @@ def t2_gate(config) -> tuple[bool, str | None]:
     if not config.models.embedding.kind:
         return False, (
             "T2 vectors off — no [models.embedding] in brainpick.toml; "
-            "`brainpick init` detects local backends (ollama pull nomic-embed-text)"
+            "`brainpick init` detects local backends (ollama pull bge-m3)"
         )
     if not lancedb_available():
         return False, (

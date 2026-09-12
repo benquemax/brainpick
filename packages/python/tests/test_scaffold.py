@@ -152,6 +152,18 @@ def test_init_records_a_detected_backend_in_the_local_layer(kotiaurinko, capsys)
     assert 'model = "nomic-embed-text:latest"' in local
     assert "nomic-embed-text" in out
     assert "brainpick.local.toml" in out
+    # spec/30: an English-only model is named as such, with the multilingual pull
+    assert "English-only" in out
+    assert "ollama pull bge-m3" in out
+
+
+def test_init_says_nothing_about_language_for_a_multilingual_model(kotiaurinko, capsys):
+    probes = [("ollama", Backend("ollama", "http://127.0.0.1:11434", "bge-m3:latest")),
+              ("lm studio", None), ("llama.cpp", None)]
+    assert run_init(kotiaurinko, env={}, probes=probes) == 0
+    out = capsys.readouterr().out
+    assert "bge-m3:latest" in out
+    assert "English-only" not in out
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         cfg = load_config(kotiaurinko)
@@ -164,7 +176,7 @@ def test_init_offers_the_pull_when_ollama_is_modelless(kotiaurinko, capsys):
               ("lm studio", None), ("llama.cpp", None)]
     assert run_init(kotiaurinko, env={}, probes=probes) == 0
     out = capsys.readouterr().out
-    assert "ollama pull nomic-embed-text" in out
+    assert "ollama pull bge-m3" in out
     assert "[models.embedding]" not in (kotiaurinko / "brainpick.toml").read_text(encoding="utf-8")
     assert not (kotiaurinko / "brainpick.local.toml").exists()  # nothing local to record
 
@@ -362,6 +374,7 @@ def test_doctor_reports_found_backends(kotiaurinko, capsys):
     assert run_doctor(kotiaurinko, env={}, probes=OLLAMA_FOUND) == 0
     out = capsys.readouterr().out
     assert "✓ ollama: nomic-embed-text:latest at http://127.0.0.1:11434" in out
+    assert "English-only" in out  # spec/30: doctor names it too
     assert "lm studio: not reachable" in out
 
 

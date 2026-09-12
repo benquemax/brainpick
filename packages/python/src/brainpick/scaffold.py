@@ -31,6 +31,7 @@ from brainpick.config import (
 )
 from brainpick.vectorstore import lancedb_available
 from brainpick.detect import (
+    PULL_HINT,
     Backend,
     BundleInfo,
     detect_bundle,
@@ -38,6 +39,7 @@ from brainpick.detect import (
     detect_link_style,
     find_repo_root,
     henxels_on_path,
+    is_english_only,
     openai_key_present,
     probe_backends,
 )
@@ -56,7 +58,6 @@ BANNER = r"""   ╭──────────────────╮
 
 OPENAI_ENDPOINT = "https://api.openai.com/v1"
 OPENAI_DEFAULT_MODEL = "text-embedding-3-small"
-PULL_HINT = "ollama pull nomic-embed-text"
 
 _CONFIG_TEMPLATE = """\
 # brainpick.toml — written by `brainpick init`; every key is optional (spec 0.1).
@@ -313,6 +314,9 @@ def _report_backends(
         label, backend = found
         voice.line("✓", f"embeddings: {backend.model} via {label} at {backend.endpoint}"
                         " — T2 embeds with it on the next compile")
+        if is_english_only(backend.model):  # spec/30: say so before the first compile
+            voice.arrow(f"{backend.model} is English-only — a brain in any other language"
+                        f" wants a multilingual model: {PULL_HINT}  (then rerun brainpick init)")
         return backend
 
     ollama = next((b for label, b in results if label == "ollama" and b is not None), None)
@@ -618,7 +622,8 @@ def run_doctor(
             hint = f" — {PULL_HINT}" if label == "ollama" else ""
             emit("○", f"{label}: up at {backend.endpoint}, no embedding model{hint}")
         else:
-            emit("✓", f"{label}: {backend.model} at {backend.endpoint}")
+            lang = f" — English-only; multilingual: {PULL_HINT}" if is_english_only(backend.model) else ""
+            emit("✓", f"{label}: {backend.model} at {backend.endpoint}{lang}")
     if openai_key_present(env):
         emit("○", "OPENAI_API_KEY: set — a paid API stays opt-in (brainpick init --yes records it)")
     else:

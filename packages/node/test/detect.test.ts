@@ -9,11 +9,14 @@ import { once } from "node:events";
 import { afterEach, expect, test } from "vitest";
 
 import {
+  PREFERRED_EMBEDDING_MODELS,
   detectBundle,
   detectHenxels,
   detectLinkStyle,
+  isEnglishOnly,
   needsShellForScript,
   pickBackend,
+  pickEmbeddingModel,
   probeBackends,
   probeOllama,
   probeOpenaiCompatible,
@@ -60,7 +63,7 @@ async function closedPort(): Promise<number> {
 
 // -- backend probes ----------------------------------------------------------------
 
-test("probeOllama prefers nomic-embed-text", async () => {
+test("probeOllama prefers nomic over mxbai when nothing multilingual is installed", async () => {
   const { base, close } = await jsonServer({ "/api/tags": OLLAMA_TAGS });
   try {
     const backend = await probeOllama({ OLLAMA_HOST: base });
@@ -220,4 +223,26 @@ test("needsShellForScript: only .bat/.cmd need Node's CVE-guard shell", () => {
   expect(needsShellForScript("C:\\tools\\henxels.exe")).toBe(false);
   expect(needsShellForScript("/usr/local/bin/henxels")).toBe(false);
   expect(needsShellForScript("/opt/batcave/henxels")).toBe(false); // "bat" in the path, not the ext
+});
+
+// -- multilingual first (spec/30) ------------------------------------------------
+
+test("pickEmbeddingModel prefers multilingual first", () => {
+  expect(PREFERRED_EMBEDDING_MODELS.slice(0, 2)).toEqual(["bge-m3", "snowflake-arctic-embed2"]);
+  const names = ["qwen3.5:4b", "nomic-embed-text:latest", "bge-m3:latest", "mxbai-embed-large:latest"];
+  expect(pickEmbeddingModel(names)).toBe("bge-m3:latest");
+  // "embed" is not in the name, but bge-m3 IS an embedding model — the preferred list knows it
+  expect(pickEmbeddingModel(["qwen3.5:4b", "bge-m3:567m"])).toBe("bge-m3:567m");
+});
+
+test("isEnglishOnly names the known families", () => {
+  expect(isEnglishOnly("nomic-embed-text:latest")).toBe(true);
+  expect(isEnglishOnly("mxbai-embed-large")).toBe(true);
+  expect(isEnglishOnly("nomic-ai/nomic-embed-text-v1.5")).toBe(true);
+  expect(isEnglishOnly("BAAI/bge-small-en-v1.5")).toBe(true);
+  expect(isEnglishOnly("all-minilm")).toBe(true);
+  expect(isEnglishOnly("bge-m3:latest")).toBe(false);
+  expect(isEnglishOnly("text-embedding-3-small")).toBe(false);
+  expect(isEnglishOnly("snowflake-arctic-embed2")).toBe(false);
+  expect(isEnglishOnly(null)).toBe(false);
 });

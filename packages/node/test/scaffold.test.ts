@@ -156,6 +156,9 @@ test("init records a detected backend in brainpick.local.toml", async () => {
   expect(local).toContain('endpoint = "http://127.0.0.1:11434"');
   expect(local).toContain('model = "nomic-embed-text:latest"');
   expect(out.text()).toContain("nomic-embed-text");
+  // spec/30: an English-only model is named as such, with the multilingual pull
+  expect(out.text()).toContain("English-only");
+  expect(out.text()).toContain("ollama pull bge-m3");
   const merged = loadConfig(root, {}, () => undefined);
   expect(merged.models.embedding.kind).toBe("ollama"); // the layers merge back together
 });
@@ -188,7 +191,7 @@ test("init offers the pull when ollama is modelless", async () => {
   ];
   const out = capture();
   expect(await runInit(root, { env: {}, probes, print: out.print })).toBe(0);
-  expect(out.text()).toContain("ollama pull nomic-embed-text");
+  expect(out.text()).toContain("ollama pull bge-m3");
   expect(readFileSync(join(root, "brainpick.toml"), "utf8")).not.toContain("[models.embedding]");
   expect(existsSync(join(root, "brainpick.local.toml"))).toBe(false);
 });
@@ -406,6 +409,7 @@ test("doctor reports found backends", async () => {
   expect(await runDoctor(root, { env: {}, probes: OLLAMA_FOUND, print: out.print })).toBe(0);
   const text = out.text();
   expect(text).toContain("✓ ollama: nomic-embed-text:latest at http://127.0.0.1:11434");
+  expect(text).toContain("English-only"); // spec/30: doctor names it too
   expect(text).toContain("lm studio: not reachable");
 });
 

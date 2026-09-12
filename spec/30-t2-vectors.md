@@ -72,8 +72,12 @@ search. Only a connection that cannot be opened fails fast.
 
 1. Explicit `[models.embedding]` config — always wins, never re-probed.
 2. Ollama (`http://127.0.0.1:11434`, then `OLLAMA_HOST`): prefer installed
-   models in order `nomic-embed-text`, `mxbai-embed-large`,
-   `snowflake-arctic-embed2`, `bge-m3`.
+   models in order `bge-m3`, `snowflake-arctic-embed2`, `nomic-embed-text`,
+   `mxbai-embed-large` — **multilingual first**. A brain is written in the
+   languages its owner thinks in, and a query in one language must find a
+   page written in another (`koirien nimet` ↔ "dog names"); an English-only
+   model returns noise for everything else. The pull hint engines print when
+   no model is found is therefore `ollama pull bge-m3`.
 3. OpenAI-compatible local endpoints: `:1234/v1` (LM Studio), `:8080/v1`
    (llama.cpp).
 4. `OPENAI_API_KEY` → `text-embedding-3-small` — recorded only with
@@ -89,6 +93,15 @@ search. Only a connection that cannot be opened fails fast.
 6. Nothing → `[modules] vectors` stays off with the exact enabling command.
 
 Probes: parallel, ≤ 300 ms, silent misses.
+
+**English-only models are named as such.** When the recorded or detected
+model is one of the known English-only families — `nomic-embed-text`,
+`mxbai-embed-large`, `all-minilm`, `bge-{small,base,large}-en`, and the
+`nomic-ai/nomic-embed-text-v1.5` local default — `init` and `doctor` say
+so on the embedding line and name the multilingual pull, so a user whose
+brain is not in English learns it before the first compile, not from an
+empty search. Changing the model changes the `fingerprint`, which
+re-embeds everything: switching is one config edit and one compile.
 
 ## Retrieval
 

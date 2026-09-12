@@ -14,12 +14,32 @@ import { splitFrontmatter } from "./core/frontmatter";
 import { extractLinks } from "./core/links";
 
 export const PROBE_TIMEOUT_MS = 300; // a miss must never make init feel slow
+// spec/30: multilingual first — a brain is written in the languages its owner thinks
+// in, and `koirien nimet` must find "dog names"; an English-only model returns noise.
 export const PREFERRED_EMBEDDING_MODELS = [
+  "bge-m3",
+  "snowflake-arctic-embed2",
   "nomic-embed-text",
   "mxbai-embed-large",
-  "snowflake-arctic-embed2",
-  "bge-m3",
 ] as const;
+export const PULL_HINT = "ollama pull bge-m3";
+/** Known English-only families (spec/30): init/doctor name them so a non-English
+ * brain learns it before the first compile, not from an empty search. */
+export const ENGLISH_ONLY_MODELS = [
+  "nomic-embed-text",
+  "mxbai-embed-large",
+  "all-minilm",
+  "bge-small-en",
+  "bge-base-en",
+  "bge-large-en",
+] as const;
+
+/** True when `model` belongs to a known English-only family (spec/30). */
+export function isEnglishOnly(model: string | null | undefined): boolean {
+  if (!model) return false;
+  const lowered = model.toLowerCase();
+  return ENGLISH_ONLY_MODELS.some((family) => lowered.includes(family));
+}
 export const DEFAULT_OLLAMA = "http://127.0.0.1:11434";
 export const DEFAULT_OPENAI_COMPATIBLE: ReadonlyArray<readonly [string, string]> = [
   ["lm studio", "http://127.0.0.1:1234"],
@@ -144,13 +164,14 @@ async function getJson(url: string): Promise<Record<string, unknown> | null> {
   }
 }
 
-function pickEmbeddingModel(names: string[]): string | null {
-  const embeddable = names.filter((name) => name.toLowerCase().includes("embed"));
+export function pickEmbeddingModel(names: string[]): string | null {
   for (const preferred of PREFERRED_EMBEDDING_MODELS) {
-    for (const name of embeddable) {
-      if (name.includes(preferred)) return name;
+    // the list knows bge-m3 embeds
+    for (const name of names) {
+      if (name.toLowerCase().includes(preferred)) return name;
     }
   }
+  const embeddable = names.filter((name) => name.toLowerCase().includes("embed"));
   return embeddable[0] ?? null;
 }
 

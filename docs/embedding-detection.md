@@ -4,7 +4,7 @@ about: concept
 title: Embedding detection
 description: The ladder brainpick climbs to find an embedding backend — explicit config, Ollama, OpenAI-compatible endpoints, an in-process local ONNX model in either engine, or an honest off.
 tags: [tier, engine]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-13T09:30:00Z
 ---
 
 # Embedding detection
@@ -18,9 +18,16 @@ check:
 
 1. **Explicit configuration** always wins and is never second-guessed.
 2. **Ollama** on its default port (and `OLLAMA_HOST`): installed embedding
-   models are preferred in a sensible order (`nomic-embed-text` first); if
-   Ollama is up but has no embedding model, init offers the exact
-   `ollama pull` command.
+   models are preferred **multilingual first** — `bge-m3`, then
+   `snowflake-arctic-embed2`, then the English-only `nomic-embed-text` and
+   `mxbai-embed-large`. A brain is written in whatever languages its owner
+   thinks in, and a query in one must find a page written in another
+   (*koirien nimet* ↔ "dog names"); with an English-only model every
+   non-English query returns confident noise. If Ollama is up but has no
+   embedding model, init offers the exact command: `ollama pull bge-m3`.
+   When the model it did pick is a known English-only family, init and
+   doctor say so on the embedding line and name the multilingual pull —
+   the warning arrives before the first compile, not from an empty search.
 3. **LM Studio / llama.cpp** as OpenAI-compatible endpoints.
 4. **`OPENAI_API_KEY`** — with an explicit confirmation before defaulting to
    a paid API; local-first means asking first.

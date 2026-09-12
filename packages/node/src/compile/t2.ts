@@ -229,7 +229,7 @@ export async function t2Gate(config: Config): Promise<[boolean, string | null]> 
     return [
       false,
       "T2 vectors off — no [models.embedding] in brainpick.toml; " +
-        "`brainpick init` detects local backends (ollama pull nomic-embed-text)",
+        "`brainpick init` detects local backends (ollama pull bge-m3)",
     ];
   }
   if (!(await lancedbAvailable())) {

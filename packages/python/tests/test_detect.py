@@ -76,9 +76,34 @@ def closed_port() -> int:
 # -- backend probes ----------------------------------------------------------------
 
 
-def test_probe_ollama_prefers_nomic_embed_text(fake_ollama):
+def test_probe_ollama_prefers_nomic_over_mxbai_when_nothing_multilingual(fake_ollama):
     backend = probe_ollama(env={"OLLAMA_HOST": fake_ollama})
     assert backend == Backend("ollama", fake_ollama, "nomic-embed-text:latest")
+
+
+def test_pick_embedding_model_prefers_multilingual_first():
+    from brainpick.detect import PREFERRED_EMBEDDING_MODELS, _pick_embedding_model
+
+    # spec/30: multilingual first — a Finnish query must reach an English page
+    assert PREFERRED_EMBEDDING_MODELS[:2] == ("bge-m3", "snowflake-arctic-embed2")
+    names = ["qwen3.5:4b", "nomic-embed-text:latest", "bge-m3:latest", "mxbai-embed-large:latest"]
+    assert _pick_embedding_model(names) == "bge-m3:latest"
+    # "embed" is not in the name, but bge-m3 IS an embedding model — the preferred list knows it
+    assert _pick_embedding_model(["qwen3.5:4b", "bge-m3:567m"]) == "bge-m3:567m"
+
+
+def test_is_english_only_names_the_known_families():
+    from brainpick.detect import is_english_only
+
+    assert is_english_only("nomic-embed-text:latest")
+    assert is_english_only("mxbai-embed-large")
+    assert is_english_only("nomic-ai/nomic-embed-text-v1.5")
+    assert is_english_only("BAAI/bge-small-en-v1.5")
+    assert is_english_only("all-minilm")
+    assert not is_english_only("bge-m3:latest")
+    assert not is_english_only("text-embedding-3-small")
+    assert not is_english_only("snowflake-arctic-embed2")
+    assert not is_english_only(None)
 
 
 def test_probe_ollama_reports_endpoint_with_no_embedding_model():

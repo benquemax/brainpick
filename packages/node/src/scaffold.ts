@@ -22,8 +22,10 @@ import {
   detectLinkStyle,
   findRepoRoot,
   henxelsOnPath,
+  isEnglishOnly,
   openaiKeyPresent,
   probeBackends,
+  PULL_HINT,
   type Backend,
   type BundleInfo,
   type Env,
@@ -47,7 +49,6 @@ export const BANNER = `   ╭─────────────────
 
 export const OPENAI_ENDPOINT = "https://api.openai.com/v1";
 export const OPENAI_DEFAULT_MODEL = "text-embedding-3-small";
-export const PULL_HINT = "ollama pull nomic-embed-text";
 
 const CONFIG_TEMPLATE = `# brainpick.toml — written by \`brainpick init\`; every key is optional (spec 0.1).
 # SHARED bundle policy — machine-local endpoints live in brainpick.local.toml.
@@ -305,6 +306,13 @@ function reportBackends(voice: Voice, results: readonly ProbeResult[], env: Env,
       `embeddings: ${backend!.model} via ${label} at ${backend!.endpoint}` +
         " — T2 embeds with it on the next compile",
     );
+    if (isEnglishOnly(backend!.model)) {
+      // spec/30: say so before the first compile
+      voice.arrow(
+        `${backend!.model} is English-only — a brain in any other language` +
+          ` wants a multilingual model: ${PULL_HINT}  (then rerun brainpick init)`,
+      );
+    }
     return backend;
   }
 
@@ -652,7 +660,8 @@ export async function runDoctor(root: string, options: DoctorOptions = {}): Prom
       const hint = label === "ollama" ? ` — ${PULL_HINT}` : "";
       emit("○", `${label}: up at ${backend.endpoint}, no embedding model${hint}`);
     } else {
-      emit("✓", `${label}: ${backend.model} at ${backend.endpoint}`);
+      const lang = isEnglishOnly(backend.model) ? ` — English-only; multilingual: ${PULL_HINT}` : "";
+      emit("✓", `${label}: ${backend.model} at ${backend.endpoint}${lang}`);
     }
   }
   if (openaiKeyPresent(env)) {

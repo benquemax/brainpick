@@ -20,11 +20,24 @@ from brainpick.core.frontmatter import split_frontmatter
 from brainpick.core.links import extract_links
 
 PROBE_TIMEOUT = 0.3  # seconds; a miss must never make init feel slow
+# spec/30: multilingual first — a brain is written in the languages its owner thinks
+# in, and `koirien nimet` must find "dog names"; an English-only model returns noise.
 PREFERRED_EMBEDDING_MODELS = (
+    "bge-m3",
+    "snowflake-arctic-embed2",
     "nomic-embed-text",
     "mxbai-embed-large",
-    "snowflake-arctic-embed2",
-    "bge-m3",
+)
+PULL_HINT = "ollama pull bge-m3"
+# Known English-only families (spec/30): init/doctor name them so a non-English
+# brain learns it before the first compile, not from an empty search.
+ENGLISH_ONLY_MODELS = (
+    "nomic-embed-text",
+    "mxbai-embed-large",
+    "all-minilm",
+    "bge-small-en",
+    "bge-base-en",
+    "bge-large-en",
 )
 DEFAULT_OLLAMA = "http://127.0.0.1:11434"
 DEFAULT_OPENAI_COMPATIBLE = (
@@ -123,12 +136,20 @@ def _get_json(url: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def is_english_only(model: str | None) -> bool:
+    """True when `model` belongs to a known English-only family (spec/30)."""
+    if not model:
+        return False
+    lowered = model.lower()
+    return any(family in lowered for family in ENGLISH_ONLY_MODELS)
+
+
 def _pick_embedding_model(names: list[str]) -> str | None:
-    embeddable = [name for name in names if "embed" in name.lower()]
-    for preferred in PREFERRED_EMBEDDING_MODELS:
-        for name in embeddable:
-            if preferred in name:
+    for preferred in PREFERRED_EMBEDDING_MODELS:  # the list knows bge-m3 embeds
+        for name in names:
+            if preferred in name.lower():
                 return name
+    embeddable = [name for name in names if "embed" in name.lower()]
     return embeddable[0] if embeddable else None
 
 
