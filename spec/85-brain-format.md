@@ -40,7 +40,7 @@ an episode — `_todo.md`, scratch — stays **beside** the brain, not in it.
 | Folder | Memory type | Holds | Reserved files |
 |---|---|---|---|
 | `knowledge/` | semantic | evergreen concept docs, one concept per page | — |
-| `skills/` | procedural | distilled, actionable procedures (`type: skill`; `playbook` accepted) and, beside them, the `tools/` they drive | `skilltree.md` (generated) |
+| `skills/` | procedural | distilled, actionable procedures (`type: skill`) and, beside them, the `tools/` they drive | `skilltree.md` (generated) |
 | `journals/` | episodic | one file per month, `YYYY-MM.md`, a `## YYYY-MM-DD` section per day, newest first; only the current month at the top level, earlier months in `journals/archive/` | `index.md` |
 | `vision/` | direction | the northstar as a book; `index.md` is its table of contents | `index.md` |
 | `plans/` | decided work | one plan per page; undecided ideas do not belong here | `index.md` |
@@ -84,11 +84,14 @@ not frontmatter — see *Grounding* below.
 
 A **skill** is procedural memory: a distilled, tested procedure an agent
 follows, with the repetitive parts demoted to scripts it drives. A doc is
-a skill by its `type` — `skill`, or the older `playbook`, matched
-case-insensitively — wherever it lives (spec/20); the `skills/` folder is
-the template's convention, never the engine's test. `skill` is the type the
-template writes from format 1.1 on; `playbook` stays a skill forever
-(additive-only policy) so a brain born earlier keeps its procedures.
+a skill by its `type` — `skill`, matched case-insensitively — wherever it
+lives (spec/20); the `skills/` folder is the template's convention, never
+the engine's test. A `playbook` is the same form for a different audience —
+step-by-step instructions a *human* follows — and is deliberately not a
+skill: listing it under "read before improvising" would hand an agent a
+procedure written for someone else. A brain born before format 1.1 typed
+its procedures `Playbook`; retyping them `skill` is the one-line migration,
+and the template writes `skill` from 1.1 on.
 
 Skills exist because of a cost hierarchy: a script is cheaper than a model
 running a workflow, which is cheaper than a human. The loop a skill
@@ -239,8 +242,9 @@ Class `brain`:
 - `brain://` links are extracted with `kind: "brain"`, `brain_id` and `path`,
   and excluded from ghosts.
 - A fixture brain (`spec/fixtures/bundles/kotiaivot/`) with the template's
-  layout — two skills (one `type: skill`, one `type: playbook`) where one
-  depends on the other and drives a tool under `tools/` — compiles to
+  layout — two `type: skill` docs where one depends on the other and
+  drives a tool under `tools/`, and a `type: playbook` how-to that is not
+  a skill — compiles to
   golden T1 artifacts carrying the `depends_on` edge (spec/20), a
   `skills/skilltree.md` byte-identical across engines, and an AGENTS.md
   report block with a `Skills` section; nothing under `raw/` appears in the

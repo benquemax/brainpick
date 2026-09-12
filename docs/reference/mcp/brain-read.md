@@ -4,7 +4,7 @@ about: thing
 title: "brain_read"
 description: "Read one doc with forgiving resolution (path, stem, fuzzy title), returning frontmatter, outline, content and neighbors, shaped to a token budget."
 tags: [mcp, agents]
-timestamp: 2026-09-12T16:40:00Z
+timestamp: 2026-09-12T18:10:00Z
 ---
 
 # brain_read
@@ -16,7 +16,7 @@ exact path → unique file stem → fuzzy title; an ambiguous match returns a
 `truncated` and a `hint`. Over budget it returns the outline plus a leading
 excerpt and a hint to request `sections`. Default budget 2000.
 
-On a skill (`type: skill` or `playbook`, [Skills](../../skills.md)) the payload
+On a skill (`type: skill`, [Skills](../../skills.md)) the payload
 adds `skill: {depends_on, dependents, tools}` — prerequisites and dependents
 as `{path, title}`, each tool as `{path, exists}` — and the hint says to read
 the prerequisites first and run the tools yourself: brainpick never executes

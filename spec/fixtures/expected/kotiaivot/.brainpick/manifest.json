@@ -3,12 +3,16 @@
   "compiled_at": "1970-01-01T00:00:00Z",
   "files": {
     "index.md": {
-      "bytes": 766,
-      "sha256": "129e839ae37cbc2a7fcf9724e8aa796bc4f0f20e896cf1737b827707046609b1"
+      "bytes": 943,
+      "sha256": "4fc90261b083a9923908a76be51465296db332624fd854c83e0ddd7ecdfa5968"
     },
     "knowledge/kahvi.md": {
-      "bytes": 360,
-      "sha256": "18ca3265030d3b6d7c7e86f8e8a56bc64c9c42366545a6fa58a44061397d99b1"
+      "bytes": 421,
+      "sha256": "eb690a83ea2e1852821f873117883420c8a32395dce2adcc11ea0e60039f536b"
+    },
+    "knowledge/vieraat.md": {
+      "bytes": 304,
+      "sha256": "9c0d73f97ef2201824da8b7e7d9e047d2a92add5d439a29e277f6856dbb364a5"
     },
     "skills/kahvin-keitto.md": {
       "bytes": 684,
@@ -19,12 +23,12 @@
       "sha256": "f28fc1d8d4121ab7caa3462d8fe4a7b6e5e56039f0c6ef63ac0dbe1abc26ae65"
     },
     "skills/veden-keitto.md": {
-      "bytes": 331,
-      "sha256": "9acd71a44caba18e4f55c1ae1aab1c26f29922e829f46897c3539fb7d4e42a95"
+      "bytes": 328,
+      "sha256": "a23d3e277ad446af3598fa5eb8e498e021fcc7f0bd170ebc4677d4a427c619ab"
     }
   },
   "index_md": {
-    "content_hash": "129e839ae37cbc2a7fcf9724e8aa796bc4f0f20e896cf1737b827707046609b1",
+    "content_hash": "4fc90261b083a9923908a76be51465296db332624fd854c83e0ddd7ecdfa5968",
     "managed": "section"
   },
   "seq": 1,

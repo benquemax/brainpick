@@ -4,7 +4,7 @@ about: concept
 title: "Spec: brain format"
 description: "The normative contract for a brain — the fixed _brain/ root, the five memory-type folders, the engine-consumed frontmatter keys and their additive-only policy, inline grounding, the data flow's folder order, the [brain] config section, the brain:// link syntax and the format version with its migration rule."
 tags: [spec, brain-format]
-timestamp: 2026-09-12T16:40:00Z
+timestamp: 2026-09-12T18:10:00Z
 ---
 
 # Spec: brain format
@@ -17,8 +17,8 @@ committed content and would hurt to change later.
   brains' links and registries name it. `_temp/` is always excluded;
   project management (`_todo.md`) stays beside the brain.
 - **Folders are memory types — for the template.** `knowledge/`
-  (semantic), `skills/` (procedural, `type: skill` — `playbook` stays
-  recognised — with generated `skilltree.md`), `journals/` (episodic — one file per month `YYYY-MM.md`,
+  (semantic), `skills/` (procedural, `type: skill`, with generated
+  `skilltree.md`), `journals/` (episodic — one file per month `YYYY-MM.md`,
   a `## YYYY-MM-DD` section per day newest first, earlier months in
   `journals/archive/`), `vision/` (a book with an `index.md` contents page)
   and `plans/` (decided work), plus `raw/` for undistilled source material
@@ -36,8 +36,9 @@ committed content and would hurt to change later.
   skill out as a harness `SKILL.md`, still to come). Additive-only: never
   renamed or removed, optional for at least one version after appearing,
   unknown keys ignored.
-- **Skills.** A doc is a skill by `type` alone (`skill` or `playbook`,
-  case-insensitive), never by folder; reserved files never are. Every
+- **Skills.** A doc is a skill by `type` alone (`skill`, case-insensitive),
+  never by folder; reserved files never are, and neither is a `playbook` —
+  the same form for a human reader. Every
   compile writes `t1/skills.json`; a brain with a skill gets a generated
   `skilltree.md` beside its first skill; `brain_overview` lists skills
   first, `brain_read` returns their structure, keyword search boosts them
@@ -63,8 +64,8 @@ committed content and would hurt to change later.
   dry-run diff) and keeps every earlier format servable.
 - **Conformance class `brain`.** `[brain]` parsing with defaults, env and
   the audience warning in both engines; `brain://` extraction; the fixture
-  brain `kotiaivot` (a `skill`, a `playbook` it depends on, a tool, a
-  `raw/`) whose skills.json, skilltree.md, depends_on edge, boosted search
+  brain `kotiaivot` (two `skill` docs, one depending on the other, a tool,
+  a `playbook` that must not be a skill, a `raw/`) whose skills.json, skilltree.md, depends_on edge, boosted search
   order and report block are goldens, and whose manifest holds nothing from
   `raw/`; `[bundle] exclude` honoured by every scan in both engines.
 

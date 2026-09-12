@@ -1,5 +1,5 @@
 ---
-type: playbook
+type: skill
 title: Veden keitto
 description: Use when you need boiling water — for coffee, tea, or pasta.
 tags: [vesi]

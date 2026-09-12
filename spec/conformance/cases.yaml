@@ -25,9 +25,10 @@ cases:
     bundle: kotiaurinko
 
   # kotiaivot (spec/85): a brain — [brain] format = 1, skills/ with a
-  # `type: skill` doc that depends_on a `type: playbook` doc and drives a
-  # tool, raw/ excluded. Proves the depends_on edge and skills.json (spec/20),
-  # the generated skilltree.md, and that raw/ never reaches the manifest.
+  # `type: skill` doc that depends_on another and drives a tool, a
+  # `type: playbook` how-to for humans that must NOT be a skill, raw/
+  # excluded. Proves the depends_on edge and skills.json (spec/20), the
+  # generated skilltree.md, and that raw/ never reaches the manifest.
   - id: compile-kotiaivot-t1
     class: compile
     bundle: kotiaivot

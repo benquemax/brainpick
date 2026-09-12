@@ -14,7 +14,7 @@ from brainpick.core.links import RawLink, extract_links
 
 ALWAYS_EXCLUDED_DIRS = {".brainpick", ".git", "_temp", "node_modules"}
 RESERVED_NAMES = {"index.md", "log.md", "skilltree.md"}
-SKILL_TYPES = {"skill", "playbook"}  # spec/85: a skill by type, wherever it lives
+SKILL_TYPES = {"skill"}  # spec/85: a skill by type, wherever it lives; a playbook is for humans
 _H1 = re.compile(r"^# +(.+?)\s*$", re.MULTILINE)
 
 
@@ -51,8 +51,8 @@ class Document:
 
 
 def is_skill(type_value) -> bool:
-    """A doc is a skill by its `type` — `skill` or the older `playbook`, trimmed,
-    case-insensitive — never by folder (spec/85)."""
+    """A doc is a skill by its `type` — `skill`, trimmed, case-insensitive — never
+    by folder (spec/85). A `playbook` is a how-to for humans, not a skill."""
     return type_value is not None and str(type_value).strip().lower() in SKILL_TYPES
 
 

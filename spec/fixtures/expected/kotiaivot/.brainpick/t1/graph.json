@@ -10,6 +10,13 @@
     {
       "count": 1,
       "kind": "link",
+      "label": "Vieraat",
+      "source": "index.md",
+      "target": "knowledge/vieraat.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
       "label": "Kahvin keitto",
       "source": "index.md",
       "target": "skills/kahvin-keitto.md"
@@ -24,6 +31,13 @@
     {
       "count": 1,
       "kind": "link",
+      "label": "Vieraat",
+      "source": "knowledge/kahvi.md",
+      "target": "knowledge/vieraat.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
       "label": "Kahvin keitto",
       "source": "knowledge/kahvi.md",
       "target": "skills/kahvin-keitto.md"
@@ -33,6 +47,20 @@
       "kind": "link",
       "label": "Veden keitto",
       "source": "knowledge/kahvi.md",
+      "target": "skills/veden-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvi",
+      "source": "knowledge/vieraat.md",
+      "target": "knowledge/kahvi.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Veden keitto",
+      "source": "knowledge/vieraat.md",
       "target": "skills/veden-keitto.md"
     },
     {
@@ -87,7 +115,7 @@
       "id": "index.md",
       "in": 0,
       "orphan": false,
-      "out": 3,
+      "out": 4,
       "reserved": true,
       "tags": [],
       "timestamp": null,
@@ -98,9 +126,9 @@
       "about": null,
       "description": "What coffee is and why the morning starts with it.",
       "id": "knowledge/kahvi.md",
-      "in": 3,
+      "in": 4,
       "orphan": false,
-      "out": 2,
+      "out": 3,
       "reserved": false,
       "tags": [
         "kahvi"
@@ -108,6 +136,21 @@
       "timestamp": "2026-07-01T07:00:00Z",
       "title": "Kahvi",
       "type": "Concept"
+    },
+    {
+      "about": null,
+      "description": "What to do when guests arrive — a how-to for the host, not the agent.",
+      "id": "knowledge/vieraat.md",
+      "in": 2,
+      "orphan": false,
+      "out": 2,
+      "reserved": false,
+      "tags": [
+        "kahvi"
+      ],
+      "timestamp": "2026-07-01T07:10:00Z",
+      "title": "Vieraat",
+      "type": "playbook"
     },
     {
       "about": null,
@@ -141,7 +184,7 @@
       "about": null,
       "description": "Use when you need boiling water — for coffee, tea, or pasta.",
       "id": "skills/veden-keitto.md",
-      "in": 5,
+      "in": 6,
       "orphan": false,
       "out": 1,
       "reserved": false,
@@ -150,12 +193,12 @@
       ],
       "timestamp": "2026-07-01T07:05:00Z",
       "title": "Veden keitto",
-      "type": "playbook"
+      "type": "skill"
     }
   ],
   "stats": {
-    "docs": 5,
-    "edges": 11,
+    "docs": 6,
+    "edges": 15,
     "ghosts": 0,
     "islands": 0,
     "orphans": 0,
@@ -164,6 +207,7 @@
   "tags": {
     "kahvi": [
       "knowledge/kahvi.md",
+      "knowledge/vieraat.md",
       "skills/kahvin-keitto.md"
     ],
     "vesi": [

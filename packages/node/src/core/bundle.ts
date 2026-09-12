@@ -10,7 +10,7 @@ import { pyStr, YamlTimestamp } from "./yaml11";
 
 export const ALWAYS_EXCLUDED_DIRS = new Set([".brainpick", ".git", "_temp", "node_modules"]);
 export const RESERVED_NAMES = new Set(["index.md", "log.md", "skilltree.md"]);
-export const SKILL_TYPES = new Set(["skill", "playbook"]); // spec/85: a skill by type, wherever it lives
+export const SKILL_TYPES = new Set(["skill"]); // spec/85: a skill by type, wherever it lives; a playbook is for humans
 
 export const DEFAULT_INCLUDE: readonly string[] = ["**/*.md"];
 
@@ -46,8 +46,8 @@ export interface Document {
   tools: string[]; // declared tool paths, as written
 }
 
-/** A doc is a skill by its `type` — `skill` or the older `playbook`, trimmed,
- * case-insensitive — never by folder (spec/85). */
+/** A doc is a skill by its `type` — `skill`, trimmed, case-insensitive — never
+ * by folder (spec/85). A `playbook` is a how-to for humans, not a skill. */
 export function isSkill(typeValue: unknown): boolean {
   if (typeValue === null || typeValue === undefined) return false;
   return SKILL_TYPES.has(pyStr(typeValue).trim().toLowerCase());

@@ -4,7 +4,7 @@ about: concept
 title: "Data flow architecture"
 description: "How information moves through a brain — episodes in the journal distil into evergreen knowledge and then into actionable skills, retrieval runs the mirror path from most distilled to least, and each layer points upward instead of repeating — the principle that makes a brain memory rather than a pile of pages."
 tags: [brain-format]
-timestamp: 2026-09-12T16:40:00Z
+timestamp: 2026-09-12T18:10:00Z
 ---
 
 # Data flow architecture
@@ -80,7 +80,8 @@ An answer built on a stale checkout is built on knowledge the brain has
 already corrected; the first skill makes this its first instruction.
 
 brainpick reflects the read path in `brain_overview` by listing skills
-first — `type: skill` or `playbook`, the *type*, never the folder, because
+first — `type: skill`, the *type*, never the folder (and never `playbook`,
+the human-facing twin), because
 brainpick does not read folder names
 ([Structure agnosticism](structure-agnosticism.md)) — and boosts a matching
 skill ×1.2 in `brain_search` ([Search modes](search-modes.md)). The order is

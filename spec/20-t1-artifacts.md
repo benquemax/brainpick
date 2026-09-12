@@ -52,7 +52,7 @@ first occurrence's text as `label`.
 ### Skills and frontmatter edges
 
 A document is a **skill** when its `type`, trimmed and lowercased, is
-`skill` or `playbook` (spec/85). Recognition is keyed on frontmatter only —
+`skill` (spec/85) — a `playbook` is a how-to for humans and is not one. Recognition is keyed on frontmatter only —
 never on a folder name — and reserved files are never skills. A skill's
 frontmatter MAY carry two brain-format keys the engine consumes:
 

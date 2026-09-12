@@ -4,7 +4,7 @@ about: thing
 title: "The brain template"
 description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
 tags: [brain-format, henxels]
-timestamp: 2026-09-12T16:40:00Z
+timestamp: 2026-09-12T18:10:00Z
 ---
 
 # The brain template
@@ -215,8 +215,10 @@ and both engines read `[brain]`. The template ships in henxels
 [henxels' brainpick brain starter](https://github.com/benquemax/henxels/blob/main/docs/brainpick-brain-starter.md)),
 and [brainpick init](reference/cli/init.md) recognises the result in place —
 config at the repo root, bundle in `_brain/` — in both engines. Skills are
-in ([Skills](skills.md)): `type: skill` beside the template's `playbook`,
-`depends_on` edges, `tools`, `skilltree.md` generation, the overview listing
-skills first and `brainpick skill new`; the template's own `type` rule still
-says `playbook` and widens to both in henxels' next release. Still to come:
+in ([Skills](skills.md)): `type: skill`, `depends_on` edges, `tools`,
+`skilltree.md` generation, the overview listing skills first and
+`brainpick skill new`. The template still writes `type: playbook` for its
+first skill — a `playbook` is a how-to for humans and is *not* a skill to
+the engine — so until henxels' next release retypes it, a brain scaffolded
+today needs `type: skill` on its agent-facing procedures by hand. Still to come:
 the Agent Skill export and `brain://` link extraction.

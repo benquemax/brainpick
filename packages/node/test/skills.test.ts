@@ -42,10 +42,21 @@ async function stateOf(root: string): Promise<ServeState> {
 
 describe("recognition", () => {
   test.each([
-    ["skill", true], ["Skill", true], ["SKILL ", true], ["playbook", true], ["Playbook", true],
+    ["skill", true], ["Skill", true], ["SKILL ", true],
+    ["playbook", false], ["Playbook", false], // a how-to for humans, not procedural memory
     ["Concept", false], ["reference", false], [null, false], ["", false],
   ])("isSkill(%j) is keyed on type, case-insensitively", (value, expected) => {
     expect(isSkill(value)).toBe(expected);
+  });
+
+  test("a playbook is never a skill", () => {
+    // the fixture's host how-to (type: playbook) reaches neither skills.json nor the tree
+    const root = copyBundle("kotiaivot");
+    const docs = scan(root, undefined, RAW);
+    expect(docs.some((d) => d.path === "knowledge/vieraat.md")).toBe(true);
+    const skills = buildSkills(docs, root);
+    expect(skills.skills.map((s) => s.path)).toEqual(["skills/kahvin-keitto.md", "skills/veden-keitto.md"]);
+    expect(renderSkilltree(skills, "skills/" + SKILLTREE_FILE)).not.toContain("vieraat");
   });
 
   test("reserved files are never skills", () => {

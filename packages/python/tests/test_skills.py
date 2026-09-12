@@ -46,11 +46,22 @@ def _state(root: Path) -> ServeState:
 
 
 @pytest.mark.parametrize("value,expected", [
-    ("skill", True), ("Skill", True), ("SKILL ", True), ("playbook", True), ("Playbook", True),
+    ("skill", True), ("Skill", True), ("SKILL ", True),
+    ("playbook", False), ("Playbook", False),  # a how-to for humans, not procedural memory
     ("Concept", False), ("reference", False), (None, False), ("", False),
 ])
 def test_is_skill_is_keyed_on_type_case_insensitively(value, expected):
     assert is_skill(value) is expected
+
+
+def test_a_playbook_is_never_a_skill(kotiaivot):
+    """The fixture's host how-to (type: playbook) reaches neither skills.json nor the tree."""
+    docs = scan(kotiaivot, exclude=["raw/*"])
+    root = kotiaivot
+    assert "knowledge/vieraat.md" in {d.path for d in docs}
+    skills = build_skills(docs, root)
+    assert [s["path"] for s in skills["skills"]] == ["skills/kahvin-keitto.md", "skills/veden-keitto.md"]
+    assert "vieraat" not in render_skilltree(skills, "skills/" + SKILLTREE_FILE)
 
 
 def test_reserved_files_are_never_skills(tmp_path):

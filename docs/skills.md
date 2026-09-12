@@ -4,7 +4,7 @@ about: concept
 title: "Skills"
 description: "Procedural memory in a brain — a skill is a distilled, tested procedure an agent follows, with its repetitive parts demoted to tools it drives; recognised by type, linked by depends_on, listed first, boosted in search, never executed by brainpick — and why brainpick ships the framework but no skills of its own."
 tags: [brain-format, agents, skills]
-timestamp: 2026-09-12T16:40:00Z
+timestamp: 2026-09-12T18:10:00Z
 ---
 
 # Skills
@@ -20,14 +20,24 @@ leaves to the agent.
 
 ## What a skill is, to the engine
 
-A document is a skill when its `type` is `skill` — or `playbook`, the value
-the first brains used — compared case-insensitively, wherever the file
-lives. The `skills/` folder is the [brain template](brain-template.md)'s
-convention; the engine never tests a folder name, which is
-[Structure agnosticism](structure-agnosticism.md) applied to the one memory
-type that most tempts a special case. A reserved file (`index.md`,
-`log.md`, the generated `skilltree.md`) is never a skill whatever its
-frontmatter says.
+A document is a skill when its `type` is `skill`, compared
+case-insensitively, wherever the file lives. The `skills/` folder is the
+[brain template](brain-template.md)'s convention; the engine never tests a
+folder name, which is [Structure agnosticism](structure-agnosticism.md)
+applied to the one memory type that most tempts a special case. A reserved
+file (`index.md`, `log.md`, the generated `skilltree.md`) is never a skill
+whatever its frontmatter says.
+
+A `playbook` is not a skill. Same form — step-by-step instructions — but a
+different audience: a playbook is what a *human* follows, a skill is what
+an *agent* follows, and the ontology keeps them apart on purpose
+([The two-axis ontology](ontology.md)). The first version of this feature
+treated `playbook` as an alias, and this wiki's own compile showed why that
+is wrong: *Wiki conventions*, a how-to for whoever writes here, appeared
+under "read before improvising" in the brain report. An agent handed a
+procedure written for someone else has been handed noise. Brains born
+before the type existed typed their procedures `Playbook`; retyping the
+agent-facing ones `skill` is the one-line migration.
 
 Two frontmatter keys carry the skill's structure
 ([Spec: brain format](reference/spec/brain-format.md)):
