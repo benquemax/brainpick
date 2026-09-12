@@ -57,7 +57,13 @@ test("tags are searchable", () => {
 test("an inflected query reaches its stem", () => {
   const records = buildDocsRecords(scan(copyBundle("kotiaivot"), undefined, ["raw/*"]));
   expect(new Set(search(records, "kahvia", 8).map((h) => h.path))).toEqual(
-    new Set(["knowledge/kahvi.md", "knowledge/vieraat.md", "skills/kahvin-keitto.md", "skills/veden-keitto.md"]),
+    new Set([
+      "knowledge/kahvi.md",
+      "knowledge/vieraat.md",
+      "skills/kahvin-keitto.md",
+      "skills/veden-keitto.md",
+      "todo/archive/2026-07-01.md",
+    ]),
   );
 });
 

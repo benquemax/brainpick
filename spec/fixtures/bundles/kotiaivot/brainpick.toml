@@ -5,4 +5,4 @@ root = "."
 exclude = ["raw/*"]
 
 [brain]
-format = 1
+format = 2

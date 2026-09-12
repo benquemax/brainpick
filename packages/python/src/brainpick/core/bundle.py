@@ -49,6 +49,13 @@ class Document:
     depends_on: list[str] = field(default_factory=list)   # RESOLVED prerequisites, declared order
     tools: list[str] = field(default_factory=list)        # declared tool paths, as written
     export: list[str] = field(default_factory=list)       # spec/85 export targets (agent-skill)
+    todo: bool = False                                    # spec/20 To-do lists (type: todo)
+
+
+def is_todo(type_value) -> bool:
+    """A doc is a to-do list by its `type` — `todo`, trimmed, case-insensitive —
+    never by folder (spec/85 *To-do lists*)."""
+    return str(type_value or "").strip().lower() == "todo"
 
 
 def is_skill(type_value) -> bool:
@@ -199,6 +206,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
 
         reserved = posixpath.basename(path) in RESERVED_NAMES
         skill = is_skill(meta.get("type")) and not reserved
+        todo = is_todo(meta.get("type")) and not reserved
         depends_on: list[str] = []
         tools: list[str] = []
         export: list[str] = []
@@ -232,5 +240,6 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             depends_on=depends_on,
             tools=tools,
             export=export,
+            todo=todo,
         ))
     return docs

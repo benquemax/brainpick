@@ -4,7 +4,7 @@ about: concept
 title: "Spec: brain format"
 description: "The normative contract for a brain — the fixed _brain/ root, the five memory-type folders, the engine-consumed frontmatter keys and their additive-only policy, inline grounding, the data flow's folder order, the [brain] config section, the brain:// link syntax and the format version with its migration rule."
 tags: [spec, brain-format]
-timestamp: 2026-09-13T11:00:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # Spec: brain format
@@ -15,26 +15,30 @@ committed content and would hurt to change later.
 
 - **Bundle root.** `_brain/` at the repository root — fixed, because other
   brains' links and registries name it. `_temp/` is always excluded;
-  project management (`_todo.md`) stays beside the brain.
+  scratch stays beside the brain, open work (`todo/`) is in it from
+  format 2.
 - **Folders are memory types — for the template.** `knowledge/`
   (semantic), `skills/` (procedural, `type: skill`, with generated
-  `skilltree.md`), `journals/` (episodic — one file per month `YYYY-MM.md`,
-  a `## YYYY-MM-DD` section per day newest first, earlier months in
-  `journals/archive/`), `vision/` (a book with an `index.md` contents page)
-  and `plans/` (decided work), plus `raw/` for undistilled source material
+  `skilltree.md`), `journals/` (episodic — one file per day `YYYY-MM-DD.md`,
+  only today at the top, earlier days in `journals/archive/YYYY/MM/`;
+  format 1 kept a month per file), `vision/` (a book with an `index.md`
+  contents page), `plans/` (decided work) and `todo/` (`open.md` plus a
+  per-day `archive/`, `type: todo` — [To-do lists](../../todo-lists.md)),
+  plus `raw/` for undistilled source material
   that is excluded from the compiled brain via `[bundle] exclude`. The five
   memory types are sufficient: a new one is a `type` value or a sub-folder,
   never a seventh sibling. Engines never interpret folder names — they read
   the root, frontmatter and reserved names only, so the table is normative
   for the template and informative for engines
-  ([Structure agnosticism](../../structure-agnosticism.md)); the month roll
+  ([Structure agnosticism](../../structure-agnosticism.md)); the day roll
   is the agent's act, not an engine command.
 - **Frontmatter.** OKF's fields are OKF's. The format adds only keys the
   engine consumes, all on skills: `depends_on` (prerequisite edges, kind
   `depends_on`; unresolved → ghost), `tools` (plain file paths the skill
   drives — indexed, never executed) and `export: agent-skill` (`brainpick
   integrate` writes a pointer stub `SKILL.md` under the harness's skill
-  directory — the brain stays canonical). Additive-only: never
+  directory — the brain stays canonical); plus the `type: todo` value that
+  makes a doc's checklist lines to-do items. Additive-only: never
   renamed or removed, optional for at least one version after appearing,
   unknown keys ignored.
 - **Skills.** A doc is a skill by `type` alone (`skill`, case-insensitive),

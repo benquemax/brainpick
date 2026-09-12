@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from brainpick.compile.pipeline import _atomic_write
 from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER, top_ghosts
+from brainpick.compile.todos import todo_counts
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
 from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
@@ -66,6 +67,16 @@ def _similarity_gaps_open_count(root) -> int:
     return sum(1 for p in data.get("pairs", []) if p.get("status") == "open")
 
 
+def _busiest_todo_list(todos: list[dict]) -> str:
+    """The to-do list with the most open items (path tie-break) — where the
+    overview hint points."""
+    per_path: dict[str, int] = {}
+    for item in todos:
+        if item.get("status") == "open":
+            per_path[item["path"]] = per_path.get(item["path"], 0) + 1
+    return sorted(per_path.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+
+
 # -- brain_overview ----------------------------------------------------------------
 
 
@@ -98,6 +109,11 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
     if skills:
         hint = (f"{len(skills)} skills — read the matching one before improvising a procedure; "
                 "brain_read on a skill lists its prerequisites and tools. " + hint)
+    todos = getattr(state, "todos", [])
+    todo_totals = todo_counts(todos)
+    if todo_totals["open"]:  # spec/85 To-do lists: open work is one read away
+        busiest = _busiest_todo_list(todos)
+        hint = (f"{todo_totals['open']} open todos — brain_read '{busiest}' lists them. " + hint)
     update = getattr(state, "update", None)
     if update is not None:  # spec/80: the notice leads the hint — first line of the first call
         hint = (f"brainpick {update['latest']} is available (you run {update['current']}): "
@@ -108,6 +124,7 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
         "tiers": state.manifest.get("tiers", {}),
         **({"update": dict(update)} if update is not None else {}),
         "skills": skills,
+        "todos": todo_totals,
         "tree": tree,
         "top_ghosts": top_ghosts(state.graph),
         "similarity_gaps_open_count": _similarity_gaps_open_count(state.root),
@@ -190,9 +207,12 @@ def _single_search(state: ServeState, query: str, mode: str = "auto", limit: int
         graph_fn=state.graph_fn(), link_graph=state.graph,
     )
     raw = body["hits"]
+    todo_paths = {t["path"] for t in getattr(state, "todos", [])}
     hits = [
         {"path": h["path"], "title": h["title"], "description": h["description"],
-         "score": h["score"], "why": _why(h, query)}
+         "score": h["score"], "why": _why(h, query),
+         # spec/70: a to-do list hit answers "still open?" by itself
+         **({"todo": todo_counts(state.todos, h["path"])} if h["path"] in todo_paths else {})}
         for h in raw
     ]
     result = {

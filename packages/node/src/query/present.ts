@@ -41,6 +41,8 @@ export function presentOverview(p: Record<string, unknown>): string {
         .map(([k, v]) => `${k} ${String(v)}`)
         .join(" · "),
   ];
+  const todos = p["todos"] as { open?: number; done?: number } | undefined;
+  if (todos && (todos.open || todos.done)) lines.push(`todos: ${todos.open ?? 0} open · ${todos.done ?? 0} done`);
   const skills = (p["skills"] ?? []) as OverviewDoc[];
   if (skills.length) {
     lines.push("");
@@ -70,6 +72,7 @@ interface Hit {
   title: string;
   description: string | null;
   why?: string;
+  todo?: { open: number; done: number };
 }
 
 export function presentSearch(p: Record<string, unknown>, query: string): string {
@@ -82,7 +85,8 @@ export function presentSearch(p: Record<string, unknown>, query: string): string
   for (const hit of hits) {
     const desc = hit.description ? ` — ${hit.description}` : "";
     const why = hit.why ? `  (${hit.why})` : "";
-    lines.push(`  ${hit.path}  ${hit.title}${desc}${why}`);
+    const todo = hit.todo ? `  [${hit.todo.open} open · ${hit.todo.done} done]` : "";
+    lines.push(`  ${hit.path}  ${hit.title}${desc}${todo}${why}`);
   }
   if (hits.length === 0) lines.push("  (no hits — try `overview` for the whole brain)");
   return lines.join("\n");

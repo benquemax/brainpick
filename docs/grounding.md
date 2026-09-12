@@ -4,7 +4,7 @@ about: concept
 title: "Grounding"
 description: "Every claim in a brain's knowledge and skills says where it came from — inline, Wikipedia-style, with a plain link to a journal entry, an external page, another brain, or an admitted assumption — so the kind of source is readable at the claim and provenance never needs a citation template or a frontmatter key."
 tags: [brain-format]
-timestamp: 2026-09-07T16:00:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # Grounding
@@ -28,7 +28,7 @@ construction:
 
 | Link target | Source kind | Reads as |
 |---|---|---|
-| a journal section (`../journals/2026-09.md#2026-09-07`) | a decision or observation this brain made | "we decided / we saw" |
+| a journal day (`../journals/archive/2026/09/2026-09-07.md`; a month-file section `../journals/2026-09.md#2026-09-07` under format 1) | a decision or observation this brain made | "we decided / we saw" |
 | raw material (`../raw/customer-call-2026-09-07.md`) | a source this brain holds but does not compile | "the transcript says" |
 | an external URL | a page outside the brain | "according to" |
 | another brain (`brain://…`) | knowledge that lives closer to its implementation | "the project brain says" |

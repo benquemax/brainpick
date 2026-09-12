@@ -74,6 +74,20 @@ frontmatter MAY carry two brain-format keys the engine consumes:
 On a non-skill document both keys are ignored. `depends_on` edges count
 toward `in`/`out`, orphan status and islands like any other edge.
 
+### To-do lists
+
+A document is a **to-do list** when its `type`, trimmed and lowercased, is
+`todo` (spec/85 *To-do lists*); reserved files never are. Its items are
+the checklist lines of its body, in document order: a line whose trimmed
+text starts with `- [ ] `, `- [x] ` or `- [X] ` (`*`/`+` bullets alike)
+is one item — `[ ]` open, `[x]` done — and its text is the rest of the
+line, trimmed. A trailing `(done: YYYY-MM-DD)` is stripped from the text
+and recorded as the item's `done` date; otherwise `done` is the doc's
+`timestamp` date for a done item and `null` for an open one. Fenced code
+blocks are skipped. A to-do list is an ordinary document in every other
+respect — it is in the graph, `docs.jsonl` and keyword search, and its
+items' text is part of its searchable text like any body.
+
 ## t1/graph.json (normative)
 
 ```json
@@ -139,6 +153,25 @@ tool paths, resolved to bundle-relative form when the file exists, kept as
 declared otherwise; `export` holds the declared export targets (spec/85
 *Exported skills*), `[]` when there are none. Written on every full compile, `{"skills": []}` when
 there are none; part of the freshness comparison like `graph.json`.
+
+## t1/todos.json (normative)
+
+The to-do items of the bundle (*To-do lists*), the substrate
+`brain_overview` and `brain_search` draw on:
+
+```json
+{
+  "todos": [
+    {"done": null, "line": 7, "path": "todo/open.md", "status": "open", "text": "Descale the kettle"},
+    {"done": "2026-07-01", "line": 8, "path": "todo/open.md", "status": "done", "text": "Buy filters"}
+  ]
+}
+```
+
+Sorted by (`path`, `line`); `line` is the 1-based line of the item in the
+file (frontmatter included). Written on every full compile,
+`{"todos": []}` when there are none; part of the freshness comparison like
+`skills.json`.
 
 ## Generated index.md
 

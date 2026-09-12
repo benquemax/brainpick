@@ -4,7 +4,7 @@ about: concept
 title: Structure agnosticism
 description: "Principle 14 — brainpick is a thin view, not a format owner: it reads the bundle root, frontmatter and OKF's reserved names, never folder layout, so a wiki, a brain or anything in between compiles the same way and a brain born on any template version keeps working with every later brainpick."
 tags: [brain, spec, design]
-timestamp: 2026-09-07T16:00:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # Structure agnosticism
@@ -47,9 +47,9 @@ brainpick follows without a flag.
 template keeps working with every later brainpick, and a brain scaffolded
 under a later template works with today's, as long as the frontmatter
 contract holds. When the template changed its journal from dated files to
-monthly files with dated sections, brainpick did not notice — it only ever
-saw markdown with `##` headings. That is the whole migration story for the
-layout: there is none.
+monthly files with dated sections — and back to a file per day in format 2
+— brainpick did not notice — it only ever saw markdown with `##` headings.
+That is the whole migration story for the layout: there is none.
 
 **Safety for the developers.** Because the engine never keys on layout, a
 release cannot break an earlier brain by renaming a folder or moving a
@@ -70,7 +70,7 @@ keys by OKF's own compatibility promise.
 Any brainpick feature whose correctness depends on a folder name. Concrete
 cases that were considered and rejected:
 
-- **A `brainpick journal roll` command.** Moving last month's journal into
+- **A `brainpick journal roll` command.** Moving yesterday's journal into
   `journals/archive/` is knowledge about *this template's* layout. The
   moment brainpick knows it, brainpick owns the layout. The roll is the
   agent's act (the first skill teaches it) and the contract's check

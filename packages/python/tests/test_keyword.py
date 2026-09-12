@@ -50,7 +50,8 @@ def test_inflected_query_reaches_its_stem(kotiaivot):
     records = build_docs_records(scan(kotiaivot, exclude=("raw/*",)))
     paths = {h["path"] for h in search(records, "kahvia", limit=8)}
     assert paths == {"knowledge/kahvi.md", "knowledge/vieraat.md",
-                     "skills/kahvin-keitto.md", "skills/veden-keitto.md"}
+                     "skills/kahvin-keitto.md", "skills/veden-keitto.md",
+                     "todo/archive/2026-07-01.md"}
 
 
 def test_exact_token_still_outranks_a_stem_only_match(kotiaurinko):

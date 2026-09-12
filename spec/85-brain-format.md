@@ -32,8 +32,10 @@ instructions mention it. (`[bundle] root` keeps the engine indifferent to
 the name; the cost of changing it is social, in every other brain's links.)
 
 `_temp/` is always excluded (spec/80) and gitignored; nothing in it is
-brain material. Project management that is neither evergreen knowledge nor
-an episode — `_todo.md`, scratch — stays **beside** the brain, not in it.
+brain material. Scratch stays **beside** the brain, not in it. Open work is
+not scratch: from format 2 the to-do list lives *in* the brain (`todo/`,
+below), so "is anything about X still open?" is one `brain_search` away
+instead of a grep. A format-1 brain kept `_todo.md` beside the brain.
 
 ## Folders are memory types
 
@@ -41,23 +43,36 @@ an episode — `_todo.md`, scratch — stays **beside** the brain, not in it.
 |---|---|---|---|
 | `knowledge/` | semantic | evergreen concept docs, one concept per page | — |
 | `skills/` | procedural | distilled, actionable procedures (`type: skill`) and, beside them, the `tools/` they drive | `skilltree.md` (generated) |
-| `journals/` | episodic | one file per month, `YYYY-MM.md`, a `## YYYY-MM-DD` section per day, newest first; only the current month at the top level, earlier months in `journals/archive/` | `index.md` |
+| `journals/` | episodic | one file per **day**, `YYYY-MM-DD.md`, entries newest first under any heading (`## HH:MM` or a title); only today at the top level, every earlier day in `journals/archive/YYYY/MM/` | `index.md` |
+| `todo/` | open work | `open.md` — the current to-do list as checklist lines (`- [ ]` open, `- [x]` done) under `type: todo`; the moment an item is done it moves to `todo/archive/YYYY-MM-DD.md`, the day it was closed, so `open.md` stays small and "done" is an episode with a date | `index.md` |
 | `vision/` | direction | the northstar as a book; `index.md` is its table of contents | `index.md` |
 | `plans/` | decided work | one plan per page; undecided ideas do not belong here | `index.md` |
 | `raw/` | *(not a memory type)* | undistilled source material — transcripts, exports, clippings — that knowledge grounds on; no frontmatter, kebab-case, listed in its index, **excluded from the compiled brain** via `[bundle] exclude = ["raw/*"]` | `index.md` |
 
 Every folder MAY hold sub-folders. The five memory types are
 **sufficient**: a memory type that does not fit is a `type` value or a
-sub-folder, never a seventh sibling. Engines MUST tolerate brains that omit
+sub-folder, never a seventh sibling (`todo/` is not a memory type — it is
+the brain's own work queue, kept in the brain so it is searchable). Engines MUST tolerate brains that omit
 any folder (an empty memory type is simply empty) and MUST NOT depend on
 any being present.
 
-Journals are logs, not concept docs: no frontmatter, every heading an ISO
-date. A month per file caps the length forever; the **month roll** — moving
-last month's file into `archive/` before the first entry of a new month —
-is the agent's act (taught by the first skill) and the contract's check
-(the template allows one file at the top of `journals/`), never an engine
-command: the engine does not know the layout.
+Journals are logs, not concept docs: no frontmatter, the file name is
+the ISO date. A day per file caps the length forever and gives the
+half-life (spec/50) a file-level unit; the **day roll** — moving
+yesterday's file into `archive/YYYY/MM/` before the first entry of a new
+day — is the agent's act (taught by the first skill) and the contract's
+check (the template allows one file at the top of `journals/`), never an
+engine command: the engine does not know the layout. A grounding link to
+a day is a link to a file, no anchor:
+`../journals/archive/2026/09/2026-09-07.md`.
+
+Format 1 kept one file per month (`YYYY-MM.md`, a `## YYYY-MM-DD` section
+per day, the previous month rolled into a flat `journals/archive/`). Both
+layouts are plain OKF logs; engines serve either without noticing. The
+template's `brainpick migrate --to 2` splits each month file by its day
+sections into `archive/YYYY/MM/YYYY-MM-DD.md` (today's stays at the top),
+rewrites `journals/YYYY-MM.md#YYYY-MM-DD` links to the day files, moves
+`_todo.md` to `todo/open.md` under `type: todo`, and bumps the stamp.
 
 Raw material stays greppable (T0) and is what claims ground on, but it
 never enters T1–T3: it is noisy by nature and would drown the distilled
@@ -79,6 +94,7 @@ not frontmatter — see *Grounding* below.
 | `depends_on` | skills | list of doc paths (bundle-relative, `.md`) | skills this skill assumes; `depends_on` edges in T1 (spec/20) and the edges of the generated `skilltree.md` |
 | `tools` | skills | list of file paths (bundle-relative) | the deterministic scripts this skill drives; indexed and pointed at, never executed by an engine |
 | `export` | skills | `agent-skill` (string or list) | the doc is also exported as a harness-loaded Agent Skill (`SKILL.md`) by `brainpick integrate` — see *Exported skills* |
+| `type: todo` | to-do lists | OKF `type` value | the doc's checklist lines are to-do items the engine indexes — see *To-do lists* |
 
 ### Skills
 
@@ -155,6 +171,24 @@ directory belongs to the repo, not the engine — and integrate says so.
 `agents-md` writes no stubs. Nothing about `export` changes search,
 overview or `brain_read`.
 
+### To-do lists
+
+A doc whose `type`, trimmed and lowercased, is `todo` is a **to-do list**:
+every checklist line in its body — `- [ ] text` (open) or `- [x] text`
+(done), `*` or `+` bullets alike, at any indentation — is one item. The
+template keeps `todo/open.md` (the live list) and `todo/archive/
+YYYY-MM-DD.md` (what was closed that day, one file per day like a journal),
+but the engine keys on the `type` alone, wherever the doc lives, exactly
+as it does for skills. The engine compiles the items into `t1/todos.json`
+(spec/20) and surfaces them where an agent looks: `brain_overview` counts
+them (`todos: {"open", "done"}`), `brain_search` marks a hit that is a
+to-do list with its open/done counts, and `brain_read` returns the doc as
+it is. An item's date is the doc's `timestamp` (the archive file's day, by
+the template's convention); an item may also end in `(done: YYYY-MM-DD)`,
+which the engine records as its `done` date. The engine never edits a
+list: ticking a box and moving a line to the archive is `brain_write` or
+the agent's editor.
+
 **Additive-only policy.** A brain-format key, once published, is never
 renamed or removed; a newer format adds keys, and every key is optional for
 at least one format version after it appears. An engine MUST ignore keys it
@@ -167,8 +201,9 @@ Wikipedia-style: a plain link where the claim is made, no citation
 template. What matters is the *kind* of source, which the link target
 carries by construction:
 
-- a journal section (`../journals/2026-09.md#2026-09-07`) — a decision or
-  observation this brain made;
+- a journal day (`../journals/archive/2026/09/2026-09-07.md`; a section of
+  a month file, `../journals/2026-09.md#2026-09-07`, in format 1) — a
+  decision or observation this brain made;
 - raw material (`../raw/customer-call-2026-09-07.md`) — a source this brain
   holds but does not compile;
 - an external URL — a page outside the brain;
@@ -208,7 +243,7 @@ a wiki, not a brain.
 
 ```toml
 [brain]
-format = 1                         # brain-format version this brain follows
+format = 2                         # brain-format version this brain follows
 origin = "git@github.com:me/x.git" # canonical git URL — how other people find this brain
 audience = "personal"              # personal | team | public — who reads and writes here
 readers = []                       # for team: who, by handle or role — decides what to assume
@@ -260,7 +295,9 @@ brain may not reach the other) or becomes a `brain://` pointer.
 
 ## Versioning and migration
 
-`[brain] format` is the stamp. Format `1` is this document. A later format:
+`[brain] format` is the stamp. Format `2` is this document; format `1`
+differs in the journal rhythm (a month per file, a flat archive) and in
+keeping `_todo.md` beside the brain — both described above. A later format:
 
 - changes bytes in committed brains only through `brainpick migrate --to N`,
   a deterministic rewrite with a dry-run diff that bumps the stamp — never
@@ -281,12 +318,17 @@ Class `brain`:
   and excluded from ghosts.
 - A fixture brain (`spec/fixtures/bundles/kotiaivot/`) with the template's
   layout — two `type: skill` docs where one depends on the other and
-  drives a tool under `tools/`, and a `type: playbook` how-to that is not
-  a skill — compiles to
+  drives a tool under `tools/`, a `type: playbook` how-to that is not
+  a skill, a `todo/open.md` list with open and done items and a
+  `todo/archive/` day file — compiles to
   golden T1 artifacts carrying the `depends_on` edge (spec/20), a
+  `t1/todos.json` with every checklist item, a
   `skills/skilltree.md` byte-identical across engines, and an AGENTS.md
   report block with a `Skills` section; nothing under `raw/` appears in the
   manifest.
+- `brain_overview` reports `todos: {"open": n, "done": m}` for the fixture;
+  a keyword search that only a to-do item's text matches finds the list
+  (`todo/open.md`) and the hit carries `todo: {"open", "done"}`.
 - `brain_overview` lists both skills under `skills` with their prerequisites
   and tools; `brain_read` on the dependent skill returns its `skill` block
   (spec/70); a keyword search whose terms match a skill's trigger

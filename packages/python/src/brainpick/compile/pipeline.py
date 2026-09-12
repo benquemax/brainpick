@@ -26,6 +26,7 @@ from brainpick.compile.skills import (
     render_skilltree,
     skilltree_path,
 )
+from brainpick.compile.todos import build_todos
 from brainpick.compile.t2 import build_chunks, run_t2_stage, t2_gate
 from brainpick.compile.t3 import run_t3_stage, t3_gate
 from brainpick.config import Config, resolve_bundle
@@ -202,6 +203,7 @@ def run_compile(
     skills = build_skills(docs, root)
     skills_text = canonical_json(skills)
     warnings.extend(_cycle_warnings(skills))
+    todos_text = canonical_json(build_todos(docs, root))
 
     old_manifest_text = _read_or_none(bp / "manifest.json")
     old_manifest = json.loads(old_manifest_text) if old_manifest_text else None
@@ -215,6 +217,7 @@ def run_compile(
         and old_graph_text == graph_text
         and _read_or_none(bp / "t1" / "docs.jsonl") == docs_text
         and _read_or_none(bp / "t1" / "skills.json") == skills_text
+        and _read_or_none(bp / "t1" / "todos.json") == todos_text
     )
 
     # T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
@@ -289,6 +292,7 @@ def run_compile(
     _atomic_write(bp / "t1" / "graph.json", graph_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "docs.jsonl", docs_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "skills.json", skills_text.encode("utf-8"))
+    _atomic_write(bp / "t1" / "todos.json", todos_text.encode("utf-8"))
     _write_timeline(root, config)  # advisory (spec/90) — rides along, never blocks
 
     if old_manifest is None:
@@ -437,10 +441,12 @@ def check_fresh(root: str | Path, config: Config | None = None) -> Freshness:
     graph_text = canonical_json(build_graph(docs))
     docs_text = canonical_jsonl(build_docs_records(docs))
     skills_text = canonical_json(build_skills(docs, root))
+    todos_text = canonical_json(build_todos(docs, root))
     if (
         _read_or_none(bp / "t1" / "graph.json") != graph_text
         or _read_or_none(bp / "t1" / "docs.jsonl") != docs_text
         or _read_or_none(bp / "t1" / "skills.json") != skills_text
+        or _read_or_none(bp / "t1" / "todos.json") != todos_text
     ):
         return Freshness(False, "stale — run: brainpick compile")
     return Freshness(True, "fresh")

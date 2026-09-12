@@ -4,7 +4,7 @@ about: thing
 title: "The brain template"
 description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
 tags: [brain-format, henxels]
-timestamp: 2026-09-12T18:10:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # The brain template
@@ -44,15 +44,18 @@ _brain/
     using-the-brain.md   the first skill: pull first, read order, grounding, subsidiarity, "not the truth"
     skilltree.md         generated from depends_on — edit the skills, never the tree
   journals/
-    index.md             what a journal is and how the month rolls
-    YYYY-MM.md           the current month — a ## YYYY-MM-DD section per day, newest first
-    archive/YYYY-MM.md   earlier months, moved here by the agent on the first entry of a new month
+    index.md             what a journal is and how the day rolls
+    YYYY-MM-DD.md        today — entries newest first, no frontmatter
+    archive/YYYY/MM/YYYY-MM-DD.md   every earlier day, moved here by the agent on the first entry of a new day
+  todo/
+    index.md             what the list is and how an item closes
+    open.md              the live to-do list — type: todo, `- [ ]` open, `- [x]` done
+    archive/YYYY-MM-DD.md   what was closed that day — type: todo, timestamped by the day
   raw/index.md        undistilled source material — greppable, indexed, excluded from the compiled brain
   vision/index.md     the northstar as a book; unlinked chapters are invisible
   plans/index.md      decided work only
-_todo.md              parking lot — project management, beside the brain
 _temp/                scratch — gitignored, always excluded
-brainpick.toml        shared policy, committed: [bundle] root = "_brain", exclude = ["raw/*"], [brain] format = 1
+brainpick.toml        shared policy, committed: [bundle] root = "_brain", exclude = ["raw/*"], [brain] format = 2
 brainpick.local.toml  machine-local endpoints — gitignored, never committed
 henxels.yaml          the contract below
 ```
@@ -93,17 +96,22 @@ the digest shows the agent.
 10. Every link lands in the bundle: `rooted_links_resolve` and
     `links_resolve` — no ghosts hiding.
 11. Kebab-case everywhere.
-12. One journal file per month, `journals/YYYY-MM.md`, a `## YYYY-MM-DD`
-    section per day, newest first, no frontmatter
-    (`filename_matches_regex`, `no_frontmatter`, `log_headings_are_dates`).
-    Entries point to what they changed, never restate it.
-13. Only the current month stays at the top of `journals/` (`max_files: 1`
-    with the index excepted); earlier months live in `journals/archive/`.
-    The roll is the agent's act — the first skill teaches it, the check
-    blocks a commit that forgot it. It is deliberately not a brainpick
-    command: the engine does not know the layout
+12. One journal file per day, `journals/YYYY-MM-DD.md`, entries newest
+    first under any heading, no frontmatter (`filename_matches_regex`,
+    `no_frontmatter`). Entries point to what they changed, never restate
+    it. (Format 1 kept a month per file with a `## YYYY-MM-DD` section per
+    day; `brainpick migrate --to 2` splits it.)
+13. Only today stays at the top of `journals/` (`max_files: 1` with the
+    index excepted); every earlier day lives in
+    `journals/archive/YYYY/MM/`, so the archive never becomes one flat
+    pile. The roll is the agent's act — the first skill teaches it, the
+    check blocks a commit that forgot it. It is deliberately not a
+    brainpick command: the engine does not know the layout
     ([Structure agnosticism](structure-agnosticism.md)).
-14. Archived months keep the same shape, untouched.
+14. Archived days keep the same shape, untouched. `todo/open.md` is
+    `type: todo` and holds no `[x]` line older than today; a closed item
+    moves to `todo/archive/YYYY-MM-DD.md` the day it closes
+    ([To-do lists](todo-lists.md)).
 15. `raw/` is orderly, never a dump: kebab-case names, listed in
     `raw/index.md`, a wider filetype list (`.csv .html .pdf .png …`), no
     frontmatter or links required. `brainpick.toml` excludes it
@@ -217,8 +225,13 @@ and [brainpick init](reference/cli/init.md) recognises the result in place —
 config at the repo root, bundle in `_brain/` — in both engines. Skills are
 in ([Skills](skills.md)): `type: skill`, `depends_on` edges, `tools`,
 `skilltree.md` generation, the overview listing skills first and
-`brainpick skill new`. The template still writes `type: playbook` for its
-first skill — a `playbook` is a how-to for humans and is *not* a skill to
-the engine — so until henxels' next release retypes it, a brain scaffolded
-today needs `type: skill` on its agent-facing procedures by hand. Still to come:
-the Agent Skill export and `brain://` link extraction.
+`brainpick skill new`; the Agent Skill export (`export: agent-skill`) is
+in too ([Agent integrations](agent-integrations.md)). Both engines read
+format 2 — day-per-file journals and the `todo/` lists
+([To-do lists](todo-lists.md)) — and format 1 alike. The template still
+writes format 1: `type: playbook` for its first skill (a `playbook` is a
+how-to for humans and is *not* a skill to the engine), monthly journals,
+`_todo.md` beside the brain. Until henxels' next release, a brain
+scaffolded today needs `type: skill` on its agent-facing procedures by
+hand and gets the format-2 layout by following this page. Still to come:
+`brainpick migrate --to 2` and `brain://` link extraction.

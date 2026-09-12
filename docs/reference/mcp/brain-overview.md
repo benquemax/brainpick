@@ -4,7 +4,7 @@ about: thing
 title: "brain_overview"
 description: "The orientation tool — bundle name, counts, tier availability, the skills and the index tree — the progressive-disclosure root, with no required arguments."
 tags: [mcp, agents]
-timestamp: 2026-09-13T10:00:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # brain_overview
@@ -16,7 +16,9 @@ Before the tree comes `skills` — every `type: skill` doc as
 `{path, title, description, depends_on, tools}`, an empty list in a wiki —
 trimmed only after the tree is empty, so the procedures the brain already
 holds are the first thing an agent sees ([Skills](../../skills.md)).
-Default budget 800 tokens. It is the progressive-disclosure root — the call an
+`todos: {open, done}` counts the checklist items of every `type: todo` doc
+([To-do lists](../../todo-lists.md)); when any are open the hint says so
+and names the busiest list. Default budget 800 tokens. It is the progressive-disclosure root — the call an
 agent makes first, before searching or reading — which is why the
 [Update notice](../../update-notice.md), when there is one, rides here as
 `update` and leads the `hint`.

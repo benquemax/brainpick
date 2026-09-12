@@ -14,6 +14,7 @@ import { checkForUpdate, type UpdateNotice } from "../update";
 import { SPEC_VERSION, VERSION } from "../version";
 import { buildSkills, dependencyCycles, renderSkilltree, skilltreePath, type SkillsArtifact } from "./skills";
 import { runSimilarityGapsStage, similarityGapsGate } from "./similarity-gaps";
+import { buildTodos } from "./todos";
 import {
   applyIndexSection,
   applyReportSection,
@@ -175,6 +176,7 @@ export async function runCompile(
   const skills = buildSkills(docs, root);
   const skillsText = canonicalJson(skills as unknown as JsonValue);
   warnings.push(...cycleWarnings(skills));
+  const todosText = canonicalJson(buildTodos(docs, root) as unknown as JsonValue);
 
   const oldManifestText = readTextOrNull(join(bp, "manifest.json"));
   const oldManifest = oldManifestText ? (JSON.parse(oldManifestText) as Record<string, unknown>) : null;
@@ -187,7 +189,8 @@ export async function runCompile(
     !treeChanged &&
     oldGraphText === graphText &&
     readTextOrNull(join(bp, "t1", "docs.jsonl")) === docsText &&
-    readTextOrNull(join(bp, "t1", "skills.json")) === skillsText
+    readTextOrNull(join(bp, "t1", "skills.json")) === skillsText &&
+    readTextOrNull(join(bp, "t1", "todos.json")) === todosText
   );
 
   // T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
@@ -259,6 +262,7 @@ export async function runCompile(
   atomicWrite(join(bp, "t1", "graph.json"), graphText);
   atomicWrite(join(bp, "t1", "docs.jsonl"), docsText);
   atomicWrite(join(bp, "t1", "skills.json"), skillsText);
+  atomicWrite(join(bp, "t1", "todos.json"), todosText);
   writeTimeline(root, cfg); // advisory (spec/90) — rides along, never blocks
 
   // tier-status-only transitions rewrite the manifest without spending a seq
@@ -429,10 +433,12 @@ export function checkFresh(root: string): Freshness {
   const graphText = canonicalJson(buildGraph(docs) as unknown as JsonValue);
   const docsText = canonicalJsonl(buildDocsRecords(docs) as unknown as JsonValue[]);
   const skillsText = canonicalJson(buildSkills(docs, root) as unknown as JsonValue);
+  const todosText = canonicalJson(buildTodos(docs, root) as unknown as JsonValue);
   if (
     readTextOrNull(join(bp, "t1", "graph.json")) !== graphText ||
     readTextOrNull(join(bp, "t1", "docs.jsonl")) !== docsText ||
-    readTextOrNull(join(bp, "t1", "skills.json")) !== skillsText
+    readTextOrNull(join(bp, "t1", "skills.json")) !== skillsText ||
+    readTextOrNull(join(bp, "t1", "todos.json")) !== todosText
   ) {
     return { fresh: false, reason: "stale — run: brainpick compile" };
   }

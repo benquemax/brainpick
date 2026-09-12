@@ -4,7 +4,7 @@ about: concept
 title: "The brain"
 description: "A brain is a wiki meant to be an agent's memory — an OKF bundle with memory-type folders, a declared data flow architecture, inline grounding, an audience and an identity other brains can address; what makes it more than a wiki, and what brainpick does with the difference."
 tags: [brain-format]
-timestamp: 2026-09-12T18:10:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # The brain
@@ -27,13 +27,15 @@ Four things, and each one is a rule the template enforces:
 1. **Folders are memory types.** `_brain/` holds five memory types, each
    with one job: `knowledge/` (semantic — evergreen concepts), `skills/`
    (procedural — distilled, actionable procedures), `journals/` (episodic —
-   one file per month, a dated section per day), `vision/` (direction — the
+   one file per day, only today at the top, earlier days archived by
+   year and month), `vision/` (direction — the
    northstar as a book), `plans/` (decided work) — plus `raw/`, which is not
    a memory type but the undistilled source material knowledge grounds on,
    kept greppable and excluded from the compiled brain. Nothing is
    replicated across layers; a doc lives in exactly one memory type.
-   Project management that is neither knowledge nor an episode —
-   `_todo.md`, scratch in `_temp/` — stays *beside* the brain.
+   Open work is in the brain too — `todo/` ([To-do lists](todo-lists.md)),
+   searchable, its archive dated by day; only scratch in `_temp/` stays
+   *beside* the brain.
 
    The folders are the template's, not brainpick's: brainpick reads
    frontmatter and reserved names only ([Structure agnosticism](structure-agnosticism.md)),

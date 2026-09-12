@@ -4,7 +4,7 @@ about: thing
 title: "brain_search"
 description: "Search returning titles and descriptions with a match reason — never full bodies — across auto, keyword, semantic and graph modes."
 tags: [mcp, agents]
-timestamp: 2026-09-06T14:40:00Z
+timestamp: 2026-09-13T12:00:00Z
 ---
 
 # brain_search
@@ -13,8 +13,9 @@ timestamp: 2026-09-06T14:40:00Z
 of `{path, title, description, score, why}` — descriptions only, never full
 bodies — plus `used_modes`, `degraded_from`, `truncated` and a `hint`. `mode ∈
 auto|keyword|semantic|graph` (default `auto`); an unknown mode falls back to
-`auto` with a note. `why` is one clause naming the match reason. Default budget
-1200.
+`auto` with a note. `why` is one clause naming the match reason. A hit that is
+a to-do list adds `todo: {open, done}` — its item counts
+([To-do lists](../../todo-lists.md)). Default budget 1200.
 
 Behind a federated server ([federation](../../federation.md)) every brain in
 `scope` — `all` (default), `here`, `me`, or a comma-separated alias list — is

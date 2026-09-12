@@ -31,6 +31,20 @@
     {
       "count": 1,
       "kind": "link",
+      "label": "Closed 2026-07-01",
+      "source": "index.md",
+      "target": "todo/archive/2026-07-01.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Open",
+      "source": "index.md",
+      "target": "todo/open.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
       "label": "Vieraat",
       "source": "knowledge/kahvi.md",
       "target": "knowledge/vieraat.md"
@@ -104,6 +118,27 @@
       "label": "Kahvi",
       "source": "skills/veden-keitto.md",
       "target": "knowledge/kahvi.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvin keitto",
+      "source": "todo/archive/2026-07-01.md",
+      "target": "skills/kahvin-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Open",
+      "source": "todo/index.md",
+      "target": "todo/open.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Veden keitto",
+      "source": "todo/open.md",
+      "target": "skills/veden-keitto.md"
     }
   ],
   "ghosts": [],
@@ -115,7 +150,7 @@
       "id": "index.md",
       "in": 0,
       "orphan": false,
-      "out": 4,
+      "out": 6,
       "reserved": true,
       "tags": [],
       "timestamp": null,
@@ -156,7 +191,7 @@
       "about": null,
       "description": "Use when brewing the morning coffee — the whole procedure, kettle to cup.",
       "id": "skills/kahvin-keitto.md",
-      "in": 3,
+      "in": 4,
       "orphan": false,
       "out": 3,
       "reserved": false,
@@ -184,7 +219,7 @@
       "about": null,
       "description": "Use when you need boiling water — for coffee, tea, or pasta.",
       "id": "skills/veden-keitto.md",
-      "in": 6,
+      "in": 7,
       "orphan": false,
       "out": 1,
       "reserved": false,
@@ -194,14 +229,53 @@
       "timestamp": "2026-07-01T07:05:00Z",
       "title": "Veden keitto",
       "type": "skill"
+    },
+    {
+      "about": null,
+      "description": "What was done on the first of July.",
+      "id": "todo/archive/2026-07-01.md",
+      "in": 1,
+      "orphan": true,
+      "out": 1,
+      "reserved": false,
+      "tags": [],
+      "timestamp": "2026-07-01T20:00:00Z",
+      "title": "Closed 2026-07-01",
+      "type": "todo"
+    },
+    {
+      "about": null,
+      "description": null,
+      "id": "todo/index.md",
+      "in": 0,
+      "orphan": false,
+      "out": 1,
+      "reserved": true,
+      "tags": [],
+      "timestamp": null,
+      "title": "Todo",
+      "type": null
+    },
+    {
+      "about": null,
+      "description": "What is still to be done around the morning coffee.",
+      "id": "todo/open.md",
+      "in": 2,
+      "orphan": true,
+      "out": 1,
+      "reserved": false,
+      "tags": [],
+      "timestamp": "2026-07-02T08:00:00Z",
+      "title": "Open",
+      "type": "todo"
     }
   ],
   "stats": {
-    "docs": 6,
-    "edges": 15,
+    "docs": 9,
+    "edges": 20,
     "ghosts": 0,
     "islands": 0,
-    "orphans": 0,
+    "orphans": 2,
     "tags": 2
   },
   "tags": {

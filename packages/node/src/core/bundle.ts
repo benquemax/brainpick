@@ -45,6 +45,14 @@ export interface Document {
   dependsOn: string[]; // RESOLVED prerequisites, declared order
   tools: string[]; // declared tool paths, as written
   export: string[]; // spec/85 export targets (agent-skill)
+  todo: boolean; // spec/20 To-do lists (type: todo)
+}
+
+/** A doc is a to-do list by its `type` — `todo`, trimmed, case-insensitive —
+ * never by folder (spec/85 *To-do lists*). */
+export function isTodo(typeValue: unknown): boolean {
+  if (typeValue === null || typeValue === undefined) return false;
+  return pyStr(typeValue).trim().toLowerCase() === "todo";
 }
 
 /** A doc is a skill by its `type` — `skill`, trimmed, case-insensitive — never
@@ -302,6 +310,7 @@ export function scan(
 
     const reserved = RESERVED_NAMES.has(posixBasename(path));
     const skill = isSkill(meta["type"]) && !reserved;
+    const todo = isTodo(meta["type"]) && !reserved;
     const dependsOn: string[] = [];
     let tools: string[] = [];
     let exportTargets: string[] = [];
@@ -335,6 +344,7 @@ export function scan(
       dependsOn,
       tools,
       export: exportTargets,
+      todo,
     });
   }
   return docs;

@@ -30,6 +30,9 @@ def present_overview(payload: dict) -> str:
     ]
     if "similarity_gaps_open_count" in payload:
         lines.append(f"similarity gaps: {payload['similarity_gaps_open_count']} open")
+    todos = payload.get("todos")
+    if todos and (todos.get("open") or todos.get("done")):
+        lines.append(f"todos: {todos.get('open', 0)} open · {todos.get('done', 0)} done")
     if payload.get("skills"):
         lines.append("")
         lines.append("skills (read before improvising):")
@@ -60,7 +63,8 @@ def present_search(payload: dict, query: str) -> str:
     for hit in hits:
         desc = f" — {hit['description']}" if hit.get("description") else ""
         why = f"  ({hit['why']})" if hit.get("why") else ""
-        lines.append(f"  {hit['path']}  {hit['title']}{desc}{why}")
+        todo = f"  [{hit['todo']['open']} open · {hit['todo']['done']} done]" if hit.get("todo") else ""
+        lines.append(f"  {hit['path']}  {hit['title']}{desc}{todo}{why}")
     if not hits:
         lines.append("  (no hits — try `overview` for the whole brain)")
     return "\n".join(lines)

@@ -37,6 +37,12 @@ procedures exist before it improvises one. Budget trimming empties the
 `tree` before it touches `skills`. When skills exist, `hint` says so and
 names `brain_read` as the way to a skill's prerequisites and tools.
 
+`todos` (spec/20 *t1/todos.json*) is always present: `{"open": n, "done":
+m}`, the counts of to-do items across every to-do list in the brain —
+`{"open": 0, "done": 0}` when there are none. Never budget-trimmed. When
+items are open, `hint` says how many and names the list with the most
+(`brain_read <path>` opens it).
+
 `update` (spec/80 `[update] check`) is present only when a newer engine
 version is known: `{"current", "latest", "hint"}`, `hint` the exact upgrade
 command. The overview `hint` then starts with the notice — an agent that
@@ -48,7 +54,10 @@ reads only the first line of its first call learns it. Never budget-trimmed
 `mode ∈ auto|keyword|semantic|graph` (default `auto`). → `{"hits":
 [{"path", "title", "description", "score", "why"}], "used_modes",
 "degraded_from", "truncated", "hint"}`. Descriptions only — never full
-bodies. `why` is one clause naming the match reason. Default budget 1200.
+bodies. `why` is one clause naming the match reason. A hit that is a
+to-do list (spec/20 *To-do lists*) adds `"todo": {"open": n, "done": m}`
+— its item counts, so "is X still open?" is answered by the hit itself;
+absent on every other hit. Default budget 1200.
 
 ## brain_read({doc, sections?, budget_tokens?})
 

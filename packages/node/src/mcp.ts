@@ -14,6 +14,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { z } from "zod";
 
 import { BEGIN_PREFIX, END_MARKER, topGhosts } from "./compile/t1";
+import { todoCounts, type TodoRecord } from "./compile/todos";
 import type { DocRecord, GraphStats } from "./compile/t1";
 import { ALWAYS_EXCLUDED_DIRS, posixDirname, posixNormpath } from "./core/bundle";
 import { cmpStr, sha256Hex } from "./core/canonical";
@@ -90,6 +91,14 @@ function similarityGapsOpenCount(root: string): number {
   return (data.pairs ?? []).filter((p) => p.status === "open").length;
 }
 
+/** The to-do list with the most open items (path tie-break) — where the
+ * overview hint points. */
+function busiestTodoList(todos: readonly TodoRecord[]): string {
+  const perPath = new Map<string, number>();
+  for (const item of todos) if (item.status === "open") perPath.set(item.path, (perPath.get(item.path) ?? 0) + 1);
+  return [...perPath.entries()].sort((a, b) => b[1] - a[1] || cmpStr(a[0], b[0]))[0]![0];
+}
+
 function singleOverview(state: ServeState, budgetTokens?: number | null): Record<string, unknown> {
   const budget = budgetTokens || 800;
   const stats = (state.graph.stats ?? {}) as Partial<GraphStats>;
@@ -131,6 +140,11 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
       "brain_read on a skill lists its prerequisites and tools. " +
       hint;
   }
+  const todoTotals = todoCounts(state.todos);
+  if (todoTotals.open) {
+    // spec/85 To-do lists: open work is one read away
+    hint = `${todoTotals.open} open todos — brain_read '${busiestTodoList(state.todos)}' lists them. ` + hint;
+  }
   const update = state.update;
   if (update) {
     // spec/80: the notice leads the hint — first line of the first call
@@ -142,6 +156,7 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
     tiers: state.tiers(),
     ...(update ? { update: { ...update } } : {}),
     skills,
+    todos: todoTotals,
     tree,
     top_ghosts: topGhosts(state.graph),
     similarity_gaps_open_count: similarityGapsOpenCount(state.root),
@@ -211,12 +226,15 @@ async function singleSearch(
     state.graph,
   );
   const raw = body.hits;
+  const todoPaths = new Set(state.todos.map((t) => t.path));
   const hits = raw.map((h) => ({
     path: h.path,
     title: h.title,
     description: h.description,
     score: h.score,
     why: why(h, query),
+    // spec/70: a to-do list hit answers "still open?" by itself
+    ...(todoPaths.has(h.path) ? { todo: todoCounts(state.todos, h.path) } : {}),
   }));
   const result: Record<string, unknown> = {
     hits,

@@ -1,0 +1,32 @@
+{
+  "todos": [
+    {
+      "done": "2026-07-01",
+      "line": 10,
+      "path": "todo/archive/2026-07-01.md",
+      "status": "done",
+      "text": "Write down the [Kahvin keitto](../../skills/kahvin-keitto.md) procedure"
+    },
+    {
+      "done": null,
+      "line": 10,
+      "path": "todo/open.md",
+      "status": "open",
+      "text": "Descale the kettle — see [Veden keitto](../skills/veden-keitto.md)"
+    },
+    {
+      "done": null,
+      "line": 11,
+      "path": "todo/open.md",
+      "status": "open",
+      "text": "Try the oily beans again once `keita` retries twice"
+    },
+    {
+      "done": "2026-07-02",
+      "line": 12,
+      "path": "todo/open.md",
+      "status": "done",
+      "text": "Buy filters"
+    }
+  ]
+}

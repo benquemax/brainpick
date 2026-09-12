@@ -24,11 +24,14 @@ cases:
     class: compile-idempotent
     bundle: kotiaurinko
 
-  # kotiaivot (spec/85): a brain — [brain] format = 1, skills/ with a
+  # kotiaivot (spec/85): a brain — [brain] format = 2, skills/ with a
   # `type: skill` doc that depends_on another and drives a tool, a
-  # `type: playbook` how-to for humans that must NOT be a skill, raw/
-  # excluded. Proves the depends_on edge and skills.json (spec/20), the
-  # generated skilltree.md, and that raw/ never reaches the manifest.
+  # `type: playbook` how-to for humans that must NOT be a skill, todo/
+  # with `type: todo` lists (open.md: two open, one done with a `(done:)`
+  # date; archive/2026-07-01.md: one done, dated by its timestamp), raw/
+  # excluded. Proves the depends_on edge, skills.json and todos.json
+  # (spec/20), the generated skilltree.md, and that raw/ never reaches the
+  # manifest.
   - id: compile-kotiaivot-t1
     class: compile
     bundle: kotiaivot
@@ -37,6 +40,7 @@ cases:
       - .brainpick/t1/graph.json
       - .brainpick/t1/docs.jsonl
       - .brainpick/t1/skills.json
+      - .brainpick/t1/todos.json
       - index.md
       - skills/skilltree.md
 
@@ -74,8 +78,10 @@ cases:
     # kahvin-keitto.md matches on its trigger description — and the skill boost
     # (spec/50, ×1.2) lifts it above the prose page: the read path starts with
     # skills. veden-keitto.md matches "coffee" only via its own description.
-    # An engine without the boost returns kahvi.md first and fails.
-    expect_paths: [skills/kahvin-keitto.md, knowledge/kahvi.md, skills/veden-keitto.md]
+    # An engine without the boost returns kahvi.md first and fails. The to-do
+    # list todo/open.md (format 2) says "morning coffee" in its description
+    # and trails the skill; it is prose too, and unboosted.
+    expect_paths: [skills/kahvin-keitto.md, knowledge/kahvi.md, todo/open.md, skills/veden-keitto.md]
     expect_order: true
 
   # Tags are searchable (spec/50): `vesi` appears in veden-keitto.md ONLY as
@@ -89,16 +95,30 @@ cases:
     limit: 8
     expect_paths: [skills/veden-keitto.md]
 
+  # To-do lists are searchable (spec/85 *To-do lists*): `descale` occurs
+  # only in an open item of todo/open.md. An engine that leaves the to-do
+  # list out of the index — format 1's `_todo.md` beside the brain — returns
+  # nothing and fails.
+  - id: search-keyword-todo-item
+    class: query
+    bundle: kotiaivot
+    query: "descale"
+    mode: keyword
+    limit: 8
+    expect_paths: [todo/open.md]
+
   # Stem terms (spec/50): `kahvia` (partitive) occurs nowhere; its 4-char
   # prefix `kahv` is shared with `kahvi`/`kahvin`, so every page that says
-  # or tags coffee is reached. An exact-token-only engine returns nothing.
+  # or tags coffee is reached — the archived to-do that names the skill
+  # included. An exact-token-only engine returns nothing.
   - id: search-keyword-stem
     class: query
     bundle: kotiaivot
     query: "kahvia"
     mode: keyword
     limit: 8
-    expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, skills/kahvin-keitto.md, skills/veden-keitto.md]
+    expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, skills/kahvin-keitto.md,
+                   skills/veden-keitto.md, todo/archive/2026-07-01.md]
 
   - id: search-keyword-aurinko
     class: query

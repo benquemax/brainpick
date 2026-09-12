@@ -224,7 +224,17 @@ class ServeState:
         self.records = [json.loads(line) for line in lines if line]
         self.kg = load_kg(bp)  # None when no T3 export is present — query degrades
         self.skills = self._load_skills(bp)
+        self.todos = self._load_todos(bp)
         self.seq = self.manifest["seq"]
+
+    @staticmethod
+    def _load_todos(bp: Path) -> list[dict]:
+        """t1/todos.json (spec/20) — absent (compiled before it existed) reads as
+        "no to-do lists"; the next compile writes it."""
+        path = bp / "t1" / "todos.json"
+        if not path.is_file():
+            return []
+        return json.loads(path.read_text(encoding="utf-8")).get("todos", [])
 
     @staticmethod
     def _load_skills(bp: Path) -> list[dict]:
