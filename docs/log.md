@@ -2,6 +2,11 @@
 
 ## 2026-09-13
 
+- Released 0.6.0: brain format 2 and everything that makes a brain shared
+  memory — day journals, to-do lists inside the brain, skills, half-life
+  ranking, `brainpick migrate`, the brain ritual, the release ledger and the
+  what's-new notice. `brainpick whats-new` prints the upgrade path
+  ([Upgrading a brain](upgrading.md)).
 - Added: [The brain ritual](brain-ritual.md) — `brainpick integrate` (every
   target) installs a static `brainpick:begin ritual (v1)` block below the
   AGENTS.md report: pull and compile at session start, consult before

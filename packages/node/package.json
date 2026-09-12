@@ -1,6 +1,6 @@
 {
   "name": "brainpick",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "pick your agent's brain — compile and serve OKF knowledge bundles (native Node engine, zero Python)",
   "license": "MIT",
   "homepage": "https://github.com/benquemax/brainpick",

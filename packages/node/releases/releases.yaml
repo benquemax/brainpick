@@ -16,7 +16,7 @@
 
 releases:
   - version: 0.6.0
-    date: unreleased
+    date: 2026-09-12
     brain_format: 2
     summary: >-
       Brain format 2 and everything that makes a brain shared memory: day

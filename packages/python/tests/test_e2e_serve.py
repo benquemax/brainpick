@@ -107,7 +107,7 @@ def test_sse_frame_format():
 def test_health(kotiaurinko):
     with TestClient(make_app(kotiaurinko)) as client:
         assert client.get("/api/health").json() == {
-            "impl": "python", "name": "brainpick", "spec_version": "0.1", "version": "0.5.0",
+            "impl": "python", "name": "brainpick", "spec_version": "0.1", "version": "0.6.0",
         }
 
 
