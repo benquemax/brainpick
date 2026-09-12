@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from brainpick import SPEC_VERSION, __version__
+from brainpick.update import check_for_update
 from brainpick.compile.t1 import (
     apply_index_section,
     apply_report_section,
@@ -48,6 +49,7 @@ class CompileResult:
     delta: dict | None
     warnings: list[str] = field(default_factory=list)
     t3_summary: dict | None = None  # --sample preview counts, printed by the CLI
+    update: dict | None = None  # spec/80: the new-version notice, when one is known
 
 
 @dataclass
@@ -93,7 +95,8 @@ def _similarity_gaps_for_report(bp: Path) -> list[dict] | None:
     return None if text is None else json.loads(text)["pairs"]
 
 
-def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict | None = None) -> None:
+def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict | None = None,
+                    update: dict | None = None) -> None:
     """Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
     already live — the bundle root, and the repo root above it when the bundle is
     a subdir. Never creates the file; writes only when the block actually changed."""
@@ -116,7 +119,8 @@ def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict
         if existing is None:
             continue
         bundle_display = os.path.relpath(root, base).replace(os.sep, "/")
-        block = render_report_block(graph, tiers, bundle_display, similarity_gaps, skills=skills)
+        block = render_report_block(graph, tiers, bundle_display, similarity_gaps, skills=skills,
+                                    update=update)
         updated = apply_report_section(existing, block)
         if updated is not None and updated != existing:
             _atomic_write(agents, updated.encode("utf-8"))
@@ -272,13 +276,15 @@ def run_compile(
             warnings.append(t3_instruction)  # said once: the next manifest records t3 = off
 
     tiers = {"t1": "fresh", "t2": t2_status, "t3": t3_status}
+    update = check_for_update("python", __version__, enabled=config.update.check)
     # The opt-in AGENTS.md brain report rides along on every compile so it stays
     # true even when nothing else changed (e.g. the markers were just installed).
-    _refresh_report(root, bp, graph, tiers, skills)
+    _refresh_report(root, bp, graph, tiers, skills, update)
     artifacts_changed = t1_changed or t2_changed or t3_changed
     unchanged = not artifacts_changed and old_manifest is not None and old_tiers == tiers
     if unchanged and not full:
-        return CompileResult(False, old_manifest["seq"], graph["stats"], None, warnings, t3_summary)
+        return CompileResult(False, old_manifest["seq"], graph["stats"], None, warnings, t3_summary,
+                             update=update)
 
     _atomic_write(bp / "t1" / "graph.json", graph_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "docs.jsonl", docs_text.encode("utf-8"))
@@ -320,7 +326,7 @@ def run_compile(
         }
         delta["seq"] = seq
 
-    return CompileResult(not unchanged, seq, graph["stats"], delta, warnings, t3_summary)
+    return CompileResult(not unchanged, seq, graph["stats"], delta, warnings, t3_summary, update=update)
 
 
 def _compile_t2_only(root: Path, bp: Path, config: Config) -> CompileResult:

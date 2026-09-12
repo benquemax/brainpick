@@ -11,6 +11,10 @@ SPEC = REPO_ROOT / "spec"
 FIXTURE_BUNDLES = SPEC / "fixtures" / "bundles"
 EXPECTED = SPEC / "fixtures" / "expected"
 
+# spec/80 [update] check: the new-version lookup never runs under test — no
+# suite may depend on pypi being reachable, and no golden may carry the line.
+os.environ.setdefault("BRAINPICK_UPDATE_CHECK", "false")
+
 
 @pytest.fixture
 def kotiaurinko(tmp_path: Path) -> Path:

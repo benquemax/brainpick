@@ -9,6 +9,14 @@ from brainpick import __version__
 from brainpick.compile.pipeline import CompileResult, check_fresh, run_compile
 
 
+def _print_update(result: CompileResult) -> None:
+    """spec/80: the proactive new-version notice — one line, never a failure."""
+    if result.update is not None:
+        u = result.update
+        print(f"note: brainpick {u['latest']} is available (you run {u['current']}): {u['hint']}",
+              flush=True)
+
+
 def _print_compiled(result: CompileResult) -> None:
     s = result.stats
     print(
@@ -47,6 +55,7 @@ def _cmd_compile(args: argparse.Namespace) -> int:
         print(f"fresh — nothing to do (seq {result.seq})")
     _print_t3_summary(result)
     _print_warnings(result)
+    _print_update(result)
 
     if args.watch:
         from watchfiles import watch as watch_sync

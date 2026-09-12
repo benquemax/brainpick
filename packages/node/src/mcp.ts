@@ -131,10 +131,16 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
       "brain_read on a skill lists its prerequisites and tools. " +
       hint;
   }
+  const update = state.update;
+  if (update) {
+    // spec/80: the notice leads the hint — first line of the first call
+    hint = `brainpick ${update.latest} is available (you run ${update.current}): ${update.hint}. ` + hint;
+  }
   const result: Record<string, unknown> = {
     bundle: basename(state.root),
     counts,
     tiers: state.tiers(),
+    ...(update ? { update: { ...update } } : {}),
     skills,
     tree,
     top_ghosts: topGhosts(state.graph),

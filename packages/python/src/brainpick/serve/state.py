@@ -201,6 +201,7 @@ class ServeState:
         # until an agent calls brain_show / POST /api/show.
         self.presentation_seq = 0
         self.presentation: dict | None = None
+        self.update: dict | None = None  # spec/80: the new-version notice, when one is known
         self.loop: asyncio.AbstractEventLoop | None = None
         self._subscribers: set[asyncio.Queue] = set()
 
@@ -209,6 +210,7 @@ class ServeState:
     def load(self) -> None:
         """Compile if stale (a serve is a compile), then hold the artifacts."""
         result = run_compile(self.root, config=self.config)
+        self.update = result.update
         if result.changed:
             self.apply_compile_result(result)
         else:

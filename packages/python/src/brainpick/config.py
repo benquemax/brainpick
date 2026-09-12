@@ -64,6 +64,14 @@ class ValidateConfig:
 
 
 @dataclass
+class UpdateConfig:
+    """[update] — the proactive new-version notice (spec/80). `check = false`
+    keeps an air-gapped or private machine off the registry for good."""
+
+    check: bool = True
+
+
+@dataclass
 class UiConfig:
     """[ui] — presentation policy the engine ships to the browser via /api/status
     (spec/50, spec/80), so the client stops guessing from the GPU tier."""
@@ -144,11 +152,12 @@ class Config:
     serve: ServeConfig = field(default_factory=ServeConfig)
     ui: UiConfig = field(default_factory=UiConfig)
     validate: ValidateConfig = field(default_factory=ValidateConfig)
+    update: UpdateConfig = field(default_factory=UpdateConfig)
     similarity_gaps: SimilarityGapsConfig = field(default_factory=SimilarityGapsConfig)
     brain: BrainConfig = field(default_factory=BrainConfig)
 
 
-_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps", "brain")
+_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "update", "similarity_gaps", "brain")
 _MODEL_TABLES = ("embedding", "extraction")
 # [models.*] tables are nested and handled separately below.
 _KNOWN_TOP = {"spec", "models", *_SECTIONS}

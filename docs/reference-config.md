@@ -4,7 +4,7 @@ about: concept
 title: "Configuration reference"
 description: "Every brainpick.toml key with its default, type and allowed values, derived from config.py and the config spec — plus layering, env overrides and the auth file."
 tags: [config, spec]
-timestamp: 2026-09-07T11:30:00Z
+timestamp: 2026-09-13T10:00:00Z
 ---
 
 # Configuration reference
@@ -66,6 +66,10 @@ Pages are named by their dotted TOML path.
 ## validate
 
 - [validate.henxels](reference/config/validate-henxels.md)
+
+## update
+
+- [update.check](reference/config/update-check.md)
 
 ## brain
 

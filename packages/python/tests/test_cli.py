@@ -319,3 +319,19 @@ def test_cli_mcp_root_honours_bundle_root(kotiaurinko):
     brain_set = resolve_brain_set([str(repo)], cwd=repo)
     assert [b.root for b in brain_set.brains] == [kotiaurinko]
     assert not brain_set.federated
+
+
+def test_compile_prints_the_update_notice_when_one_is_known(kotiaurinko, capsys, monkeypatch):
+    """spec/80: one line on compile output, only when something newer is known."""
+    import brainpick.compile.pipeline as pipeline
+
+    assert main(["compile", "--root", str(kotiaurinko)]) == 0
+    assert "is available" not in capsys.readouterr().out  # the suite runs with the check off
+
+    def fake_check(impl, current, **_kwargs):
+        return {"current": current, "latest": "9.9.9", "hint": "pip install -U brainpick"}
+
+    monkeypatch.setattr(pipeline, "check_for_update", fake_check)
+    assert main(["compile", "--root", str(kotiaurinko)]) == 0
+    out = capsys.readouterr().out
+    assert "note: brainpick 9.9.9 is available" in out and "pip install -U brainpick" in out

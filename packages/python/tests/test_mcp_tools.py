@@ -681,3 +681,13 @@ def test_brain_show_registered_as_sixth_tool_even_when_writes_refused(kotiaurink
         "brain_overview", "brain_search", "brain_read",
         "brain_neighbors", "brain_write", "brain_show",
     }
+
+
+def test_overview_update_notice_is_absent_without_one_and_leads_the_hint_with_one(kotiaurinko):
+    state = make_state(kotiaurinko)
+    plain = overview_payload(state)
+    assert "update" not in plain
+    state.update = {"current": "0.5.0", "latest": "0.6.0", "hint": "pip install -U brainpick"}
+    noticed = overview_payload(state)
+    assert noticed["update"] == state.update
+    assert noticed["hint"].startswith("brainpick 0.6.0 is available (you run 0.5.0): pip install -U brainpick.")

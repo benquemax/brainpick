@@ -48,6 +48,9 @@ max_asset_bytes = 8388608       # 8 MiB — POST /api/assets upload cap (spec/50
 [validate]
 henxels = "auto"                # auto | always | never
 
+[update]                        # the proactive new-version notice (spec/20, spec/70)
+check = true                    # false: never touch the network for a version check
+
 [brain]                         # present only on a brain, not a plain wiki (spec/85)
 format = 0                      # brain-format version; 0 = not a brain
 origin = ""                     # canonical git URL — a lookup key, never the identity
@@ -59,6 +62,30 @@ Unknown keys are warnings, not errors (config written by a newer brainpick
 must not brick an older one). `[brain]` is defined in spec/85; all of its
 keys are optional and `BRAINPICK_BRAIN_*` env overrides apply to the
 scalars.
+
+## `[update] check` — the new-version notice
+
+Agents never check for updates; the brain tells them. When `check` is true
+(default), `compile` and `serve` look up the latest published version of
+the running engine — PyPI's `https://pypi.org/pypi/brainpick/json` for the
+Python engine, npm's `https://registry.npmjs.org/brainpick/latest` for the
+Node engine — at most **once per 24 h**, with the probe timeout of spec/30
+(≤ 300 ms, a miss is silent), and cache the answer in
+`~/.cache/brainpick/latest.json` as `{"impl", "checked_at", "latest"}`.
+The lookup never blocks, never fails a compile, and never runs in tests
+(`BRAINPICK_UPDATE_CHECK=false`, the env override of this key, is the
+switch; CI sets it). What it leaks is one HTTPS request to the registry per
+day; `check = false` in `brainpick.local.toml` keeps an air-gapped or
+private machine silent for good.
+
+The result is a **notice**: `{"current", "latest", "hint"}`, present only
+when `latest` is known AND newer than `current` (semantic-version
+comparison on the `MAJOR.MINOR.PATCH` core; pre-release tags never count as
+newer). Where it surfaces is normative so every harness sees it without
+asking: the AGENTS.md report block (spec/20), `brain_overview` (spec/70),
+and one line on `compile` output. `hint` is the exact upgrade command for
+the engine that noticed: `pip install -U brainpick` or
+`npm install -g brainpick`.
 
 ## `[bundle] id` — brain identity
 

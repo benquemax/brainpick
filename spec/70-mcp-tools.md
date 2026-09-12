@@ -37,6 +37,12 @@ procedures exist before it improvises one. Budget trimming empties the
 `tree` before it touches `skills`. When skills exist, `hint` says so and
 names `brain_read` as the way to a skill's prerequisites and tools.
 
+`update` (spec/80 `[update] check`) is present only when a newer engine
+version is known: `{"current", "latest", "hint"}`, `hint` the exact upgrade
+command. The overview `hint` then starts with the notice — an agent that
+reads only the first line of its first call learns it. Never budget-trimmed
+(three short strings); absent, not `null`, when there is nothing to say.
+
 ## brain_search({query, mode?, limit?, scope?, budget_tokens?})
 
 `mode ∈ auto|keyword|semantic|graph` (default `auto`). → `{"hits":

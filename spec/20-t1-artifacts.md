@@ -194,6 +194,13 @@ skill, omitted entirely otherwise (a wiki is not a brain).
 Deterministic; cross-engine byte-identical (a conformance golden accompanies
 the first implementation).
 
+One line is not deterministic and sits outside the golden: when the engine
+knows a newer version of itself is published (`[update] check`, spec/80),
+the line `- Engine: brainpick <current> — <latest> available: <hint>`
+follows the bundle root line. It is omitted entirely when nothing newer is
+known, so the golden — rendered with the check off — never carries it, and
+a report refreshed after an upgrade loses the line on the next compile.
+
 ## Generated skills/skilltree.md
 
 When the bundle declares itself a brain (`[brain] format ≥ 1`, spec/85)

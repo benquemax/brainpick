@@ -700,3 +700,12 @@ test("showPayload reports a server-side rejection without touching local state",
   expect(queue.drain()).toEqual([]);
   expect(state.presentationSeq).toBe(0);
 });
+
+test("overview update notice is absent without one and leads the hint with one", async () => {
+  const state = await makeState(copyBundle());
+  expect(overviewPayload(state)).not.toHaveProperty("update");
+  state.update = { current: "0.5.0", latest: "0.6.0", hint: "npm install -g brainpick" };
+  const noticed = overviewPayload(state);
+  expect(noticed["update"]).toEqual(state.update);
+  expect(String(noticed["hint"]).startsWith("brainpick 0.6.0 is available (you run 0.5.0): npm install -g brainpick.")).toBe(true);
+});

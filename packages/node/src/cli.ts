@@ -17,6 +17,12 @@ import { VERSION } from "./version";
 // show-client.ts to avoid a circular import (see that file's header comment).
 export { connectableHost, postShow, type ShowResult };
 
+/** spec/80: the proactive new-version notice — one line, never a failure. */
+function printUpdate(result: CompileResult): void {
+  const u = result.update;
+  if (u) console.log(`note: brainpick ${u.latest} is available (you run ${u.current}): ${u.hint}`);
+}
+
 function printCompiled(result: CompileResult): void {
   const s = result.stats;
   console.log(
@@ -119,6 +125,7 @@ program
       if (result.changed) printCompiled(result);
       else console.log(`fresh — nothing to do (seq ${result.seq})`);
       for (const warning of result.warnings) console.log(warning);
+      printUpdate(result);
 
       if (opts.watch) {
         const { watch } = await import("chokidar");

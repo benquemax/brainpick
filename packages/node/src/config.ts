@@ -50,6 +50,12 @@ export interface ValidateConfig {
   henxels: string;
 }
 
+/** [update] — the proactive new-version notice (spec/80). `check = false`
+ * keeps an air-gapped or private machine off the registry for good. */
+export interface UpdateConfig {
+  check: boolean;
+}
+
 export interface UiConfig {
   max_nodes_mobile: number; // node cap the web UI applies on mobile/weak GPUs
   default_mode: string; // cosmos | brain — the view the UI opens in (spec/80)
@@ -114,6 +120,7 @@ export interface Config {
   serve: ServeConfig;
   ui: UiConfig;
   validate: ValidateConfig;
+  update: UpdateConfig;
   similarity_gaps: SimilarityGapsConfig;
   brain: BrainConfig;
 }
@@ -139,12 +146,13 @@ export function defaultConfig(): Config {
     },
     ui: { max_nodes_mobile: 8000, default_mode: "cosmos" },
     validate: { henxels: "auto" },
+    update: { check: true },
     similarity_gaps: { threshold: 0.75, max_pairs: 50 },
     brain: { format: 0, origin: "", audience: "personal", readers: [] },
   };
 }
 
-const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate", "similarity_gaps", "brain"] as const;
+const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate", "update", "similarity_gaps", "brain"] as const;
 // [models.*] tables are nested and handled separately below.
 const KNOWN_TOP = new Set(["spec", "models", ...SECTIONS]);
 

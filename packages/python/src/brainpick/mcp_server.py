@@ -98,10 +98,15 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
     if skills:
         hint = (f"{len(skills)} skills — read the matching one before improvising a procedure; "
                 "brain_read on a skill lists its prerequisites and tools. " + hint)
+    update = getattr(state, "update", None)
+    if update is not None:  # spec/80: the notice leads the hint — first line of the first call
+        hint = (f"brainpick {update['latest']} is available (you run {update['current']}): "
+                f"{update['hint']}. " + hint)
     result = {
         "bundle": state.root.name,
         "counts": counts,
         "tiers": state.manifest.get("tiers", {}),
+        **({"update": dict(update)} if update is not None else {}),
         "skills": skills,
         "tree": tree,
         "top_ghosts": top_ghosts(state.graph),

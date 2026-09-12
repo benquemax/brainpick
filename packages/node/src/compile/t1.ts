@@ -1,4 +1,5 @@
 /** T1: the deterministic tier — graph, docs substrate, generated index (spec/20). */
+import type { UpdateNotice } from "../update";
 import { cmpStr, sha256Hex } from "../core/canonical";
 import { posixDirname, type Document } from "../core/bundle";
 import type { SkillsArtifact } from "./skills";
@@ -311,6 +312,7 @@ export function renderReportBlock(
   bundleRoot = ".",
   similarityGaps: ReportGapPair[] | null = null,
   skills: SkillsArtifact | null = null,
+  update: UpdateNotice | null = null,
 ): string {
   const stats = (graph.stats ?? {}) as Partial<GraphStats>;
   const nodes = graph.nodes ?? [];
@@ -376,6 +378,10 @@ export function renderReportBlock(
   }
 
   lines.push(`- Bundle root: ${bundleRoot}`);
+  if (update !== null) {
+    // spec/80: the one non-deterministic line, outside the golden
+    lines.push(`- Engine: brainpick ${update.current} — ${update.latest} available: ${update.hint}`);
+  }
 
   const body = REPORT_PREAMBLE + "\n\n" + lines.join("\n") + "\n";
   const stamp = sha256Hex(body).slice(0, 8);
