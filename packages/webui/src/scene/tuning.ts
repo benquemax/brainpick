@@ -117,6 +117,22 @@ export const ENTITY_EDGE = {
 } as const;
 
 /**
+ * `depends_on` edges — a skill's declared prerequisite (spec/20, docs/skills.md).
+ * A style of its own, so the skill tree reads apart from the prose web: a warm
+ * coral wire (hue ~14°, outside both the about-color sweep 75°–332° and the
+ * entity gold band 44° ± 30°), bolder than an idle link, and graded along its
+ * length — dimmer at the skill, brightest at the prerequisite — so the line
+ * points at what to read first without an arrowhead GL lines cannot draw.
+ */
+export const SKILL_EDGE = {
+  tint: [1.0, 0.46, 0.34] as [number, number, number],
+  /** Above 1: a prerequisite line is bolder than the calm idle web. */
+  bright: 1.6,
+  /** Brightness at the skill end relative to the prerequisite end. */
+  tailFactor: 0.45,
+} as const;
+
+/**
  * THE TWO-AXIS ONTOLOGY lens (docs/ontology.md): COLOR = about (a page's
  * ontological subject), SHAPE = type (its document form) — orthogonal
  * fields, orthogonal visual channels. Both are OPTIONAL frontmatter; a node

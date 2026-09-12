@@ -4,7 +4,7 @@ about: concept
 title: "Skills"
 description: "Procedural memory in a brain — a skill is a distilled, tested procedure an agent follows, with its repetitive parts demoted to tools it drives; recognised by type, linked by depends_on, listed first, boosted in search, never executed by brainpick — and why brainpick ships the framework but no skills of its own."
 tags: [brain-format, agents, skills]
-timestamp: 2026-09-13T11:00:00Z
+timestamp: 2026-09-13T11:30:00Z
 ---
 
 # Skills
@@ -147,3 +147,7 @@ canonical and carries the prerequisites and tools. Nothing is copied, so
 nothing drifts; a stem of `brainpick` is skipped with a warning because it
 would shadow the engine's own skill, and `agents-md` writes no stubs.
 Search, overview and `brain_read` ignore the key entirely.
+
+In the [holographic brain](holographic-brain.md) a `depends_on` edge has a
+style of its own — a warm wire that brightens toward the prerequisite — so
+the skill tree reads apart from the prose web at a glance.

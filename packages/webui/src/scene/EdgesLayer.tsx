@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { nodeStagger, type GraphRuntime } from './runtime';
 import { edgeLensDim, focusIndex, selectionRenderId } from './emphasis';
-import { BRAIN, DIM_EASE, EDGE_GLOW, ENTITY_EDGE, glslFloat as f, TIME_MACHINE } from './tuning';
+import { edgeVertexColor } from './edgeStyle';
+import { BRAIN, DIM_EASE, EDGE_GLOW, glslFloat as f, TIME_MACHINE } from './tuning';
 
 const VERTEX = /* glsl */ `
   attribute vec3 aBrain;
@@ -135,10 +136,9 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
   const hasBrain = bp.length >= runtime.liveCount * 3;
 
   for (let e = 0; e < runtime.edgeCount; e++) {
-    // kind: 0 doc link, 1 T3 relation, 2 virtual gravitation.
+    // kind (scene/edgeStyle EDGE_KIND): 0 doc link, 1 T3 relation, 2 virtual gravitation, 3 depends_on.
     const kind = runtime.edgeKinds[e] ?? 0;
     const weight = runtime.edgeWeights[e] ?? 1;
-    const bright = kind === 1 ? ENTITY_EDGE.relationFloor + (1 - ENTITY_EDGE.relationFloor) * weight : 1;
     const src = runtime.edgePairs[e * 2] ?? 0;
     const tgt = runtime.edgePairs[e * 2 + 1] ?? 0;
     // The edge fires from whichever endpoint saw activity most recently.
@@ -165,15 +165,15 @@ function buildGeometry(runtime: GraphRuntime): THREE.BufferGeometry {
       fire[v] = edgeFire;
       birthIdx[v] = edgeBirth;
       deathIdx[v] = edgeDeath;
-      if (kind === 2) {
-        colors[v * 3] = ENTITY_EDGE.virtualTint[0] * ENTITY_EDGE.virtualBright;
-        colors[v * 3 + 1] = ENTITY_EDGE.virtualTint[1] * ENTITY_EDGE.virtualBright;
-        colors[v * 3 + 2] = ENTITY_EDGE.virtualTint[2] * ENTITY_EDGE.virtualBright;
-      } else {
-        colors[v * 3] = (runtime.colors[node * 3] ?? 0.6) * bright;
-        colors[v * 3 + 1] = (runtime.colors[node * 3 + 1] ?? 0.8) * bright;
-        colors[v * 3 + 2] = (runtime.colors[node * 3 + 2] ?? 1) * bright;
-      }
+      const [cr, cg, cb] = edgeVertexColor(
+        kind,
+        end === 0 ? 0 : 1,
+        [runtime.colors[node * 3] ?? 0.6, runtime.colors[node * 3 + 1] ?? 0.8, runtime.colors[node * 3 + 2] ?? 1],
+        weight,
+      );
+      colors[v * 3] = cr;
+      colors[v * 3 + 1] = cg;
+      colors[v * 3 + 2] = cb;
     }
   }
   const posAttr = new THREE.Float32BufferAttribute(positions, 3);

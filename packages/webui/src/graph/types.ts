@@ -22,8 +22,8 @@ export interface GraphNode {
  * synthetic kinds the entity layer feeds through the same render path: a
  * `relation` is a T3 entity↔entity edge, a `virtual` is the weak entity→source-doc
  * tie that lets an entity gravitate toward the docs that mention it (overlay).
- * A `depends_on` is a skill's declared prerequisite (spec/20) — drawn like a
- * link until it gets a style of its own.
+ * A `depends_on` is a skill's declared prerequisite (spec/20) — drawn in the
+ * skill style (scene/edgeStyle): a warm wire graded toward the prerequisite.
  */
 export type EdgeKind = 'link' | 'wikilink' | 'depends_on' | 'relation' | 'virtual';
 

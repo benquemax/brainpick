@@ -7,6 +7,7 @@
  * nodes linger briefly with a death timestamp so the sprite shader can fade
  * them out (spec 60 leave animation).
  */
+import { edgeKindFlag } from './edgeStyle';
 import type { UIStoreApi, ViewMode } from '../state/store';
 import type { UIState } from '../state/store';
 import { buildSeeds, diffGraph } from '../layout/simShared';
@@ -141,7 +142,7 @@ export class GraphRuntime {
   edgePairs: Uint32Array = new Uint32Array(0);
   /** Per-edge brightness weight (relation weight / virtual hint / 1 for links). */
   edgeWeights: Float32Array = new Float32Array(0);
-  /** Per-edge kind flag: 0 link, 1 relation, 2 virtual — EdgesLayer tints by it. */
+  /** Per-edge kind flag (scene/edgeStyle EDGE_KIND): 0 link, 1 relation, 2 virtual, 3 depends_on — EdgesLayer tints by it. */
   edgeKinds: Uint8Array = new Uint8Array(0);
   edgeCount = 0;
   /** Ghost links whose source is live: index + phantom offset (scene/ghosts). */
@@ -468,7 +469,7 @@ export class GraphRuntime {
       pairs.push(s, t);
       links.push({ source: s, target: t, count: edge.count });
       weights.push(edge.weight ?? 1);
-      kinds.push(edge.kind === 'relation' ? 1 : edge.kind === 'virtual' ? 2 : 0);
+      kinds.push(edgeKindFlag(edge.kind));
       edgeKeys.push(`${edge.source}${edge.target}${edge.kind}${edge.count}`);
     }
 

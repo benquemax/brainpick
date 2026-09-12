@@ -4,7 +4,7 @@ about: thing
 title: Holographic brain
 description: The signature visualization — the knowledge graph arranged into an anatomical brain you spin and pinch, morphing to a flat GPU cosmos for analysis.
 tags: [ui]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-13T11:30:00Z
 ---
 
 # Holographic brain
@@ -34,7 +34,12 @@ change: new concepts materialize beside their neighbors, deletions fade, and
 recent edits travel as light pulses along edges — watching an agent think is
 the default demo. A time scrubber replays the brain's growth from its
 history, and the layer toggle swaps between explicit links and the
-[knowledge graph tier](knowledge-graph-tier.md)'s entities.
+[knowledge graph tier](knowledge-graph-tier.md)'s entities. Every edge kind
+has a look of its own: a doc link carries its endpoints' colors, an entity
+relation dims with its weight, and a skill's `depends_on` prerequisite
+([Skills](skills.md)) is a warm coral wire, bolder than the idle web and
+graded from dim at the skill to bright at the prerequisite — the line points
+at what to read first, without an arrowhead.
 
 And it ships as an installable, touch-first PWA from day one: one-finger
 orbit, pinch dolly, two-finger spin, offline snapshot of your last brain,
