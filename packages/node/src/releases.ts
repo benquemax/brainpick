@@ -144,8 +144,8 @@ export function renderRelease(release: Release): string {
 }
 
 /** What `brainpick whats-new` prints: the releases the notice points at (or the
- * current release alone when nothing lies between), every `agent_action`
- * collected under *Do next*, and the format part when it applies. */
+ * current release alone when nothing lies between) newest first, then *Do next*
+ * — a numbered checklist in the order the actions should be done. */
 export function renderWhatsNew(
   ledger: Release[],
   current: string,
@@ -164,15 +164,17 @@ export function renderWhatsNew(
     }
   }
   const out = shown.map(renderRelease);
-  const actions = shown.flatMap((r) =>
-    r.changes.filter((c) => c.agent_action).map((c) => oneLine(c.agent_action!)),
-  );
+  // Do next: a numbered checklist in the order to do them — the oldest shown
+  // release's actions first, each in ledger order, the format part last.
+  const actions = [...shown]
+    .reverse()
+    .flatMap((r) => r.changes.filter((c) => c.agent_action).map((c) => oneLine(c.agent_action!)));
   const notice = whatsNew(ledger, current, since, brainFormat);
   const fmt = notice?.format;
-  if (actions.length || fmt) {
+  if (fmt) actions.push(`brain format ${fmt.current} → ${fmt.latest}: run \`brainpick migrate --to ${fmt.latest}\``);
+  if (actions.length) {
     out.push("Do next:\n");
-    for (const action of actions) out.push(`- ${action}\n`);
-    if (fmt) out.push(`- brain format ${fmt.current} → ${fmt.latest}: run \`brainpick migrate --to ${fmt.latest}\`\n`);
+    out.push(actions.map((action, i) => `${i + 1}. ${action}\n`).join(""));
   }
   return out.join("\n");
 }

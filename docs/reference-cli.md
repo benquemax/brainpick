@@ -4,7 +4,7 @@ about: concept
 title: "CLI reference"
 description: "Every brainpick subcommand and its flags, derived from the argparse CLI — compile and serve, the read mirrors, writes, presentations, onboarding and auth."
 tags: [cli, spec]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-13T14:00:00Z
 ---
 
 # CLI reference
@@ -40,6 +40,8 @@ the read tools in the terminal, present live, onboard, and manage auth.
 
 - [brainpick whats-new](reference/cli/whats-new.md) — what changed since this brain was last compiled, and what to do about it.
 - [brainpick migrate](reference/cli/migrate.md) — rewrite a brain to a newer brain format; `--dry-run` previews.
+
+The whole upgrade, as one walk: [Upgrading a brain](upgrading.md).
 
 ## Authentication
 

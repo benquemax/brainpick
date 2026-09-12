@@ -174,7 +174,17 @@ entries the notice points at — summary, changes, and every
 the manifest's `generator.version`, else the current version alone (the
 running engine's own notes: always something useful, never "nothing").
 `--all` prints the whole ledger; `--json` the raw entries plus the notice.
-The format part is always appended when it applies.
+
+**Do next is a checklist**, not a list: its items are numbered `1.`, `2.`,
+… in the order they should be done — the actions of the *oldest* shown
+release first (an agent that missed three releases catches up in the order
+they happened), each release's actions in ledger order, and the format
+part (`brain format <c> → <l>: run \`brainpick migrate --to <l>\``) last
+when it applies. Ledger authors therefore order a release's `changes` so
+its `agent_action`s read as an upgrade path: the engine and the brain's
+bytes first (upgrade, migrate), then the wiring that makes the brain shared
+(integrate, register), then habits. An `agent_action` that names a command
+names it in backticks and exactly as it is typed.
 
 Conformance (class `whats-new`): a fixture ledger under
 `spec/fixtures/releases/` and cases giving `current`, `since`, `format`

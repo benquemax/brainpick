@@ -11,12 +11,14 @@ settings:
     above: 0.85
     # the three shipped SKILL.md copies are kept identical ON PURPOSE by
     # scripts/sync-skill.mjs (one canonical source, shipped into both packages),
-    # as are the three releases.yaml copies by scripts/sync-releases.mjs;
-    # the migrated golden tree's todo/index.md is what spec/85's migration
-    # writes, identical to the format-2 fixture's by definition;
+    # as are the three releases.yaml copies by scripts/sync-releases.mjs and
+    # the three RITUAL.md copies by scripts/sync-ritual.mjs;
+    # the migrated golden tree (spec/fixtures/expected/*/migrated/) is what
+    # spec/85's migration writes from the fixture bundle — a rewrite of those
+    # very files, near-identical by definition, reviewed as a diff at regen;
     # the packages/*/tsconfig.json files are intentionally near-identical
     # scaffolding (same tsup+node20 TS setup repeated per package on purpose)
-    ignore: ["**/__init__.py", "**/SKILL.md", "**/releases.yaml", "spec/fixtures/expected/*/migrated/todo/index.md", "**/*.codx/_meta.ts", "**/tsconfig.json"]
+    ignore: ["**/__init__.py", "**/SKILL.md", "**/RITUAL.md", "**/releases.yaml", "spec/fixtures/expected/*/migrated/**", "**/*.codx/_meta.ts", "**/tsconfig.json"]
 
 henxels:
   - henxel: "The scratch folder survives: _temp/ exists with its .gitkeep"

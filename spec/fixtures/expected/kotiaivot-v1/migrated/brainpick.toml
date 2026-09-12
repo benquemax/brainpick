@@ -6,3 +6,14 @@ root = "."
 [brain]
 format = 2              # the brainpick brain format (spec/85)
 audience = "personal"
+
+# Memories fade — slowly (spec/50). A doc's search score is multiplied by
+# 2^(-age / half_life) on its `timestamp`, floored at 1/16: nothing is hidden,
+# it only ranks lower. STEEPEN the curve here (fewer days) instead of deleting;
+# a page can pin itself with `half_life: 0` in its frontmatter.
+[half_life]
+default = 365           # days; 0 = never fades
+[half_life.folders]     # folder → days, the most nested folder wins
+journals = 180          # episodic memory fades first
+todo = 90               # an open list should be a fresh list
+skills = 0              # procedural memory never fades

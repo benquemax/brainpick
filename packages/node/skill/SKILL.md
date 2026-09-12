@@ -17,6 +17,22 @@ the brain comes up short.
 
 Start every session with one call to get oriented, then search.
 
+## The ritual: pull first, push last
+
+A brain is shared memory — other sessions and machines commit to it between
+yours. Four habits keep it true (the same four `brainpick integrate` installs in
+AGENTS.md as the *brain ritual* block):
+
+1. **Start:** `git pull --ff-only` in every brain repo, then `brainpick compile
+   --root <bundle>` — `.brainpick/` is gitignored, so a pull alone leaves the brain
+   stale. If compile says *What's new*, run `brainpick whats-new` and walk its
+   *Do next* list before continuing.
+2. **Consult** the brain before grepping or answering from memory (this file).
+3. **Record while you work** — fix a wrong fact where you found it; today's journal
+   is `journals/YYYY-MM-DD.md`, open work is `todo/open.md`.
+4. **Finish:** `git add -A && git commit -m "…" && git push` in every brain repo you
+   changed. A change on one machine is not shared memory.
+
 ## The six MCP tools
 
 Call these if a `brainpick` MCP server is connected (tools are named `brain_*`):

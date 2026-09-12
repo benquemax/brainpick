@@ -119,8 +119,9 @@ def render_release(release: dict) -> str:
 def render_whats_new(ledger: Ledger, current: str, since: str | None, brain_format: int | None,
                      everything: bool = False) -> str:
     """What `brainpick whats-new` prints: the releases the notice points at (or the
-    current release alone when nothing lies between), every `agent_action`
-    collected under *Do next*, and the format part when it applies."""
+    current release alone when nothing lies between) newest first, then *Do next*
+    — a numbered checklist in the order the actions should be done: the oldest
+    shown release's actions first, each in ledger order, the format part last."""
     if everything:
         shown = list(ledger)
     else:
@@ -128,14 +129,13 @@ def render_whats_new(ledger: Ledger, current: str, since: str | None, brain_form
         if not shown:
             shown = [r for r in ledger if str(r["version"]) == current] or _at_most(ledger, current)[:1]
     out = [render_release(r) for r in shown]
-    actions = [_one_line(c["agent_action"]) for r in shown for c in r.get("changes", [])
+    actions = [_one_line(c["agent_action"]) for r in reversed(shown) for c in r.get("changes", [])
                if c.get("agent_action")]
     notice = whats_new(ledger, current, since, brain_format)
     fmt = notice.get("format") if notice else None
-    if actions or fmt:
+    if fmt:
+        actions.append(f"brain format {fmt['current']} → {fmt['latest']}: run `brainpick migrate --to {fmt['latest']}`")
+    if actions:
         out.append("Do next:\n")
-        for action in actions:
-            out.append(f"- {action}\n")
-        if fmt:
-            out.append(f"- brain format {fmt['current']} → {fmt['latest']}: run `brainpick migrate --to {fmt['latest']}`\n")
+        out.append("".join(f"{i}. {action}\n" for i, action in enumerate(actions, 1)))
     return "\n".join(out)

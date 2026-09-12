@@ -23,6 +23,8 @@ from brainpick.compile.t1 import build_docs_records, render_report_block  # noqa
 from brainpick.compile.t2 import build_chunks  # noqa: E402
 from brainpick.core.bundle import scan  # noqa: E402
 from brainpick.core.canonical import canonical_jsonl  # noqa: E402
+from brainpick.integrate import render_ritual_block  # noqa: E402
+from brainpick.releases import load_ledger, render_whats_new  # noqa: E402
 
 SPEC = REPO / "spec"
 BUNDLES = SPEC / "fixtures" / "bundles"
@@ -151,6 +153,24 @@ def regen_migrate(case: dict) -> None:
             print(f"golden: {path.relative_to(REPO)}")
 
 
+def regen_whats_new_text(case: dict) -> None:
+    """What `brainpick whats-new` prints for the fixture ledger (spec/80): the
+    shown releases and the numbered Do next checklist."""
+    ledger = load_ledger(REPO / "spec" / "fixtures" / "releases" / case["ledger"])
+    text = render_whats_new(ledger, case["current"], case.get("since"), case.get("format"))
+    dst = EXPECTED / "releases" / case["expected_text"]
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(text, encoding="utf-8")
+    print(f"golden: {dst.relative_to(REPO)}")
+
+
+def regen_ritual(case: dict) -> None:
+    """The brain ritual block `brainpick integrate` installs (spec/20)."""
+    dst = EXPECTED / case["artifact"]
+    dst.write_text(render_ritual_block(), encoding="utf-8")
+    print(f"golden: {dst.relative_to(REPO)}")
+
+
 def main() -> None:
     for case in CASES:
         if case["class"] == "compile":
@@ -170,6 +190,10 @@ def main() -> None:
             regen_delta(case)
         elif case["class"] == "migrate":
             regen_migrate(case)
+        elif case["class"] == "whats-new-text":
+            regen_whats_new_text(case)
+        elif case["class"] == "ritual":
+            regen_ritual(case)
     print("done — review the diffs like code before committing.")
 
 

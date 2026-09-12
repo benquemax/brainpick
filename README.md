@@ -260,14 +260,20 @@ compiles the brain, and wires itself to it. Paste this to the agent:
 > `uvx henxels init --template brainpick-brain` for a brain (an agent's
 > memory in `_brain/`) or `uvx henxels init --template okf-llm-wiki` for a
 > plain wiki (`_wiki/`); then run `brainpick init` again. Then run
-> `brainpick integrate claude-code` (or `opencode`, or `agents-md`) to
-> install the Agent Skill and print the MCP snippet — wire it into the harness
-> config. Register the bundle so a single entry fronts the whole brain:
+> `brainpick integrate claude-code` (or `opencode`, `dsh`, or `agents-md`)
+> to install the Agent Skill, print the MCP snippet — wire it into the harness
+> config — and install the brain ritual in AGENTS.md: pull and compile at
+> session start, consult the brain before answering, commit and push before
+> finishing. Register the bundle so a single entry fronts the whole brain:
 > `brainpick register . --implant`, plus `brainpick register ~/brain
 > --cortex` if I have a personal brain of my own. From then on, consult the
 > brain before grepping: `brain_overview` first, then `brain_search`,
 > `brain_read`, `brain_neighbors`. Finally commit the bundle and the
-> brainpick config.
+> brainpick config, and push.
+
+Already have a brain? `brainpick whats-new` prints what changed since it was
+last compiled and a numbered *Do next* — walk it top to bottom and the brain
+is current ([Upgrading a brain](https://github.com/benquemax/brainpick/blob/main/docs/upgrading.md)).
 
 No server appears anywhere in that flow: agents talk to `brainpick mcp`
 over stdio, spawned on demand by the harness itself. The read tools also

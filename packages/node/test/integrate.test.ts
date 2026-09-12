@@ -9,7 +9,14 @@ import { runCompile } from "../src/compile/pipeline";
 import { REPORT_BEGIN_PREFIX, REPORT_END_MARKER } from "../src/compile/t1";
 import {
   exportedSkillStubs,
+  installRitual,
+  renderRitualBlock,
   renderSkillStub,
+  REPORT_PLACEHOLDER,
+  RITUAL_BEGIN_PREFIX,
+  RITUAL_END_MARKER,
+  RITUAL_VERSION,
+  ritualPath,
   runIntegrate,
   SKILL_DESTINATIONS,
   skillPath,
@@ -203,5 +210,88 @@ describe("exported skills", () => {
     expect(await runIntegrate("claude-code", bundle, { dryRun: true, print: (l) => lines.push(l) })).toBe(0);
     expect(existsSync(join(repo, ".claude"))).toBe(false);
     expect(lines.join("\n")).toContain("kahvin-keitto");
+  });
+});
+
+describe("the brain ritual block (spec/20)", () => {
+  const CANONICAL_RITUAL = join(REPO_ROOT, "integrations", "ritual", "RITUAL.md");
+
+  test("the shipped ritual is byte-identical to the canonical and renders as the golden", () => {
+    expect(readFileSync(ritualPath(), "utf8")).toBe(readFileSync(CANONICAL_RITUAL, "utf8"));
+    const block = renderRitualBlock();
+    expect(block.startsWith(`${RITUAL_BEGIN_PREFIX}${RITUAL_VERSION}) -->\n`)).toBe(true);
+    expect(block.endsWith(RITUAL_END_MARKER + "\n")).toBe(true);
+    expect(block).toContain("git pull --ff-only");
+    expect(block).toContain("git push");
+    const golden = join(REPO_ROOT, "spec", "fixtures", "expected", "ritual-block.md");
+    expect(block).toBe(readFileSync(golden, "utf8"));
+  });
+
+  test("installs directly below the report block, above henxels", () => {
+    const text = "# A\n\nIntro.\n\n" + REPORT_PLACEHOLDER + "\n\n<!-- henxels:begin -->\nc\n<!-- henxels:end -->\n";
+    const out = installRitual(text);
+    const after = out.slice(out.indexOf(REPORT_END_MARKER) + REPORT_END_MARKER.length);
+    expect(after.startsWith("\n\n" + RITUAL_BEGIN_PREFIX)).toBe(true);
+    expect(out.indexOf(RITUAL_END_MARKER)).toBeLessThan(out.indexOf("<!-- henxels:begin -->"));
+    expect(out).toContain("Intro.");
+    expect(out).toContain("\nc\n");
+  });
+
+  test("without a report it follows the report placement", () => {
+    const out = installRitual("# A\n\nIntro.\n\n<!-- henxels:begin -->\nc\n<!-- henxels:end -->\n");
+    expect(out.indexOf(RITUAL_BEGIN_PREFIX)).toBeLessThan(out.indexOf("<!-- henxels:begin -->"));
+    expect(installRitual("# A\n").endsWith(RITUAL_END_MARKER + "\n")).toBe(true);
+  });
+
+  test("is idempotent and replaces an older version in place", () => {
+    const once = installRitual("# A\n");
+    expect(installRitual(once)).toBe(once);
+    const stale = once
+      .replace(`${RITUAL_BEGIN_PREFIX}${RITUAL_VERSION}) -->`, `${RITUAL_BEGIN_PREFIX}0) -->`)
+      .replace("git pull --ff-only", "OLD TEXT");
+    expect(installRitual(stale)).toBe(once);
+  });
+
+  test("agents-md installs it below the report and says so", async () => {
+    const { repo, bundle } = gitRepoWithBundle();
+    const lines: string[] = [];
+    expect(await runIntegrate("agents-md", bundle, { print: (l) => lines.push(l) })).toBe(0);
+    const text = readFileSync(join(repo, "AGENTS.md"), "utf8");
+    expect(text.indexOf(REPORT_END_MARKER)).toBeLessThan(text.indexOf(RITUAL_BEGIN_PREFIX));
+    expect(lines.join("\n")).toContain("ritual: installed");
+    lines.length = 0;
+    await runIntegrate("agents-md", bundle, { print: (l) => lines.push(l) });
+    expect(lines.join("\n")).toContain("ritual: already current");
+  });
+
+  test.each(["claude-code", "opencode"])("%s installs it only into an existing AGENTS.md", async (target) => {
+    const { repo, bundle } = gitRepoWithBundle();
+    const lines: string[] = [];
+    expect(await runIntegrate(target, bundle, { print: (l) => lines.push(l) })).toBe(0);
+    expect(existsSync(join(repo, "AGENTS.md"))).toBe(false);
+    expect(lines.join("\n")).toContain("no AGENTS.md");
+    writeFileSync(join(repo, "AGENTS.md"), "# A\n", "utf8");
+    expect(await runIntegrate(target, bundle, silent)).toBe(0);
+    expect(readFileSync(join(repo, "AGENTS.md"), "utf8")).toContain(RITUAL_BEGIN_PREFIX);
+  });
+
+  test("dry-run names the ritual without writing", async () => {
+    const { repo, bundle } = gitRepoWithBundle();
+    writeFileSync(join(repo, "AGENTS.md"), "# A\n", "utf8");
+    const lines: string[] = [];
+    await runIntegrate("agents-md", bundle, { dryRun: true, print: (l) => lines.push(l) });
+    expect(lines.join("\n")).toContain("ritual");
+    expect(readFileSync(join(repo, "AGENTS.md"), "utf8")).toBe("# A\n");
+  });
+
+  test("compile never touches the ritual block", async () => {
+    const { repo, bundle } = gitRepoWithBundle();
+    await runIntegrate("agents-md", bundle, silent);
+    const agents = join(repo, "AGENTS.md");
+    const before = readFileSync(agents, "utf8");
+    await runCompile(bundle, true);
+    const after = readFileSync(agents, "utf8");
+    const slice = (t: string) => t.slice(t.indexOf(RITUAL_BEGIN_PREFIX), t.indexOf(RITUAL_END_MARKER));
+    expect(slice(after)).toBe(slice(before));
   });
 });

@@ -4,7 +4,7 @@ about: concept
 title: "Spec: T1 artifacts"
 description: "The deterministic heart — document scanning, link extraction, graph.json (nodes, edges, ghosts, islands, orphans, tags), docs.jsonl, skills.json, todos.json, and the generated index and skill tree."
 tags: [spec]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-13T14:00:00Z
 ---
 
 # Spec: T1 artifacts
@@ -26,4 +26,8 @@ nodes; **islands** are the non-mainland connected components. This is the
 concrete form of the [artifact spec](../../artifact-spec.md) and the T1 rung of
 [the tiers](../../the-tiers.md); the opt-in AGENTS.md brain report shares the
 same fence mechanics as [agent integrations](../../agent-integrations.md).
+Beside the report, `brainpick integrate` installs the static
+[brain ritual](../../brain-ritual.md) block (`brainpick:begin ritual (v1)`),
+a conformance golden (class `ritual`) compile never touches.
+
 Back to [Spec reference](../../reference-spec.md).

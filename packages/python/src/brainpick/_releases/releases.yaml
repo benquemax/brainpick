@@ -19,8 +19,11 @@ releases:
     date: unreleased
     brain_format: 2
     summary: >-
-      Brain format 2 (day journals, to-do lists inside the brain), skills the
-      engine recognises, half-life ranking, a migrate command, and this ledger.
+      Brain format 2 and everything that makes a brain shared memory: day
+      journals, to-do lists inside the brain, skills the engine recognises,
+      half-life ranking, `brainpick migrate`, the brain ritual in AGENTS.md,
+      and this ledger. Do next reads as the upgrade path — walk it once, top
+      to bottom, and the brain is current.
     changes:
       - kind: added
         area: brain
@@ -32,24 +35,30 @@ releases:
           with closed items rolled into `todo/archive/YYYY-MM-DD.md`. Format 1
           brains keep working unchanged.
         agent_action: >-
-          Run `brainpick migrate --to 2` (add `--dry-run` to preview) in the
-          brain's repo, review `git diff`, compile, commit. Then journal into
-          `journals/<today>.md` and park work in `todo/open.md`, not `_todo.md`.
+          In the brain's repo run `brainpick migrate --to 2` (`--dry-run`
+          first to preview) — it splits the month journals into day files,
+          rewrites the links, moves `_todo.md` into `todo/open.md`, stamps
+          `format = 2` and seeds `[half_life]` — then review `git diff` and
+          commit.
       - kind: added
         area: cli
         text: >-
           `brainpick migrate --to N` — the one command that rewrites committed
           bytes: deterministic, mechanical, writes by default, `--dry-run`
-          prints the action list and a diff.
+          prints the action list and a diff. It seeds the format's config
+          defaults (`[half_life]`) when they are absent.
       - kind: added
         area: cli
         text: >-
-          `brainpick whats-new` prints this ledger for the releases since the
-          brain was last compiled; compile, the AGENTS.md report and
-          brain_overview carry a one-line notice pointing at it.
+          The brain ritual: `brainpick integrate <target>` installs a fenced
+          `brainpick:begin ritual` block in AGENTS.md beside the report — pull
+          and compile at session start, consult the brain before grepping or
+          answering from memory, record while working, commit and push before
+          finishing. The shipped Agent Skill says the same.
         agent_action: >-
-          When a compile or overview says "What's new", run `brainpick
-          whats-new` once and act on its "Do next" lines.
+          Run `brainpick integrate agents-md` (or `claude-code` / `opencode` /
+          `dsh`) in every repo whose AGENTS.md carries the brain report, so the
+          ritual block lands next to it; then follow it — pull first, push last.
       - kind: added
         area: brain
         text: >-
@@ -59,19 +68,38 @@ releases:
           brain_overview names them first. A `type: playbook` is a how-to for
           humans, not a skill. `brainpick skill list|new` scaffold them.
         agent_action: >-
-          Before improvising a procedure, read the matching skill from
-          brain_overview's `skills`; write new ones with `brainpick skill new`.
+          Retype every agent-facing `type: playbook` in the brain to
+          `type: skill` (a playbook is for humans); write new procedures with
+          `brainpick skill new <name>`; read the matching skill from
+          brain_overview's `skills` before improvising one.
+      - kind: added
+        area: cli
+        text: >-
+          `brainpick integrate --export agent-skill` writes a pointer stub for
+          every exported skill (`export: agent-skill` in its frontmatter) into
+          the host's skills folder.
       - kind: added
         area: search
         text: >-
           Half-life ranking (spec/50): `[half_life] default` days and a
           `[half_life.folders]` table fade stale docs by `2^(-age/half_life)`,
           floored at 1/16; a doc's own `half_life` frontmatter overrides both.
-          Off (0) unless configured; the brain template sets a slow 365-day
-          default with faster journals and to-dos.
+          Off (0) unless configured; migrate and the brain template set a slow
+          365-day default with faster journals (180) and to-dos (90), skills
+          never fade.
         agent_action: >-
-          When rotten notes keep outranking fresh ones, steepen the folder's
+          When rotten notes keep outranking fresh ones, steepen that folder's
           half-life in `brainpick.toml` — never delete history to fix ranking.
+      - kind: added
+        area: cli
+        text: >-
+          `brainpick whats-new` prints this ledger for the releases since the
+          brain was last compiled, with Do next as a numbered checklist;
+          compile, the AGENTS.md report and brain_overview carry a one-line
+          notice pointing at it.
+        agent_action: >-
+          When a compile or overview says "What's new", run `brainpick
+          whats-new` once and walk its Do next list top to bottom.
       - kind: added
         area: search
         text: >-
@@ -88,11 +116,6 @@ releases:
         text: >-
           Embedding detection is multilingual first: `bge-m3` leads, and
           English-only models are named as such by `brainpick init`.
-      - kind: added
-        area: cli
-        text: >-
-          `brainpick integrate --export agent-skill` writes a pointer stub for
-          every exported skill into the host's skills folder.
       - kind: changed
         area: webui
         text: depends_on edges are drawn in a style of their own.

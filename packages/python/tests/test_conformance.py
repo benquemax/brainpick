@@ -323,3 +323,29 @@ def test_whats_new_notice(case):
 
     ledger = load_ledger(SPEC / "fixtures" / "releases" / case["ledger"])
     assert whats_new(ledger, case["current"], case["since"], case["format"]) == case["expected"]
+
+
+@pytest.mark.parametrize("case", _cases("whats-new-text"), ids=_case_ids("whats-new-text"))
+def test_whats_new_text(case):
+    """spec/80: what `brainpick whats-new` prints — the shown releases and the
+    numbered Do next checklist in the order to do them — byte for byte."""
+    from brainpick.releases import load_ledger, render_whats_new
+
+    ledger = load_ledger(SPEC / "fixtures" / "releases" / case["ledger"])
+    text = render_whats_new(ledger, case["current"], case["since"], case["format"])
+    golden = SPEC / "fixtures" / "expected" / "releases" / case["expected_text"]
+    assert text == golden.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("case", _cases("ritual"), ids=_case_ids("ritual"))
+def test_ritual_block(case, tmp_path):
+    """spec/20 *The brain ritual block*: the block integrate installs is the golden,
+    and it lands directly below the report block in a marked AGENTS.md."""
+    from brainpick.integrate import _REPORT_PLACEHOLDER, install_ritual, render_ritual_block
+    from brainpick.compile.t1 import REPORT_END_MARKER
+
+    golden = SPEC / "fixtures" / "expected" / case["artifact"]
+    assert render_ritual_block() == golden.read_text(encoding="utf-8")
+    text = install_ritual("# A\n\n" + _REPORT_PLACEHOLDER + "\n")
+    assert text == "# A\n\n" + _REPORT_PLACEHOLDER + "\n\n" + golden.read_text(encoding="utf-8")
+    assert text.count(REPORT_END_MARKER) == 1

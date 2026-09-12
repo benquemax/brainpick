@@ -2,6 +2,18 @@
 
 ## 2026-09-13
 
+- Added: [The brain ritual](brain-ritual.md) — `brainpick integrate` (every
+  target) installs a static `brainpick:begin ritual (v1)` block below the
+  AGENTS.md report: pull and compile at session start, consult before
+  grepping, record while working, commit and push before finishing. One
+  canonical `integrations/ritual/RITUAL.md` shipped in both packages,
+  conformance class `ritual`; the Agent Skill repeats the four habits.
+- Changed: `brainpick whats-new`'s *Do next* is a numbered checklist in the
+  order to do them (oldest missed release first, format last; conformance
+  class `whats-new-text`), and the 0.6.0 ledger entry is written as that
+  upgrade path. [Upgrading a brain](upgrading.md) is the walk.
+- Changed: `brainpick migrate --to 2` also seeds the `[half_life]` defaults
+  into `brainpick.toml` when absent — a migrated brain matches a fresh one.
 - Added: `brainpick migrate --to N` (spec/85) — the one command that
   rewrites committed bytes, in both engines. The 1 → 2 step splits month
   journals into day files (today's at the top, the rest under

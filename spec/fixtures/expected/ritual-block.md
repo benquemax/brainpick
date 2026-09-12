@@ -1,0 +1,8 @@
+<!-- brainpick:begin ritual (v1) -->
+**The brain ritual.** This repo's brain is shared memory: other agents and machines commit to it between your sessions, and what you learn here is lost unless it goes back. Four habits keep it true — `brainpick whats-new` explains any that changed.
+
+1. **Start: pull, then compile.** Before anything else, in every brain repo you use: `git pull --ff-only`, then `brainpick compile --root <bundle>` (the bundle root is the path `brainpick register` lists — it is not always the repo root). `.brainpick/` is gitignored, so a pull alone leaves the brain stale; compile is incremental and takes under a second. If compile says *What's new*, run `brainpick whats-new` and walk its *Do next* list top to bottom before continuing.
+2. **Consult before grepping or answering from memory.** `brain_overview` first (MCP) or `brainpick overview` (CLI), then `brain_search` → `brain_read` → `brain_neighbors`. Grep only after the brain comes up short. Skills listed in the overview are procedures that have worked — read the matching one before improvising.
+3. **Record while you work, not at the end.** A wrong fact gets fixed where you found it; a decision, a contact, an insight goes to the folder the brain's conventions name (today's journal is `journals/YYYY-MM-DD.md`; open work is `todo/open.md`). If the brain lacked something you needed, add it so the next session does not have to rediscover it.
+4. **Finish: commit and push.** Before you report done: `git add -A && git commit -m "…" && git push` in every brain repo you changed. The contract runs on commit; a change that sits on one machine is not shared memory.
+<!-- brainpick:end ritual -->

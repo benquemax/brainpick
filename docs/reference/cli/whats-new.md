@@ -4,7 +4,7 @@ about: thing
 title: "brainpick whats-new"
 description: "What changed in brainpick since this brain was last compiled, and what an agent should do about it — read from the shipped release ledger, offline."
 tags: [cli, agents]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-13T14:00:00Z
 ---
 
 # brainpick whats-new
@@ -15,9 +15,11 @@ running — read from the release ledger every package ships
 ([What's new notice](../../whats-new.md)), so it works offline and says the
 same thing in both engines. Each release is a heading, `## 0.5.0
 (2026-09-11)`, its summary, and one line per change — `- added (brain):
-Brain format 2.` — followed by **Do next:**, every `agent_action` the
-shown releases carry, plus the [brainpick migrate](migrate.md) line when the
-brain's stamped format is behind.
+Brain format 2.` — followed by **Do next:** — a numbered checklist in the
+order to do them: the oldest shown release's actions first, each in ledger
+order, and the [brainpick migrate](migrate.md) line last when the brain's
+stamped format is behind. Walk it top to bottom
+([Upgrading a brain](../../upgrading.md)).
 
 `--since` defaults to the `generator.version` of `.brainpick/manifest.json`
 — the engine that last compiled the brain — which is exactly what the

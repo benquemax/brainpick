@@ -8,9 +8,16 @@ import pytest
 from brainpick.compile.pipeline import run_compile
 from brainpick.compile.t1 import REPORT_BEGIN_PREFIX, REPORT_END_MARKER
 from brainpick.integrate import (
+    RITUAL_BEGIN_PREFIX,
+    RITUAL_END_MARKER,
+    RITUAL_VERSION,
     SKILL_DESTINATIONS,
+    _REPORT_PLACEHOLDER,
     exported_skill_stubs,
+    install_ritual,
+    render_ritual_block,
     render_skill_stub,
+    ritual_path,
     run_integrate,
     skill_path,
     skill_text,
@@ -213,3 +220,83 @@ def test_integrate_dry_run_names_the_stubs_without_writing(brain_repo, capsys):
     assert run_integrate("claude-code", bundle, dry_run=True) == 0
     assert not (root / ".claude").exists()
     assert "kahvin-keitto" in capsys.readouterr().out
+
+
+# -- the brain ritual block (spec/20) ---------------------------------------------
+
+
+def test_ritual_parity_shipped_equals_canonical():
+    canonical = REPO_ROOT / "integrations" / "ritual" / "RITUAL.md"
+    assert ritual_path().read_text(encoding="utf-8") == canonical.read_text(encoding="utf-8")
+    block = render_ritual_block()
+    assert block.startswith(f"{RITUAL_BEGIN_PREFIX}{RITUAL_VERSION}) -->\n")
+    assert block.endswith(RITUAL_END_MARKER + "\n")
+    assert "git pull --ff-only" in block and "git push" in block
+
+
+def test_ritual_block_is_the_conformance_golden():
+    golden = REPO_ROOT / "spec" / "fixtures" / "expected" / "ritual-block.md"
+    assert render_ritual_block() == golden.read_text(encoding="utf-8")
+
+
+def test_install_ritual_goes_directly_below_the_report_block():
+    text = "# A\n\nIntro.\n\n" + _REPORT_PLACEHOLDER + "\n\n<!-- henxels:begin -->\nc\n<!-- henxels:end -->\n"
+    out = install_ritual(text)
+    body = out[out.index(REPORT_END_MARKER) + len(REPORT_END_MARKER):]
+    assert body.startswith("\n\n" + RITUAL_BEGIN_PREFIX)
+    assert out.index(RITUAL_END_MARKER) < out.index("<!-- henxels:begin -->")
+    assert "Intro." in out and "\nc\n" in out
+
+
+def test_install_ritual_without_a_report_follows_the_report_placement():
+    out = install_ritual("# A\n\nIntro.\n\n<!-- henxels:begin -->\nc\n<!-- henxels:end -->\n")
+    assert out.index(RITUAL_BEGIN_PREFIX) < out.index("<!-- henxels:begin -->")
+    assert install_ritual("# A\n").endswith(RITUAL_END_MARKER + "\n")
+
+
+def test_install_ritual_is_idempotent_and_replaces_an_older_version():
+    once = install_ritual("# A\n")
+    assert install_ritual(once) == once
+    stale = once.replace(f"{RITUAL_BEGIN_PREFIX}{RITUAL_VERSION}) -->", f"{RITUAL_BEGIN_PREFIX}0) -->")
+    stale = stale.replace("git pull --ff-only", "OLD TEXT")
+    assert install_ritual(stale) == once
+
+
+def test_integrate_agents_md_installs_the_ritual_below_the_report(repo, capsys):
+    root, bundle = repo
+    assert run_integrate("agents-md", bundle) == 0
+    text = (root / "AGENTS.md").read_text(encoding="utf-8")
+    assert text.index(REPORT_END_MARKER) < text.index(RITUAL_BEGIN_PREFIX)
+    assert "ritual: installed" in capsys.readouterr().out
+    run_integrate("agents-md", bundle)
+    assert "ritual: already current" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("target", ["claude-code", "opencode", "dsh"])
+def test_harness_targets_install_the_ritual_only_into_an_existing_agents_md(repo, target, capsys):
+    root, bundle = repo
+    assert run_integrate(target, bundle) == 0
+    assert not (root / "AGENTS.md").exists()
+    assert "no AGENTS.md" in capsys.readouterr().out
+    (root / "AGENTS.md").write_text("# A\n", encoding="utf-8")
+    assert run_integrate(target, bundle) == 0
+    assert RITUAL_BEGIN_PREFIX in (root / "AGENTS.md").read_text(encoding="utf-8")
+
+
+def test_integrate_dry_run_names_the_ritual_without_writing(repo, capsys):
+    root, bundle = repo
+    (root / "AGENTS.md").write_text("# A\n", encoding="utf-8")
+    run_integrate("agents-md", bundle, dry_run=True)
+    assert "ritual" in capsys.readouterr().out
+    assert (root / "AGENTS.md").read_text(encoding="utf-8") == "# A\n"
+
+
+def test_compile_never_touches_the_ritual_block(repo):
+    root, bundle = repo
+    run_integrate("agents-md", bundle)
+    agents = root / "AGENTS.md"
+    before = agents.read_text(encoding="utf-8")
+    run_compile(bundle, full=True)
+    after = agents.read_text(encoding="utf-8")
+    start, end = after.index(RITUAL_BEGIN_PREFIX), after.index(RITUAL_END_MARKER)
+    assert after[start:end] == before[before.index(RITUAL_BEGIN_PREFIX):before.index(RITUAL_END_MARKER)]

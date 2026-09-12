@@ -390,11 +390,36 @@ function stepStamp(tree: Tree, from: number, to: number): void {
   throw new MigrateError(`brainpick.toml has no \`format = ${from}\` under [brain] to stamp`);
 }
 
+// -- step 5: the format's config defaults ------------------------------------------
+
+export const HALF_LIFE_BLOCK = `# Memories fade — slowly (spec/50). A doc's search score is multiplied by
+# 2^(-age / half_life) on its \`timestamp\`, floored at 1/16: nothing is hidden,
+# it only ranks lower. STEEPEN the curve here (fewer days) instead of deleting;
+# a page can pin itself with \`half_life: 0\` in its frontmatter.
+[half_life]
+default = 365           # days; 0 = never fades
+[half_life.folders]     # folder → days, the most nested folder wins
+journals = 180          # episodic memory fades first
+todo = 90               # an open list should be a fresh list
+skills = 0              # procedural memory never fades
+`;
+const HALF_LIFE_SECTION = /^\[half_life(\.[^\]]*)?\][ \t]*(?:#.*)?$/m;
+
+/** Append the format-2 `[half_life]` defaults when brainpick.toml has none — the
+ * one step that writes config, and it only ever adds an absent section. */
+function stepHalfLife(tree: Tree): void {
+  const text = tree.read("brainpick.toml");
+  if (text === null || HALF_LIFE_SECTION.test(text)) return;
+  tree.write("brainpick.toml", text.replace(/\n+$/, "") + "\n\n" + HALF_LIFE_BLOCK);
+  tree.actions.push("add [half_life] to brainpick.toml");
+}
+
 function migrate1to2(tree: Tree, today: string): void {
   const mapping = stepJournals(tree, today);
   stepLinks(tree, mapping);
   stepTodos(tree, today);
   stepStamp(tree, 1, 2);
+  stepHalfLife(tree);
 }
 
 const MIGRATIONS: Record<number, (tree: Tree, today: string) => void> = { 2: migrate1to2 }; // target → step from target-1

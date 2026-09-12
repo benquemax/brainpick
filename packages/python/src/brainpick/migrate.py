@@ -383,11 +383,38 @@ def _step_stamp(tree: _Tree, old: int, new: int) -> None:
     raise MigrateError(f"brainpick.toml has no `format = {old}` under [brain] to stamp")
 
 
+# -- step 5: the format's config defaults -------------------------------------------
+
+HALF_LIFE_BLOCK = """# Memories fade — slowly (spec/50). A doc's search score is multiplied by
+# 2^(-age / half_life) on its `timestamp`, floored at 1/16: nothing is hidden,
+# it only ranks lower. STEEPEN the curve here (fewer days) instead of deleting;
+# a page can pin itself with `half_life: 0` in its frontmatter.
+[half_life]
+default = 365           # days; 0 = never fades
+[half_life.folders]     # folder → days, the most nested folder wins
+journals = 180          # episodic memory fades first
+todo = 90               # an open list should be a fresh list
+skills = 0              # procedural memory never fades
+"""
+_HALF_LIFE_SECTION = re.compile(r"^\[half_life(\.[^\]]*)?\][ \t]*(?:#.*)?$", re.M)
+
+
+def _step_half_life(tree: _Tree) -> None:
+    """Append the format-2 `[half_life]` defaults when brainpick.toml has none —
+    the one step that writes config, and it only ever adds an absent section."""
+    text = tree.read("brainpick.toml")
+    if text is None or _HALF_LIFE_SECTION.search(text):
+        return
+    tree.write("brainpick.toml", text.rstrip("\n") + "\n\n" + HALF_LIFE_BLOCK)
+    tree.actions.append("add [half_life] to brainpick.toml")
+
+
 def _migrate_1_to_2(tree: _Tree, today: str) -> None:
     mapping = _step_journals(tree, today)
     _step_links(tree, mapping)
     _step_todos(tree, today)
     _step_stamp(tree, 1, 2)
+    _step_half_life(tree)
 
 
 MIGRATIONS: dict[int, Callable[[_Tree, str], None]] = {2: _migrate_1_to_2}  # target → step from target-1

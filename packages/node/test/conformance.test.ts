@@ -60,6 +60,7 @@ interface ConformanceCase {
   since?: string | null;
   format?: number | null;
   expected?: Record<string, unknown> | null;
+  expected_text?: string;
 }
 
 const CASES = (
@@ -330,6 +331,31 @@ describe("conformance", () => {
           const { loadLedger, whatsNew } = await import("../src/releases");
           const ledger = loadLedger(join(SPEC, "fixtures", "releases", c.ledger!));
           expect(whatsNew(ledger, c.current!, c.since ?? null, c.format ?? null)).toEqual(c.expected);
+        });
+        break;
+
+      case "whats-new-text":
+        // spec/80: what `brainpick whats-new` prints — the shown releases and the
+        // numbered Do next checklist in the order to do them — byte for byte.
+        test(c.id, async () => {
+          const { loadLedger, renderWhatsNew } = await import("../src/releases");
+          const ledger = loadLedger(join(SPEC, "fixtures", "releases", c.ledger!));
+          const text = renderWhatsNew(ledger, c.current!, c.since ?? null, c.format ?? null);
+          expect(text).toBe(readFileSync(join(EXPECTED, "releases", c.expected_text!), "utf8"));
+        });
+        break;
+
+      case "ritual":
+        // spec/20 *The brain ritual block*: the block integrate installs is the
+        // golden, and it lands directly below the report block in a marked AGENTS.md.
+        test(c.id, async () => {
+          const { installRitual, renderRitualBlock, REPORT_PLACEHOLDER } = await import("../src/integrate");
+          const { REPORT_END_MARKER } = await import("../src/compile/t1");
+          const golden = readFileSync(join(EXPECTED, c.artifact!), "utf8");
+          expect(renderRitualBlock()).toBe(golden);
+          const text = installRitual("# A\n\n" + REPORT_PLACEHOLDER + "\n");
+          expect(text).toBe("# A\n\n" + REPORT_PLACEHOLDER + "\n\n" + golden);
+          expect(text.split(REPORT_END_MARKER).length - 1).toBe(1);
         });
         break;
 

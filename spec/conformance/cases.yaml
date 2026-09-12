@@ -429,3 +429,32 @@ cases:
     since: "1.1.1"
     format: 0
     expected: null
+
+  # class: whats-new-text — what `brainpick whats-new` PRINTS (spec/80): the
+  # shown releases newest first, then "Do next:" as a numbered checklist in
+  # the order the actions should be done — oldest shown release first, each
+  # release's actions in ledger order, the format part last. Byte-compared
+  # against the golden text under fixtures/expected/releases/. Both engines.
+  - id: whats-new-text-two-releases-and-a-format
+    class: whats-new-text
+    ledger: ledger.yaml
+    current: "1.1.1"
+    since: "1.0.0"
+    format: 1
+    expected_text: whats-new-two-releases-and-a-format.md
+  - id: whats-new-text-current-alone
+    class: whats-new-text
+    ledger: ledger.yaml
+    current: "1.1.1"
+    since: null
+    format: 2
+    expected_text: whats-new-current-alone.md
+
+  # class: ritual — the brain ritual block `brainpick integrate` installs in
+  # AGENTS.md (spec/20 *The brain ritual block*): the block both engines
+  # render (begin marker with the text's version, the canonical body, end
+  # marker, trailing LF) byte-compared against the golden; installing it into
+  # a marked AGENTS.md places it directly below the report block.
+  - id: ritual-block
+    class: ritual
+    artifact: ritual-block.md

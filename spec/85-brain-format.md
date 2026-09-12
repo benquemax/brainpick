@@ -314,7 +314,8 @@ needs a migration for them.
 `migrate` is the one command that rewrites committed bytes. It is
 deterministic — the same bundle in, the same bundle out, on either engine
 (conformance class `migrate`) — and it is a *mechanical* rewrite: it moves
-and splits files and edits links and the stamp, never prose. It **writes by
+and splits files and edits links, the stamp and the format's config
+defaults, never prose. It **writes by
 default** (one command for an agent; git is the undo) and prints every
 action it took as one line each, so the resulting commit reviews itself;
 `--dry-run` prints the same action list plus a unified diff of every file it
@@ -366,6 +367,27 @@ the root is `.`). `today` is the engine's local date unless
 4. **The stamp.** `format = 1` under `[brain]` in `P/brainpick.toml`
    becomes `format = 2` in place (the line is rewritten, comments after it
    kept, nothing else in the file touched).
+5. **The format's config defaults.** Format 2 ranks by half-life (spec/80
+   `[half_life]`); a migrated brain gets the same defaults a freshly
+   scaffolded one has. When `P/brainpick.toml` has no `[half_life]` section,
+   the fixed block below is appended after a blank line; when it has one,
+   nothing is added. This is the one step that writes config rather than
+   content, and it only ever adds a section that was absent.
+
+The fixed `[half_life]` block:
+
+```toml
+# Memories fade — slowly (spec/50). A doc's search score is multiplied by
+# 2^(-age / half_life) on its `timestamp`, floored at 1/16: nothing is hidden,
+# it only ranks lower. STEEPEN the curve here (fewer days) instead of deleting;
+# a page can pin itself with `half_life: 0` in its frontmatter.
+[half_life]
+default = 365           # days; 0 = never fades
+[half_life.folders]     # folder → days, the most nested folder wins
+journals = 180          # episodic memory fades first
+todo = 90               # an open list should be a fresh list
+skills = 0              # procedural memory never fades
+```
 
 The fixed `todo/index.md`:
 
@@ -382,7 +404,8 @@ The action list is one line per act, in the order performed, each of the
 form `split journals/2026-07.md → 3 day files`, `move journals/2026-07.md
 … → journals/archive/2026/07/2026-07-01.md` (one per day), `rewrite links
 in knowledge/kahvi.md (2)`, `move _todo.md → todo/open.md`, `create
-todo/index.md`, `stamp brainpick.toml: format 1 → 2`. The tally the
+todo/index.md`, `stamp brainpick.toml: format 1 → 2`, `add [half_life] to
+brainpick.toml`. The tally the
 conformance case fixes is the resulting bundle's bytes, not the wording.
 
 Migrations are cumulative: `--to 3` from format 1 runs 1 → 2 then 2 → 3.
@@ -425,8 +448,10 @@ Class `migrate`:
   `format = 1`) migrated with `--to 2` and
   `BRAINPICK_TODAY` fixed to the later day yields a bundle byte-identical
   to the golden tree under `spec/fixtures/expected/kotiaivot-v1/migrated/`
-  (every file, including the deleted ones being absent); `--dry-run` leaves
-  the fixture byte-identical to itself. Both engines natively.
+  (every file, including the deleted ones being absent — the golden's
+  `brainpick.toml` carries the stamp and the appended `[half_life]` block);
+  `--dry-run` leaves the fixture byte-identical to itself. Both engines
+  natively.
 - `brain_overview` lists both skills under `skills` with their prerequisites
   and tools; `brain_read` on the dependent skill returns its `skill` block
   (spec/70); a keyword search whose terms match a skill's trigger

@@ -73,8 +73,15 @@ def test_render_collects_agent_actions_under_do_next():
     assert "## 1.0.0" not in text and "## 1.2.0" not in text  # since is exclusive; the head is unreleased
     assert "- added (brain): Brain format 2." in text
     assert "Do next:" in text
-    assert "- Run `brainpick migrate --to 2`." in text
-    assert "brain format 1 → 3: run `brainpick migrate --to 3`" in text  # the head's format
+    # a numbered checklist in the order to do them: oldest shown release first,
+    # each in ledger order, the format part last
+    do_next = text[text.index("Do next:"):]
+    assert do_next == (
+        "Do next:\n\n"
+        "1. Run `brainpick migrate --to 2`.\n"
+        "2. Run `brainpick integrate agents-md`.\n"
+        "3. brain format 1 → 3: run `brainpick migrate --to 3`\n"  # the head's format
+    )
 
 
 def test_render_with_nothing_between_shows_the_current_release_itself():

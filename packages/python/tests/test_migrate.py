@@ -81,9 +81,23 @@ def test_migrate_1_to_2_moves_days_todos_and_bumps_the_stamp(v1):
     assert "- [Open](open.md)" in tree["todo/index.md"]
     assert "_todo.md" not in tree[".gitignore"] and "_temp/" in tree[".gitignore"]
     assert "format = 2              # the brainpick brain format (spec/85)" in tree["brainpick.toml"]
+    # the format's config defaults are seeded once, after the stamp
+    toml = tree["brainpick.toml"]
+    assert toml.index("format = 2") < toml.index("\n[half_life]\ndefault = 365")
+    assert "[half_life.folders]" in toml and "journals = 180" in toml and "skills = 0" in toml
     assert report.actions[0].startswith("split journals/2026-07.md")
-    assert report.actions[-1] == "stamp brainpick.toml: format 1 → 2"
+    assert report.actions[-2] == "stamp brainpick.toml: format 1 → 2"
+    assert report.actions[-1] == "add [half_life] to brainpick.toml"
     assert not report.dry_run
+
+
+def test_migrate_leaves_an_existing_half_life_alone(v1):
+    toml = v1 / "brainpick.toml"
+    toml.write_text(toml.read_text(encoding="utf-8") + "\n[half_life]\ndefault = 30\n", encoding="utf-8")
+    report = migrate(v1, to=2, today=TODAY)
+    text = toml.read_text(encoding="utf-8")
+    assert text.count("[half_life]") == 1 and "default = 30" in text and "default = 365" not in text
+    assert "add [half_life] to brainpick.toml" not in report.actions
 
 
 def test_migrate_is_idempotent_and_a_no_op_at_target(v1):

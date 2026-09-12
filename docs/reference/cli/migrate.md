@@ -4,7 +4,7 @@ about: thing
 title: "brainpick migrate"
 description: "Rewrite a brain from its stamped format up to a newer one — deterministic, mechanical, writes by default; --dry-run prints the same action list plus a diff and touches nothing."
 tags: [cli, brain-format]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-13T14:00:00Z
 ---
 
 # brainpick migrate
@@ -31,7 +31,11 @@ The 1 → 2 step turns month files into day files (today's at the top of
 `journals/`, every other day under `journals/archive/YYYY/MM/`), rewrites
 every link to a month or a day section so it lands on the day file, moves
 the gitignored `_todo.md` into the brain as `todo/open.md`
-([To-do lists](../../todo-lists.md)) and bumps the stamp. "Today" is the
+([To-do lists](../../todo-lists.md)), bumps the stamp and — the one step
+that writes config — appends the format's `[half_life]` defaults
+([Half-life](../../half-life.md): 365 days, journals 180, to-dos 90,
+skills never) when `brainpick.toml` has none, so a migrated brain matches a
+freshly scaffolded one. "Today" is the
 local date, or `BRAINPICK_TODAY=YYYY-MM-DD`. The details of every rule are
 on [The brain template](../../brain-template.md); a brain whose stamp is
 behind hears about this command from the

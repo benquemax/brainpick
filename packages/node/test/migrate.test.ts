@@ -86,9 +86,28 @@ test("migrate 1 → 2 moves days, todos and bumps the stamp", () => {
   expect(t[".gitignore"]).not.toContain("_todo.md");
   expect(t[".gitignore"]).toContain("_temp/");
   expect(t["brainpick.toml"]).toContain("format = 2              # the brainpick brain format (spec/85)");
+  // the format's config defaults are seeded once, after the stamp
+  const toml = t["brainpick.toml"]!;
+  expect(toml.indexOf("format = 2")).toBeLessThan(toml.indexOf("\n[half_life]\ndefault = 365"));
+  expect(toml).toContain("[half_life.folders]");
+  expect(toml).toContain("journals = 180");
+  expect(toml).toContain("skills = 0");
   expect(report.actions[0]!.startsWith("split journals/2026-07.md")).toBe(true);
-  expect(report.actions[report.actions.length - 1]).toBe("stamp brainpick.toml: format 1 → 2");
+  expect(report.actions[report.actions.length - 2]).toBe("stamp brainpick.toml: format 1 → 2");
+  expect(report.actions[report.actions.length - 1]).toBe("add [half_life] to brainpick.toml");
   expect(report.dry_run).toBe(false);
+});
+
+test("migrate leaves an existing [half_life] alone", () => {
+  const root = v1();
+  const toml = join(root, "brainpick.toml");
+  writeFileSync(toml, readFileSync(toml, "utf8") + "\n[half_life]\ndefault = 30\n", "utf8");
+  const report = migrate(root, 2, { today: TODAY });
+  const text = readFileSync(toml, "utf8");
+  expect(text.split("[half_life]").length - 1).toBe(1);
+  expect(text).toContain("default = 30");
+  expect(text).not.toContain("default = 365");
+  expect(report.actions).not.toContain("add [half_life] to brainpick.toml");
 });
 
 test("migrate is idempotent and a no-op at target", () => {

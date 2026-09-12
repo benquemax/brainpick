@@ -232,6 +232,30 @@ skill, omitted entirely otherwise (a wiki is not a brain).
 Deterministic; cross-engine byte-identical (a conformance golden accompanies
 the first implementation).
 
+### The brain ritual block
+
+Beside the report, `brainpick integrate` (every target) installs a second
+fenced block in the same `AGENTS.md`:
+
+```
+<!-- brainpick:begin ritual (v1) -->
+…
+<!-- brainpick:end ritual -->
+```
+
+Its body is the canonical `integrations/ritual/RITUAL.md`, shipped in every
+package byte-identical (like the Agent Skill; parity-tested), and it is
+what makes a brain *shared* memory rather than a read-only index: it tells
+the agent to **pull and compile at session start**, **consult the brain
+before grepping or answering from memory**, **record while working**, and
+**commit and push before finishing**. Compile never touches this block
+(it is not generated — the `(v1)` is the text's own version, bumped when
+the canonical changes) and never creates it. Integrate installs it directly
+below the report block when absent; when a block is present with an older
+`(vN)` it is replaced in place; at the current version it is left alone.
+The rendered text is a conformance golden (class `ritual`), so both engines
+install the same bytes.
+
 One line is not deterministic and sits outside the golden: when the engine
 knows a newer version of itself is published (`[update] check`, spec/80),
 the line `- Engine: brainpick <current> — <latest> available: <hint>`

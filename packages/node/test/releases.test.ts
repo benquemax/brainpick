@@ -73,8 +73,14 @@ test("render collects agent actions under Do next", () => {
   expect(text).not.toContain("## 1.2.0"); // the head is unreleased
   expect(text).toContain("- added (brain): Brain format 2.");
   expect(text).toContain("Do next:");
-  expect(text).toContain("- Run `brainpick migrate --to 2`.");
-  expect(text).toContain("brain format 1 → 3: run `brainpick migrate --to 3`"); // the head's format
+  // a numbered checklist in the order to do them: oldest shown release first,
+  // each in ledger order, the format part last
+  expect(text.slice(text.indexOf("Do next:"))).toBe(
+    "Do next:\n\n" +
+      "1. Run `brainpick migrate --to 2`.\n" +
+      "2. Run `brainpick integrate agents-md`.\n" +
+      "3. brain format 1 → 3: run `brainpick migrate --to 3`\n", // the head's format
+  );
 });
 
 test("render with nothing between shows the current release itself", () => {

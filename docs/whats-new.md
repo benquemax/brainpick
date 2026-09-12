@@ -4,7 +4,7 @@ about: concept
 title: What's new notice
 description: "A release ledger every package ships, diffed against the version that last compiled a brain and the brain's stamped format — what changed and what to do about it, surfaced where agents already look, offline and deterministic."
 tags: [agents, engine, brain-format]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-13T14:00:00Z
 ---
 
 # What's new notice
@@ -29,6 +29,14 @@ so [brainpick whats-new](reference/cli/whats-new.md) and the notice below
 work offline and say the same thing in both engines. The ledger is
 maintained by hand, like the update log, at release time; a release whose
 entry is missing fails the ledger test ([Spec: configuration](reference/spec/config.md)).
+
+Its `agent_action`s are written as an **upgrade path**: `brainpick
+whats-new` prints them under *Do next* as a numbered checklist in the order
+to do them — the oldest missed release first, each release's actions in
+ledger order, the format part last — so a ledger entry orders its changes
+the way they should be done (engine and bytes first, then wiring, then
+habits). One list, walked top to bottom, is the whole migration
+([Upgrading a brain](upgrading.md)).
 
 ## The notice
 
@@ -61,4 +69,5 @@ and gone when nothing applies; a `whats_new` object in
 engine keeps serving the brain it compiled — but advice with a command in
 it, which is what turns a version bump from a thing an agent might discover
 into a thing it does. The [Compile pipeline](compile-pipeline.md) is where
-it rides along.
+it rides along, and [the brain ritual](brain-ritual.md) is what makes an
+agent compile at session start and so hear it.
