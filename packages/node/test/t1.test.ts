@@ -65,6 +65,7 @@ test("docs records", () => {
   expect(Object.keys(kuu).sort()).toEqual([
     "about",
     "description",
+    "half_life",
     "path",
     "reserved",
     "sha256",

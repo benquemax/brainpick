@@ -50,6 +50,8 @@ interface ConformanceCase {
   embed?: string[];
   expect_order?: boolean;
   scope?: string;
+  half_life?: { default?: number; folders?: Record<string, number> };
+  now?: string;
 }
 
 const CASES = (
@@ -157,7 +159,18 @@ describe("conformance", () => {
           } else {
             const config = loadConfig(root); // honour [bundle] exclude (a brain's raw/)
             const records = buildDocsRecords(scan(root, config.bundle.include, config.bundle.exclude));
-            hits = search(records, c.query!, c.limit!);
+            if (c.half_life) {
+              // spec/50 Half-life: the case carries its config and clock
+              const halfLife = { default: c.half_life.default ?? 0, folders: { ...(c.half_life.folders ?? {}) } };
+              hits = (
+                await runSearch(records, {}, c.query!, c.mode, c.limit!, null, null, null, {
+                  halfLife,
+                  now: new Date(c.now!),
+                })
+              ).hits;
+            } else {
+              hits = search(records, c.query!, c.limit!);
+            }
           }
           if (c.expect_order) expect(hits.map((h) => h.path)).toEqual(c.expect_paths!);
           else expect(new Set(hits.map((h) => h.path))).toEqual(new Set(c.expect_paths!));

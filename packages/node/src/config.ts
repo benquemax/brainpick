@@ -107,6 +107,15 @@ export interface BrainConfig {
   readers: string[]; // for team: the assumed readers
 }
 
+/** [half_life] — the ranking factor that fades stale docs (spec/50, spec/80):
+ * `default` days for the bundle (0 = nothing fades), `folders` a bundle-relative
+ * folder → days table where the longest matching prefix wins; a doc's own
+ * frontmatter `half_life` beats both. */
+export interface HalfLifeConfig {
+  default: number;
+  folders: Record<string, number>;
+}
+
 export function isBrain(config: Config): boolean {
   return config.brain.format > 0;
 }
@@ -123,6 +132,7 @@ export interface Config {
   update: UpdateConfig;
   similarity_gaps: SimilarityGapsConfig;
   brain: BrainConfig;
+  half_life: HalfLifeConfig;
 }
 
 export function defaultConfig(): Config {
@@ -149,14 +159,47 @@ export function defaultConfig(): Config {
     update: { check: true },
     similarity_gaps: { threshold: 0.75, max_pairs: 50 },
     brain: { format: 0, origin: "", audience: "personal", readers: [] },
+    half_life: { default: 0, folders: {} },
   };
 }
 
-const SECTIONS = ["bundle", "index", "modules", "serve", "ui", "validate", "update", "similarity_gaps", "brain"] as const;
+const SECTIONS = [
+  "bundle",
+  "index",
+  "modules",
+  "serve",
+  "ui",
+  "validate",
+  "update",
+  "similarity_gaps",
+  "brain",
+  "half_life",
+] as const;
 // [models.*] tables are nested and handled separately below.
 const KNOWN_TOP = new Set(["spec", "models", ...SECTIONS]);
 
-type SectionValue = string | number | boolean | string[];
+type SectionValue = string | number | boolean | string[] | Record<string, number>;
+
+function isFolderTable(value: SectionValue): value is Record<string, number> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** `[half_life.folders]`: folder → days; non-numeric values are dropped, keys
+ * lose any trailing slash (spec/80). Python float() semantics. */
+function foldersTable(value: unknown): Record<string, number> {
+  if (!isTable(value)) return {};
+  const table: Record<string, number> = {};
+  for (const [key, days] of Object.entries(value)) {
+    if (typeof days === "boolean") continue;
+    let parsed: number | null = null;
+    if (typeof days === "number" && Number.isFinite(days)) parsed = days;
+    else if (typeof days === "bigint") parsed = Number(days);
+    else if (typeof days === "string" && days.trim() !== "" && Number.isFinite(Number(days))) parsed = Number(days);
+    if (parsed === null) continue;
+    table[key.trim().replace(/^\/+|\/+$/g, "")] = parsed;
+  }
+  return table;
+}
 type Warn = (message: string) => void;
 
 /** Python `str()` over the plausible TOML scalar types. */
@@ -167,6 +210,7 @@ function pyStrOf(value: unknown): string {
 
 /** Nudge a TOML value toward the default's type; forgiving, never raising. */
 function coerce(current: SectionValue, value: unknown): SectionValue {
+  if (isFolderTable(current)) return foldersTable(value);
   if (typeof current === "boolean") {
     if (typeof value === "boolean") return value;
     return TRUTHY.has(pyStrOf(value).trim().toLowerCase());
@@ -196,6 +240,16 @@ function coerce(current: SectionValue, value: unknown): SectionValue {
 }
 
 function fromEnv(current: SectionValue, raw: string): SectionValue {
+  if (isFolderTable(current)) {
+    // `folder=days,folder=days`
+    const table: Record<string, unknown> = {};
+    for (const part of raw.split(",")) {
+      const eq = part.indexOf("=");
+      if (eq === -1) continue;
+      table[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+    }
+    return foldersTable(table);
+  }
   if (typeof current === "boolean") {
     const lowered = raw.trim().toLowerCase();
     if (TRUTHY.has(lowered)) return true;

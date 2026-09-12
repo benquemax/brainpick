@@ -4,10 +4,14 @@ about: concept
 title: Search modes
 description: One search tool, four strategies — keyword, semantic, graph, and auto-fusion — with honest reporting when a tier is unavailable.
 tags: [tier, graph]
-timestamp: 2026-09-13T09:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Search modes
+
+Whatever the mode, every retriever's scores pass through the
+[half-life](half-life.md) factor before ranking and fusion — off unless
+the bundle configures it.
 
 Brainpick deliberately ships one search surface with a `mode` switch instead
 of a tool per strategy — fewer tools with obvious names is what makes small

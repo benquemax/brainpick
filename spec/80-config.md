@@ -32,6 +32,13 @@ ui = true
 threshold = 0.75                # minimum cosine similarity to report a pair
 max_pairs = 50                  # cap on reported pairs, highest score first
 
+[half_life]                     # the ranking factor that fades stale docs (spec/50)
+default = 0                     # days; 0 = nothing fades
+[half_life.folders]             # folder → days, longest matching prefix wins;
+                                # the frontmatter `half_life` of a doc beats both
+# journals = 30
+# skills = 0
+
 [ui]                            # presentation policy shipped to the client (spec/50 /api/status)
 max_nodes_mobile = 8000         # node cap the web UI applies on mobile/weak GPUs
 default_mode = "cosmos"         # cosmos | brain — the view the UI opens in
@@ -59,7 +66,11 @@ readers = []                    # for team: the assumed readers, by handle or ro
 ```
 
 Unknown keys are warnings, not errors (config written by a newer brainpick
-must not brick an older one). `[brain]` is defined in spec/85; all of its
+must not brick an older one). `[half_life.folders]` keys are bundle-relative
+folder paths without a trailing slash (`journals`, `journals/archive`);
+values are days, a non-number is ignored. `BRAINPICK_HALF_LIFE_DEFAULT`
+overrides the scalar; `BRAINPICK_HALF_LIFE_FOLDERS` takes
+`folder=days,folder=days`. `[brain]` is defined in spec/85; all of its
 keys are optional and `BRAINPICK_BRAIN_*` env overrides apply to the
 scalars.
 

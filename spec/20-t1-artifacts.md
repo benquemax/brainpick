@@ -10,6 +10,9 @@ A document is any bundle file matching the include globs. Per document:
 
 - `title`: frontmatter `title`, else the first `# ` heading, else the file
   stem with `-`/`_` replaced by spaces.
+- `half_life`: the frontmatter `half_life` in days as a number, `null` when
+  absent or not a number — the document's own say in the half-life
+  resolution (spec/50); the engine stores it, the query resolves it.
 - `type`, `about`, `description`, `timestamp`: frontmatter fields, absent →
   `null`. `type`/`about` are opaque strings at this layer — any enum
   constraint on their values (a bundle's own two-axis ontology, say) is a
@@ -125,7 +128,7 @@ One line per document, sorted by `path` — the substrate for keyword search
 and reading:
 
 ```json
-{"about":"thing","description":null,"path":"aurinko.md","reserved":false,"sha256":"…","tags":["tähti"],"text":"…body without frontmatter…","timestamp":null,"title":"Aurinko","type":"Concept"}
+{"about":"thing","description":null,"half_life":null,"path":"aurinko.md","reserved":false,"sha256":"…","tags":["tähti"],"text":"…body without frontmatter…","timestamp":null,"title":"Aurinko","type":"Concept"}
 ```
 
 `text` is the body with frontmatter removed, original line endings

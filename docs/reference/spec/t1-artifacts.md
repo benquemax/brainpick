@@ -4,7 +4,7 @@ about: concept
 title: "Spec: T1 artifacts"
 description: "The deterministic heart — document scanning, link extraction, graph.json (nodes, edges, ghosts, islands, orphans, tags), docs.jsonl, skills.json, todos.json, and the generated index and skill tree."
 tags: [spec]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Spec: T1 artifacts
@@ -16,7 +16,7 @@ wikilinks, rooted vs relative resolution; an unresolved link is a *ghost*), and
 the normative artifacts:
 
 - `t1/graph.json` — nodes (with `in`/`out` degree and `orphan`), edges, ghosts, islands, tags, and stats.
-- `t1/docs.jsonl` — one line per document, the substrate for keyword search and reading.
+- `t1/docs.jsonl` — one line per document, the substrate for keyword search and reading; carries the frontmatter `half_life` (days, or `null`) that the [half-life](../../half-life.md) factor resolves at query time.
 - `t1/skills.json` — every skill sorted by path with resolved `depends_on`, `tools` and its declared `export` targets ([Skills](../../skills.md)); part of the freshness gate. In a brain with a skill, compile also generates `skilltree.md` beside the first skill, written before the artifact scan like the index.
 - `t1/todos.json` — every checklist item of every `type: todo` doc as `{path, line, status, text, done}`, sorted by path then line ([To-do lists](../../todo-lists.md)); `{"todos": []}` when there are none; part of the freshness gate.
 - the generated `index.md` block — grouped by directory, entries sorted by title, hash-stamped.

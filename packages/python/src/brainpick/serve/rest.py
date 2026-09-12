@@ -206,6 +206,7 @@ async def search_endpoint(request: Request) -> JSONResponse:
         state.records, state.manifest.get("tiers", {}), query,
         mode=mode, limit=limit, semantic_fn=state.semantic_fn(),
         graph_fn=state.graph_fn(), link_graph=state.graph,
+        half_life=state.config.half_life,
     )
     return JSONResponse(body)
 

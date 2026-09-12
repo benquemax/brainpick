@@ -27,6 +27,7 @@ import { detectHenxels, findHenxels, needsShellForScript } from "./detect";
 import { makeChat } from "./llm";
 import { findBase, resolve as resolveMerge } from "./merge";
 import { KNOWN_MODES, runSearch } from "./query/router";
+import type { FadedHit } from "./query/half-life";
 import type { SearchHit } from "./query/keyword";
 import { bfsNeighborhood, jsonable, resolveDoc, type ServeState } from "./serve/state";
 import { recompileAndBroadcast } from "./serve/watcher";
@@ -181,7 +182,19 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
 
 // -- brain_search ------------------------------------------------------------------
 
-function why(hit: SearchHit, query: string): string {
+function why(hit: FadedHit, query: string): string {
+  let reason = matchReason(hit, query);
+  if (hit.faded) {
+    // spec/50 Half-life: say why an old page ranks where it does
+    const days = Math.trunc(hit.faded.age_days);
+    const half = hit.faded.half_life;
+    const halfText = Number.isInteger(half) ? `${half} day${half !== 1 ? "s" : ""}` : `${half} days`;
+    reason += `; faded (${days} day${days !== 1 ? "s" : ""} old, half-life ${halfText})`;
+  }
+  return reason;
+}
+
+function matchReason(hit: SearchHit, query: string): string {
   const lowered = query.toLowerCase();
   if (String(hit.title).toLowerCase().includes(lowered)) return `title matches '${query}'`;
   if (hit.description && hit.description.toLowerCase().includes(lowered)) {
@@ -198,6 +211,7 @@ async function singleSearch(
   mode: unknown = "auto",
   limit: unknown = 8,
   budgetTokens?: number | null,
+  now?: Date | null,
 ): Promise<Record<string, unknown>> {
   const budget = budgetTokens || 1200;
   let requested = String(mode || "auto");
@@ -224,6 +238,7 @@ async function singleSearch(
     state.semanticFn(),
     state.graphFn(),
     state.graph,
+    { halfLife: state.config.half_life, now },
   );
   const raw = body.hits;
   const todoPaths = new Set(state.todos.map((t) => t.path));
@@ -944,6 +959,7 @@ export function searchPayload(
   limit?: unknown,
   budgetTokens?: number | null,
   scope?: string | null,
+  now?: Date | null,
 ): Promise<Payload>;
 export function searchPayload(
   set: BrainSet,
@@ -952,6 +968,7 @@ export function searchPayload(
   limit?: unknown,
   budgetTokens?: number | null,
   scope?: string | null,
+  now?: Date | null,
 ): Promise<Payload>;
 export async function searchPayload(
   target: ServeState | BrainSet,
@@ -960,9 +977,12 @@ export async function searchPayload(
   limit: unknown = 8,
   budgetTokens?: number | null,
   scope?: string | null,
+  now?: Date | null,
 ): Promise<Payload> {
-  if (!(target instanceof BrainSet)) return singleSearch(target, query, mode, limit, budgetTokens);
-  if (!target.federated) return singleSearch(await target.stateFor(target.brains[0]!), query, mode, limit, budgetTokens);
+  if (!(target instanceof BrainSet)) return singleSearch(target, query, mode, limit, budgetTokens, now);
+  if (!target.federated) {
+    return singleSearch(await target.stateFor(target.brains[0]!), query, mode, limit, budgetTokens, now);
+  }
 
   const budget = budgetTokens || 1200;
   let bounded: number;
@@ -980,7 +1000,7 @@ export async function searchPayload(
   const contributing: string[] = [];
   for (let order = 0; order < chosen.length; order++) {
     const brain = chosen[order]!;
-    const body = await singleSearch(await target.stateFor(brain), query, mode, bounded, 1e9);
+    const body = await singleSearch(await target.stateFor(brain), query, mode, bounded, 1e9, now);
     const hint = String(body["hint"]);
     if (hint.startsWith("unknown mode")) modeNote = hint.split(". ", 1)[0] + ". ";
     for (const m of body["used_modes"] as string[]) if (!used.includes(m)) used.push(m);

@@ -1,8 +1,10 @@
 /** One search surface, four strategies (spec/30 + spec/50): keyword always,
  * semantic when T2 is fresh, RRF fusion under auto, honest degradation markers. */
+import type { HalfLifeConfig } from "../config";
 import type { DocRecord, Graph } from "../compile/t1";
 import { cmpStr } from "../core/canonical";
 import { linkWalkSearch } from "../kg";
+import { fade } from "./half-life";
 import { search as keywordSearch, titleSearch, type SearchHit } from "./keyword";
 
 export const KNOWN_MODES = ["auto", "keyword", "semantic", "graph"] as const;
@@ -18,6 +20,11 @@ export const RELATIONAL_HINTS = ["relate", "connect", "between"] as const;
 
 export type SemanticFn = (query: string, limit: number) => Promise<SearchHit[]> | SearchHit[];
 export type GraphFn = (query: string, limit: number) => SearchHit[];
+
+export interface SearchOptions {
+  halfLife?: HalfLifeConfig | null;
+  now?: Date | null;
+}
 
 export interface SearchBody {
   hits: SearchHit[];
@@ -95,27 +102,32 @@ export async function runSearch(
   semanticFn: SemanticFn | null = null,
   graphFn: GraphFn | null = null,
   linkGraph: Graph | null = null,
+  options: SearchOptions = {},
 ): Promise<SearchBody> {
   const resolved = resolveMode(mode);
   const t2Fresh = tiers["t2"] === "fresh" && semanticFn !== null;
   const t3On = graphFn !== null;
+  // spec/50 Half-life: every retriever's scores fade by document age before
+  // ranking and fusion; `now` fixes the clock (tests, conformance)
+  const faded = (hits: SearchHit[]): SearchHit[] => fade(hits, records, options.halfLife, options.now);
+  // the fade re-ranks BEFORE the cut to limit, so a fresh page the raw BM25
+  // ranking left just outside the window can still make it in
+  const keywordHitsFor = (q: string): SearchHit[] => faded(keywordSearch(records, q, records.length)).slice(0, limit);
 
   if (resolved === "keyword") {
-    return body(keywordSearch(records, query, limit), ["keyword"], null);
+    return body(keywordHitsFor(query), ["keyword"], null);
   }
   if (resolved === "graph") {
-    if (t3On) return body(graphFn!(query, limit), ["graph"], null);
+    if (t3On) return body(faded(graphFn!(query, limit)), ["graph"], null);
     // T3 absent: degrade to a T1 link-walk over keyword hits (spec/40)
-    const hits = linkGraph
-      ? linkWalkSearch(linkGraph, records, query, limit)
-      : keywordSearch(records, query, limit);
+    const hits = linkGraph ? faded(linkWalkSearch(linkGraph, records, query, limit)) : keywordHitsFor(query);
     return body(hits, ["keyword"], "graph");
   }
 
   let semanticHits: SearchHit[] | null = null;
   if (t2Fresh) {
     try {
-      semanticHits = await semanticFn!(query, limit);
+      semanticHits = faded(await semanticFn!(query, limit));
     } catch {
       semanticHits = null; // degrade below; T2 trouble must never error a search
     }
@@ -128,17 +140,17 @@ export async function runSearch(
 
   if (resolved === "semantic") {
     if (semanticHits === null) {
-      return body(keywordSearch(records, query, limit), ["keyword"], "semantic");
+      return body(keywordHitsFor(query), ["keyword"], "semantic");
     }
     return body(ensureTitles(semanticHits, titleHits, limit), ["semantic"], null);
   }
 
   // auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document).
   // The entity graph joins only for relation-shaped queries (spec/40).
-  const keywordHits = keywordSearch(records, query, limit);
+  const keywordHits = keywordHitsFor(query);
   const rankings: Record<string, SearchHit[]> = { keyword: keywordHits };
   if (semanticHits !== null) rankings["semantic"] = semanticHits;
-  if (t3On && isRelational(query)) rankings["graph"] = graphFn!(query, limit);
+  if (t3On && isRelational(query)) rankings["graph"] = faded(graphFn!(query, limit));
 
   const degradedFrom = semanticHits === null ? "semantic" : null;
   if (Object.keys(rankings).length === 1) {

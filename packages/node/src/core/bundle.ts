@@ -46,6 +46,7 @@ export interface Document {
   tools: string[]; // declared tool paths, as written
   export: string[]; // spec/85 export targets (agent-skill)
   todo: boolean; // spec/20 To-do lists (type: todo)
+  half_life: number | null; // spec/20: frontmatter half_life in days
 }
 
 /** A doc is a to-do list by its `type` — `todo`, trimmed, case-insensitive —
@@ -92,6 +93,14 @@ export function normalizeTimestamp(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof YamlTimestamp) return value.normalized();
   return pyStr(value);
+}
+
+/** Frontmatter `half_life` in days — a number, or null (spec/20); bools and
+ * strings are not days. */
+export function normalizeHalfLife(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "bigint") return Number(value);
+  return null;
 }
 
 export function normalizeTags(value: unknown): string[] {
@@ -345,6 +354,7 @@ export function scan(
       tools,
       export: exportTargets,
       todo,
+      half_life: normalizeHalfLife(meta["half_life"]),
     });
   }
   return docs;

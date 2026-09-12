@@ -139,6 +139,7 @@ def build_docs_records(docs: list[Document]) -> list[dict]:
         records.append({
             "about": doc.about,
             "description": doc.description,
+            "half_life": doc.half_life,
             "path": doc.path,
             "reserved": doc.reserved,
             "sha256": doc.sha256,

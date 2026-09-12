@@ -128,4 +128,31 @@ skill whose trigger description matches the query must not sink below prose
 docs that merely mention the same words. The boost applies only to documents
 the query already matched — it never surfaces a skill on its own — and is
 the one `type`-keyed ranking signal both engines implement.
-Conformance asserts the top-k result SET, not scores.
+
+**Half-life.** Memories fade, and that is a feature: a document's score
+in every retriever (keyword, semantic, graph) is multiplied by
+`max(2^(-age / half_life), 1/16)` before ranking and fusion, where `age`
+is the time from the document's OKF `timestamp` (spec/20 `docs.jsonl`) to
+the moment of the query, in days (fractional), and `half_life` is the
+document's effective half-life in days. A `timestamp` is read as
+`YYYY-MM-DD` (midnight UTC) or `YYYY-MM-DDTHH:MM:SS` with `Z` or a
+`±HH:MM` offset (naive = UTC); a document with no `timestamp`, an
+unreadable one, or whose effective half-life is `0`, never fades (factor
+`1`); a future timestamp counts as age `0`. The floor — four half-lives — keeps a faded page
+recallable: nothing is deleted or filtered, it only gets harder to recall,
+and the ranking among old pages stays meaningful. The effective half-life
+is resolved per document, most specific wins: the bundle's `[half_life]
+default` (spec/80; `0`, so nothing fades unless a brain asks), then the
+longest `[half_life.folders]` key that is a folder prefix of the document's
+bundle-relative path, then the document's own frontmatter `half_life`
+(days; `0` = never fades). The folders table is the bundle author's — the
+engine still interprets no folder name of its own (spec/85). The factor is
+applied to each retriever's scores before its hits are ranked and fused —
+keyword before the cut to `limit`, semantic and graph over the hits the
+retriever returns, re-ranked by (score desc, path) — so a stale document
+still surfaces but ranks below a fresh one that says the same thing;
+`ensure_titles` (a doc the query names) is unaffected. Federation (spec/75)
+merges the faded ranks like any other. With the default config (nothing
+fades) scores are byte-identical to an engine without the factor.
+Conformance asserts the top-k result SET, not scores; a half-life case
+carries its own `half_life` config and a fixed `now`.

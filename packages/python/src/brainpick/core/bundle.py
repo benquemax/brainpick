@@ -50,6 +50,7 @@ class Document:
     tools: list[str] = field(default_factory=list)        # declared tool paths, as written
     export: list[str] = field(default_factory=list)       # spec/85 export targets (agent-skill)
     todo: bool = False                                    # spec/20 To-do lists (type: todo)
+    half_life: float | None = None                        # spec/20: frontmatter half_life in days
 
 
 def is_todo(type_value) -> bool:
@@ -83,6 +84,16 @@ def _normalize_timestamp(value) -> str | None:
     if isinstance(value, date):
         return value.strftime("%Y-%m-%d")
     return str(value)
+
+
+def _normalize_half_life(value) -> float | None:
+    """Frontmatter `half_life` in days — a number, or None (spec/20); bools and
+    strings are not days."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
 
 
 def _normalize_tags(value) -> list[str]:
@@ -241,5 +252,6 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             tools=tools,
             export=export,
             todo=todo,
+            half_life=_normalize_half_life(meta.get("half_life")),
         ))
     return docs

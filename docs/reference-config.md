@@ -4,7 +4,7 @@ about: concept
 title: "Configuration reference"
 description: "Every brainpick.toml key with its default, type and allowed values, derived from config.py and the config spec — plus layering, env overrides and the auth file."
 tags: [config, spec]
-timestamp: 2026-09-13T10:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Configuration reference
@@ -47,6 +47,11 @@ Pages are named by their dotted TOML path.
 
 - [similarity_gaps.threshold](reference/config/similarity-gaps-threshold.md)
 - [similarity_gaps.max_pairs](reference/config/similarity-gaps-max-pairs.md)
+
+## half_life
+
+- [half_life.default](reference/config/half-life-default.md)
+- [half_life.folders](reference/config/half-life-folders.md)
 
 ## serve
 

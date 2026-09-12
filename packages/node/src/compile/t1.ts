@@ -69,6 +69,7 @@ export interface Graph {
 export interface DocRecord {
   about: string | null;
   description: string | null;
+  half_life: number | null;
   path: string;
   reserved: boolean;
   sha256: string;
@@ -214,6 +215,7 @@ export function buildDocsRecords(docs: Document[]): DocRecord[] {
     .map((doc) => ({
       about: doc.about,
       description: doc.description,
+      half_life: doc.half_life,
       path: doc.path,
       reserved: doc.reserved,
       sha256: doc.sha256,

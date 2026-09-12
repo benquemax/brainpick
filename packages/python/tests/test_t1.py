@@ -58,7 +58,7 @@ def test_docs_records(kotiaurinko):
     assert kuu["title"] == "Kuu" and kuu["description"] is None
     assert "tides" in kuu["text"] and "type: Concept" not in kuu["text"]
     assert set(kuu) == {
-        "about", "description", "path", "reserved", "sha256", "tags", "text", "timestamp", "title", "type",
+        "about", "description", "half_life", "path", "reserved", "sha256", "tags", "text", "timestamp", "title", "type",
     }
 
     # about is nullable — absent frontmatter yields None, present flows through

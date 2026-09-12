@@ -122,7 +122,18 @@ def test_query(case, tmp_path):
         _, config = resolve_bundle(root)  # honour [bundle] exclude (a brain's raw/)
         records = build_docs_records(
             scan(root, include=tuple(config.bundle.include), exclude=tuple(config.bundle.exclude)))
-        hits = search(records, case["query"], limit=case["limit"])
+        if "half_life" in case:  # spec/50 Half-life: the case carries its config and clock
+            from datetime import datetime
+
+            from brainpick.config import HalfLifeConfig
+
+            hl = HalfLifeConfig(default=case["half_life"].get("default", 0),
+                                folders=dict(case["half_life"].get("folders", {})))
+            now = datetime.fromisoformat(case["now"].replace("Z", "+00:00"))
+            hits = run_search(records, {}, case["query"], mode=case["mode"], limit=case["limit"],
+                              half_life=hl, now=now)["hits"]
+        else:
+            hits = search(records, case["query"], limit=case["limit"])
     if case.get("expect_order"):
         assert [h["path"] for h in hits] == list(case["expect_paths"])
     else:

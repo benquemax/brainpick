@@ -2,8 +2,11 @@
 semantic when T2 is fresh, RRF fusion under auto, honest degradation markers."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Callable
 
+from brainpick.config import HalfLifeConfig
+from brainpick.query.half_life import fade
 from brainpick.query.keyword import search as keyword_search
 from brainpick.query.keyword import title_search
 
@@ -79,6 +82,8 @@ def run_search(
     semantic_fn: SemanticFn | None = None,
     graph_fn: GraphFn | None = None,
     link_graph: dict | None = None,
+    half_life: HalfLifeConfig | None = None,
+    now: datetime | None = None,
 ) -> dict:
     """The spec/50 response body: {"hits", "used_modes", "degraded_from"}.
 
@@ -86,27 +91,37 @@ def run_search(
     runs the T3 entity-graph retriever (present iff the export loaded). Callers
     wire them to query.vectors.semantic_search and kg.graph_search. Any tier's
     trouble downgrades the answer with a marker, never errors the call.
+    `half_life` (spec/50 *Half-life*) fades every retriever's scores by document
+    age before ranking and fusion; `now` fixes the clock (tests, conformance).
     """
     resolved = resolve_mode(mode)
     t2_fresh = tiers.get("t2") == "fresh" and semantic_fn is not None
     t3_on = graph_fn is not None
 
+    def faded(hits: list[dict]) -> list[dict]:
+        return fade(hits, records, half_life, now)
+
+    def keyword_hits_for(query: str) -> list[dict]:
+        # the fade re-ranks BEFORE the cut to limit, so a fresh page the raw BM25
+        # ranking left just outside the window can still make it in
+        return faded(keyword_search(records, query, limit=len(records)))[:limit]
+
     if resolved == "keyword":
-        return _body(keyword_search(records, query, limit=limit), ["keyword"], None)
+        return _body(keyword_hits_for(query), ["keyword"], None)
     if resolved == "graph":
         if t3_on:
-            return _body(graph_fn(query, limit), ["graph"], None)
+            return _body(faded(graph_fn(query, limit)), ["graph"], None)
         # T3 absent: degrade to a T1 link-walk over keyword hits (spec/40)
         from brainpick.kg import link_walk_search
 
-        hits = (link_walk_search(link_graph, records, query, limit) if link_graph
-                else keyword_search(records, query, limit=limit))
+        hits = (faded(link_walk_search(link_graph, records, query, limit)) if link_graph
+                else keyword_hits_for(query))
         return _body(hits, ["keyword"], "graph")
 
     semantic_hits: list[dict] | None = None
     if t2_fresh:
         try:
-            semantic_hits = semantic_fn(query, limit)
+            semantic_hits = faded(semantic_fn(query, limit))
         except Exception:
             semantic_hits = None  # degrade below; T2 trouble must never error a search
 
@@ -117,17 +132,17 @@ def run_search(
 
     if resolved == "semantic":
         if semantic_hits is None:
-            return _body(keyword_search(records, query, limit=limit), ["keyword"], "semantic")
+            return _body(keyword_hits_for(query), ["keyword"], "semantic")
         return _body(ensure_titles(semantic_hits, title_hits, limit), ["semantic"], None)
 
     # auto: fuse whatever is available (spec/30: RRF k=60, dedupe by document).
     # The entity graph joins only for relation-shaped queries (spec/40).
-    keyword_hits = keyword_search(records, query, limit=limit)
+    keyword_hits = keyword_hits_for(query)
     rankings: dict[str, list[dict]] = {"keyword": keyword_hits}
     if semantic_hits is not None:
         rankings["semantic"] = semantic_hits
     if t3_on and is_relational(query):
-        rankings["graph"] = graph_fn(query, limit)
+        rankings["graph"] = faded(graph_fn(query, limit))
 
     degraded_from = "semantic" if semantic_hits is None else None
     if len(rankings) == 1:  # keyword alone — the honest degradation is still "semantic"

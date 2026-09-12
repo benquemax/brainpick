@@ -163,6 +163,18 @@ def _quote_terms(terms: list[str]) -> str:
 
 
 def _why(hit: dict, query: str) -> str:
+    why = _match_reason(hit, query)
+    faded = hit.get("faded")
+    if faded:  # spec/50 Half-life: say why an old page ranks where it does
+        days = int(faded["age_days"])
+        half = faded["half_life"]
+        half_text = f"{int(half)} day{'s' if int(half) != 1 else ''}" if float(half).is_integer() \
+            else f"{half} days"
+        why += f"; faded ({days} day{'s' if days != 1 else ''} old, half-life {half_text})"
+    return why
+
+
+def _match_reason(hit: dict, query: str) -> str:
     lowered = query.lower()
     if lowered in str(hit["title"]).lower():
         return f"title matches '{query}'"
@@ -189,7 +201,7 @@ def _why(hit: dict, query: str) -> str:
 
 
 def _single_search(state: ServeState, query: str, mode: str = "auto", limit: int = 8,
-                   budget_tokens: int | None = None) -> dict:
+                   budget_tokens: int | None = None, now: datetime | None = None) -> dict:
     budget = budget_tokens or 1200
     requested = str(mode or "auto")
     note = None
@@ -205,6 +217,7 @@ def _single_search(state: ServeState, query: str, mode: str = "auto", limit: int
         state.records, state.manifest.get("tiers", {}), str(query or ""),
         mode=requested, limit=limit, semantic_fn=state.semantic_fn(),
         graph_fn=state.graph_fn(), link_graph=state.graph,
+        half_life=state.config.half_life, now=now,
     )
     raw = body["hits"]
     todo_paths = {t["path"] for t in getattr(state, "todos", [])}
@@ -768,12 +781,14 @@ def overview_payload(target, budget_tokens: int | None = None, scope: str | None
 
 
 def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
-                   budget_tokens: int | None = None, scope: str | None = None) -> dict:
+                   budget_tokens: int | None = None, scope: str | None = None,
+                   now: datetime | None = None) -> dict:
     brain_set = _as_set(target)
     if brain_set is None:
-        return _single_search(target, query, mode, limit, budget_tokens)
+        return _single_search(target, query, mode, limit, budget_tokens, now=now)
     if not brain_set.federated:
-        return _single_search(brain_set.state_for(brain_set.brains[0]), query, mode, limit, budget_tokens)
+        return _single_search(brain_set.state_for(brain_set.brains[0]), query, mode, limit, budget_tokens,
+                              now=now)
 
     budget = budget_tokens or 1200
     try:
@@ -788,7 +803,7 @@ def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
     mode_note = None
     contributing: list[str] = []
     for order, brain in enumerate(chosen):
-        body = _single_search(brain_set.state_for(brain), query, mode, limit, budget_tokens=10**9)
+        body = _single_search(brain_set.state_for(brain), query, mode, limit, budget_tokens=10**9, now=now)
         if body["hint"].startswith("unknown mode"):
             mode_note = body["hint"].split(". ", 1)[0] + ". "
         for m in body["used_modes"]:

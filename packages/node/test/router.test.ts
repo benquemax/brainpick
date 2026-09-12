@@ -24,6 +24,7 @@ function record(path: string, title: string, text: string, description: string |
     title,
     about: null,
     description,
+    half_life: null,
     text,
     reserved: false,
     sha256: "x",

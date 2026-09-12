@@ -362,6 +362,7 @@ export function apiRouter(state: ServeState, auth: AuthProvider): Router {
     const body = await runSearch(
       state.records, state.tiers(), query, mode, limit,
       state.semanticFn(), state.graphFn(), state.graph,
+      { halfLife: state.config.half_life },
     );
     res.json(body);
   });

@@ -107,6 +107,24 @@ cases:
     limit: 8
     expect_paths: [todo/open.md]
 
+  # Half-life (spec/50): with `skills` fading at one day and `now` a month
+  # after the fixture's timestamps, the boosted skill that led
+  # search-keyword-skill-boost sinks to the floor (1/16) below every
+  # never-fading page — still present (nothing is filtered), just harder to
+  # recall. `half_life` is the [half_life] config table; `now` fixes the
+  # clock. An engine that ignores the factor keeps the skill first and fails.
+  - id: search-keyword-half-life
+    class: query
+    bundle: kotiaivot
+    query: "kahvi"
+    mode: keyword
+    limit: 8
+    half_life: {default: 0, folders: {skills: 1}}
+    now: "2026-08-01T00:00:00Z"
+    expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, todo/archive/2026-07-01.md,
+                   skills/kahvin-keitto.md, skills/veden-keitto.md]
+    expect_order: true
+
   # Stem terms (spec/50): `kahvia` (partitive) occurs nowhere; its 4-char
   # prefix `kahv` is shared with `kahvi`/`kahvin`, so every page that says
   # or tags coffee is reached — the archived to-do that names the skill

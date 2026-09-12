@@ -4,7 +4,7 @@ about: concept
 title: "Spec: REST API"
 description: "The HTTP surface both servers implement — health, status, graph, docs (live and at any commit), search, neighbors, live, timeline, show, guarded writes and asset upload."
 tags: [spec]
-timestamp: 2026-09-13T09:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Spec: REST API
@@ -24,7 +24,12 @@ Search scoring is normative for conformance: BM25 (k1=1.2, b=0.75) over
 `docs.jsonl`, with title weighted 3x, tags 2x, description 2x, text 1x, and
 every token of 5+ characters also indexed and queried as its 4-character
 prefix stem ([Search modes](../../search-modes.md)); conformance cases
-`search-keyword-tag-only` and `search-keyword-stem` pin both. Auth, when
+`search-keyword-tag-only` and `search-keyword-stem` pin both. Documents
+with `type: skill` are boosted 1.2x, and every retriever's scores are then
+multiplied by the [half-life](../../half-life.md) factor
+`max(2^(-age/half_life), 1/16)` on the document's OKF `timestamp` before
+ranking and fusion — off by default (`[half_life] default = 0`), pinned
+by `search-keyword-half-life` with a fixed `now`. Auth, when
 configured, gates `/api/*` and `/mcp` with a bearer token or session cookie.
 
 This realizes [live deltas](../../live-deltas.md), the browser half of

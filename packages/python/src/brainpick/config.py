@@ -102,6 +102,17 @@ BRAIN_AUDIENCES = ("personal", "team", "public")
 
 
 @dataclass
+class HalfLifeConfig:
+    """[half_life] — the ranking factor that fades stale docs (spec/50, spec/80):
+    `default` days for the bundle (0 = nothing fades), `folders` a bundle-relative
+    folder → days table where the longest matching prefix wins; a doc's own
+    frontmatter `half_life` beats both."""
+
+    default: float = 0.0
+    folders: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class BrainConfig:
     """[brain] — the bundle declares itself a brain (spec/85): an opinionated OKF
     bundle that is an agent's memory. Absent section → a wiki, not a brain."""
@@ -155,16 +166,36 @@ class Config:
     update: UpdateConfig = field(default_factory=UpdateConfig)
     similarity_gaps: SimilarityGapsConfig = field(default_factory=SimilarityGapsConfig)
     brain: BrainConfig = field(default_factory=BrainConfig)
+    half_life: HalfLifeConfig = field(default_factory=HalfLifeConfig)
 
 
-_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "update", "similarity_gaps", "brain")
+_SECTIONS = ("bundle", "index", "modules", "serve", "ui", "validate", "update", "similarity_gaps",
+             "brain", "half_life")
 _MODEL_TABLES = ("embedding", "extraction")
 # [models.*] tables are nested and handled separately below.
 _KNOWN_TOP = {"spec", "models", *_SECTIONS}
 
 
+def _folders_table(value) -> dict[str, float]:
+    """`[half_life.folders]`: folder → days; non-numeric values are dropped, keys
+    lose any trailing slash (spec/80)."""
+    if not isinstance(value, dict):
+        return {}
+    table: dict[str, float] = {}
+    for key, days in value.items():
+        if isinstance(days, bool):
+            continue
+        try:
+            table[str(key).strip().strip("/")] = float(days)
+        except (TypeError, ValueError):
+            continue
+    return table
+
+
 def _coerce(current, value):
     """Nudge a TOML value toward the default's type; forgiving, never raising."""
+    if isinstance(current, dict):
+        return _folders_table(value)
     if isinstance(current, bool):
         if isinstance(value, bool):
             return value
@@ -187,6 +218,9 @@ def _coerce(current, value):
 
 
 def _from_env(current, raw: str):
+    if isinstance(current, dict):  # `folder=days,folder=days`
+        pairs = (part.partition("=") for part in raw.split(",") if "=" in part)
+        return _folders_table({k.strip(): v.strip() for k, _, v in pairs})
     if isinstance(current, bool):
         lowered = raw.strip().lower()
         if lowered in _TRUTHY:
