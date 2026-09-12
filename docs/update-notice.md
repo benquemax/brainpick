@@ -4,7 +4,7 @@ about: concept
 title: Update notice
 description: "Agents never check for updates, so the brain tells them — a once-a-day registry lookup whose result surfaces in the AGENTS.md report, brain_overview and compile output, opt-out by config."
 tags: [agents, engine]
-timestamp: 2026-09-13T10:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Update notice
@@ -52,7 +52,10 @@ spec, so every harness sees it without asking:
 - **`brainpick compile`** prints one `note:` line, the same way it reports
   a stale tier.
 
-Nothing is enforced: the engine keeps serving the brain it compiled, and the
+It says that something is new, not what: the
+[What's new notice](whats-new.md), read from the ledger every package ships,
+is its offline twin — what changed since this brain was last compiled, and
+what to do about it. Nothing is enforced: the engine keeps serving the brain it compiled, and the
 notice is advice, not a gate. This is the progressive disclosure of
 [MCP tools](mcp-tools.md) applied to the tool itself — the fact arrives at the moment of orientation,
 at the cost of three short strings. The [Compile pipeline](compile-pipeline.md)

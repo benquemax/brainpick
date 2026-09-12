@@ -4,7 +4,7 @@ about: thing
 title: "The brain template"
 description: "The henxels starter template that scaffolds a brainpick-compatible _brain/ — the rules it enforces, how they split between henxels (structure) and brainpick (serving), what is fixed for life versus cheap to iterate, how the docs get read at all, and the migration story for later format versions."
 tags: [brain-format, henxels]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # The brain template
@@ -228,10 +228,14 @@ in ([Skills](skills.md)): `type: skill`, `depends_on` edges, `tools`,
 `brainpick skill new`; the Agent Skill export (`export: agent-skill`) is
 in too ([Agent integrations](agent-integrations.md)). Both engines read
 format 2 — day-per-file journals and the `todo/` lists
-([To-do lists](todo-lists.md)) — and format 1 alike. The template still
-writes format 1: `type: playbook` for its first skill (a `playbook` is a
-how-to for humans and is *not* a skill to the engine), monthly journals,
-`_todo.md` beside the brain. Until henxels' next release, a brain
-scaffolded today needs `type: skill` on its agent-facing procedures by
-hand and gets the format-2 layout by following this page. Still to come:
-`brainpick migrate --to 2` and `brain://` link extraction.
+([To-do lists](todo-lists.md)) — and format 1 alike, and
+[brainpick migrate](reference/cli/migrate.md) `--to 2` rewrites a format-1
+brain in one deterministic step: month files into day files, links onto the
+day files, `_todo.md` into `todo/open.md`, the stamp bumped — a brain whose
+stamp is behind hears about it at every compile
+([What's new notice](whats-new.md)). Until henxels' next release the
+template still writes format 1 (`type: playbook` for its first skill —
+a `playbook` is a how-to for humans and is *not* a skill to the engine —
+monthly journals, `_todo.md` beside the brain), so a brain scaffolded today
+runs the migration right after `henxels init` and adds `type: skill` to its
+agent-facing procedures by hand. Still to come: `brain://` link extraction.

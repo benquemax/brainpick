@@ -10,6 +10,7 @@ import { atomicWrite, readTextOrNull } from "../core/fs";
 import { deepEqual, diffGraphs, type GraphDelta } from "../deltas";
 import { findRepoRoot } from "../detect";
 import { buildTimeline } from "../timeline";
+import { whatsNewFor, type WhatsNewNotice } from "../releases";
 import { checkForUpdate, type UpdateNotice } from "../update";
 import { SPEC_VERSION, VERSION } from "../version";
 import { buildSkills, dependencyCycles, renderSkilltree, skilltreePath, type SkillsArtifact } from "./skills";
@@ -43,6 +44,8 @@ export interface CompileResult {
   warnings: string[];
   /** spec/80: the new-version notice, when one is known. */
   update?: UpdateNotice | null;
+  /** spec/80: the release-ledger notice, when one applies. */
+  whats_new?: WhatsNewNotice | null;
 }
 
 export interface Freshness {
@@ -102,6 +105,7 @@ function refreshReport(
   tiers: Record<string, unknown>,
   skills: SkillsArtifact | null = null,
   update: UpdateNotice | null = null,
+  whatsNew: WhatsNewNotice | null = null,
 ): void {
   const bundleRoot = resolve(root);
   const candidates = [bundleRoot];
@@ -117,7 +121,7 @@ function refreshReport(
     const existing = readTextOrNull(agents);
     if (existing === null) continue;
     const bundleDisplay = (relative(base, bundleRoot) || ".").split(sep).join("/");
-    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps, skills, update);
+    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps, skills, update, whatsNew);
     const updated = applyReportSection(existing, block);
     if (updated !== null && updated !== existing) atomicWrite(agents, updated);
   }
@@ -250,13 +254,22 @@ export async function runCompile(
   }
   const tiers = { t1: "fresh", t2: t2Status, t3: t3Status };
   const update = await checkForUpdate("node", VERSION, { enabled: cfg.update.check });
+  const whatsNew = whatsNewFor(oldManifest, VERSION, isBrain(cfg) ? cfg.brain.format : null);
   // The opt-in AGENTS.md brain report rides along on every compile so it stays
   // true even when nothing else changed (e.g. the markers were just installed).
-  refreshReport(root, bp, graph, tiers, skills, update);
+  refreshReport(root, bp, graph, tiers, skills, update, whatsNew);
   const artifactsChanged = t1Changed || t2Changed || t3Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {
-    return { changed: false, seq: oldManifest!["seq"] as number, stats: graph.stats, delta: null, warnings, update };
+    return {
+      changed: false,
+      seq: oldManifest!["seq"] as number,
+      stats: graph.stats,
+      delta: null,
+      warnings,
+      update,
+      whats_new: whatsNew,
+    };
   }
 
   atomicWrite(join(bp, "t1", "graph.json"), graphText);
@@ -298,7 +311,7 @@ export async function runCompile(
     delta.seq = seq;
   }
 
-  return { changed: !unchanged, seq, stats: graph.stats, delta, warnings, update };
+  return { changed: !unchanged, seq, stats: graph.stats, delta, warnings, update, whats_new: whatsNew };
 }
 
 /** `--only t2`: refresh vectors from the already-compiled docs substrate.

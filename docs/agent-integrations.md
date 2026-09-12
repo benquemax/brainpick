@@ -4,7 +4,7 @@ about: concept
 title: Agent integrations
 description: How brainpick meets agents where they live — a shipped Agent Skill, one-command integrations for each harness, four CLI query mirrors, and an AGENTS.md brain report that teaches graph-before-grep.
 tags: [agents]
-timestamp: 2026-09-13T11:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Agent integrations
@@ -82,6 +82,8 @@ index. The report is deterministic and byte-identical across engines: a
 graph-before-grep directive, the counts, the tier status, the top hub documents by
 total degree, the orphans, and the bundle root. Compile only *refreshes* an existing
 block; it never creates the file, and unmarked `AGENTS.md` files are never touched.
-One line is deliberately outside that determinism: when a newer brainpick is
+Two lines are deliberately outside that determinism: when a newer brainpick is
 published, an `Engine:` line names it and the upgrade command
-([Update notice](update-notice.md)).
+([Update notice](update-notice.md)); when releases have happened since the
+brain was last compiled, or its brain format is behind, a `What's new:` line
+names the command to run ([What's new notice](whats-new.md)).

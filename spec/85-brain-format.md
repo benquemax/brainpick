@@ -68,11 +68,12 @@ a day is a link to a file, no anchor:
 
 Format 1 kept one file per month (`YYYY-MM.md`, a `## YYYY-MM-DD` section
 per day, the previous month rolled into a flat `journals/archive/`). Both
-layouts are plain OKF logs; engines serve either without noticing. The
-template's `brainpick migrate --to 2` splits each month file by its day
-sections into `archive/YYYY/MM/YYYY-MM-DD.md` (today's stays at the top),
-rewrites `journals/YYYY-MM.md#YYYY-MM-DD` links to the day files, moves
-`_todo.md` to `todo/open.md` under `type: todo`, and bumps the stamp.
+layouts are plain OKF logs; engines serve either without noticing.
+`brainpick migrate --to 2` (see *Versioning and migration*) splits each
+month file by its day sections into `archive/YYYY/MM/YYYY-MM-DD.md`
+(today's stays at the top), rewrites `journals/YYYY-MM.md#YYYY-MM-DD` links
+to the day files, moves `_todo.md` to `todo/open.md` under `type: todo`,
+and bumps the stamp.
 
 Raw material stays greppable (T0) and is what claims ground on, but it
 never enters T1–T3: it is noisy by nature and would drown the distilled
@@ -308,6 +309,89 @@ keeping `_todo.md` beside the brain — both described above. A later format:
 Artifacts under `.brainpick/` are disposable (spec/00); a format change never
 needs a migration for them.
 
+### `brainpick migrate --to N`
+
+`migrate` is the one command that rewrites committed bytes. It is
+deterministic — the same bundle in, the same bundle out, on either engine
+(conformance class `migrate`) — and it is a *mechanical* rewrite: it moves
+and splits files and edits links and the stamp, never prose. It **writes by
+default** (one command for an agent; git is the undo) and prints every
+action it took as one line each, so the resulting commit reviews itself;
+`--dry-run` prints the same action list plus a unified diff of every file it
+would change and writes nothing. It refuses a target below the bundle's
+current stamp, and a bundle already at the target is a no-op that says so.
+A bundle without a `[brain]` section is not a brain and is refused.
+Migrating never compiles; the caller compiles afterwards (the compile
+pipeline is not touched, and `.brainpick/` stays disposable).
+
+Every step is applied to the bundle root `R` (the folder `[bundle] root`
+names) and the repo root `P` (where `brainpick.toml` lives; `P == R` when
+the root is `.`). `today` is the engine's local date unless
+`BRAINPICK_TODAY=YYYY-MM-DD` is set (conformance sets it).
+
+**1 → 2**, in this order:
+
+1. **Journals by day.** For every `R/journals/YYYY-MM.md` and
+   `R/journals/archive/YYYY-MM.md` (format 1's flat archive): split the file
+   into day files at its `## YYYY-MM-DD` headings. Text before the first day
+   heading is dropped only if it is the month's `# YYYY-MM` title and blank
+   lines; anything else is kept as the preamble of the first day. Each day
+   file is `# YYYY-MM-DD` + a blank line + the section body; a `###` heading
+   inside a section is promoted one level (`##`); `##`-level content that is
+   not a date heading stays under the day it followed. A day equal to
+   `today` lands at `R/journals/YYYY-MM-DD.md`; every other day at
+   `R/journals/archive/YYYY/MM/YYYY-MM-DD.md`. A month file with no day
+   heading at all becomes a single day file named for the month's first day.
+   The month files are removed. Relative links inside a moved section are
+   re-rooted so they still land (`../skills/x.md` from
+   `journals/2026-07.md` becomes `../../../../skills/x.md` from
+   `journals/archive/2026/07/2026-07-01.md`).
+2. **Links to days.** Everywhere in the bundle (every `.md` under `R`):
+   a link whose target resolves to a month file with a `#YYYY-MM-DD`
+   fragment is rewritten to the day file that section became, relative to
+   the linking doc, without a fragment; the same target with no fragment
+   (or a fragment that is not a day) is rewritten to the month's earliest
+   day file. Link text is untouched.
+3. **To-dos into the brain.** If `P/_todo.md` exists: `R/todo/open.md` is
+   created with frontmatter `type: todo`, `title: Open`,
+   `description: What is still to be done — the brain's live work queue.`,
+   `timestamp: <today>T00:00:00Z`, followed by `# Open`, a blank line and
+   the body of `_todo.md` with its own first `# ` title line removed and
+   its relative links re-rooted from `P` to `R/todo/` so they still land;
+   then `_todo.md` is deleted and a `_todo.md` line, if present, is removed from
+   `P/.gitignore`. `R/todo/index.md` is created when absent with a fixed
+   body (below). If `_todo.md` does not exist, `todo/` is created with
+   `index.md` and an empty `open.md` (the same frontmatter and a body of
+   `# Open` only). An existing `todo/open.md` is left alone.
+4. **The stamp.** `format = 1` under `[brain]` in `P/brainpick.toml`
+   becomes `format = 2` in place (the line is rewritten, comments after it
+   kept, nothing else in the file touched).
+
+The fixed `todo/index.md`:
+
+```markdown
+# Todo
+
+The brain's own work queue: `open.md` is the live list, `archive/` holds
+what was closed, one file per day.
+
+- [Open](open.md)
+```
+
+The action list is one line per act, in the order performed, each of the
+form `split journals/2026-07.md → 3 day files`, `move journals/2026-07.md
+… → journals/archive/2026/07/2026-07-01.md` (one per day), `rewrite links
+in knowledge/kahvi.md (2)`, `move _todo.md → todo/open.md`, `create
+todo/index.md`, `stamp brainpick.toml: format 1 → 2`. The tally the
+conformance case fixes is the resulting bundle's bytes, not the wording.
+
+Migrations are cumulative: `--to 3` from format 1 runs 1 → 2 then 2 → 3.
+
+A brain whose stamp is below the format its engine writes is told so at
+every compile, in the AGENTS.md report and in `brain_overview` — the
+what's-new notice of spec/80 (*The release ledger*), whose format part
+names the exact `migrate` command — until it is migrated.
+
 ## Conformance
 
 Class `brain`:
@@ -329,6 +413,20 @@ Class `brain`:
 - `brain_overview` reports `todos: {"open": n, "done": m}` for the fixture;
   a keyword search that only a to-do item's text matches finds the list
   (`todo/open.md`) and the hit carries `todo: {"open", "done"}`.
+
+Class `migrate`:
+
+- A format-1 fixture (`spec/fixtures/bundles/kotiaivot-v1/`: a month file
+  with two days and a `###` sub-heading, a flat-archived earlier month, a
+  knowledge page linking to a day section and to the month, a `_todo.md`
+  and a `.gitignore` listing it — shipped as `gitignore`, which the harness
+  renames to `.gitignore` in the working copy so the repo's own ignore
+  rules never swallow the fixture; the golden tree ships it the same way —
+  `format = 1`) migrated with `--to 2` and
+  `BRAINPICK_TODAY` fixed to the later day yields a bundle byte-identical
+  to the golden tree under `spec/fixtures/expected/kotiaivot-v1/migrated/`
+  (every file, including the deleted ones being absent); `--dry-run` leaves
+  the fixture byte-identical to itself. Both engines natively.
 - `brain_overview` lists both skills under `skills` with their prerequisites
   and tools; `brain_read` on the dependent skill returns its `skill` block
   (spec/70); a keyword search whose terms match a skill's trigger

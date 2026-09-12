@@ -4,7 +4,7 @@ about: thing
 title: "brainpick compile"
 description: "Compile the bundle into .brainpick/ artifacts — with --full, --check-fresh, --only, --sample and --watch."
 tags: [cli, spec]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # brainpick compile
@@ -21,6 +21,10 @@ manifest, and rebuilds only what changed. On success it prints a stat line:
 - `--only {t1,t2,t3}` — compile a single tier (t2/t3 reuse the compiled docs substrate).
 - `--sample N` — a T3 preview: extract only the first N docs' chunks and summarize.
 - `--watch` — stay running and recompile incrementally on changes.
+
+After the stat line and any tier warnings come up to two `note:` lines — the
+[Update notice](../../update-notice.md) and the
+[What's new notice](../../whats-new.md) — each naming the command to run.
 
 This is the command behind the [compile pipeline](../../compile-pipeline.md);
 its tiers are [the tiers](../../the-tiers.md), and `--check-fresh` is what the

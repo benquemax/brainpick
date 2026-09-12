@@ -55,7 +55,7 @@ brainpick = "brainpick.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-brainpick = ["_static/**/*", "_skill/SKILL.md"]
+brainpick = ["_static/**/*", "_skill/SKILL.md", "_releases/releases.yaml"]
 
 [tool.ruff]
 line-length = 110

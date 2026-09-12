@@ -49,6 +49,13 @@ command. The overview `hint` then starts with the notice — an agent that
 reads only the first line of its first call learns it. Never budget-trimmed
 (three short strings); absent, not `null`, when there is nothing to say.
 
+`whats_new` (spec/80 *The release ledger*) likewise: present only when
+the ledger has something for this brain — releases since it was last
+compiled, or a brain format newer than its stamp — as the notice object,
+and then `hint` starts with `What's new — <hint>. ` (after the update
+notice's prefix when both exist). Never budget-trimmed; absent when
+there is nothing to say.
+
 ## brain_search({query, mode?, limit?, scope?, budget_tokens?})
 
 `mode ∈ auto|keyword|semantic|graph` (default `auto`). → `{"hits":

@@ -5,6 +5,7 @@
  * serve/state.py; Node's single event loop makes the Python thread-safety
  * plumbing (loop handoff) unnecessary.
  */
+import type { WhatsNewNotice } from "../releases";
 import type { UpdateNotice } from "../update";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -327,6 +328,8 @@ export class ServeState {
   presentation: Record<string, unknown> | null = null;
   /** spec/80: the new-version notice, when one is known. */
   update: UpdateNotice | null = null;
+  /** spec/80: the release-ledger notice, when one applies. */
+  whatsNew: WhatsNewNotice | null = null;
   private subscribers = new Set<EventQueue>();
 
   constructor(root: string, config: Config) {
@@ -341,6 +344,7 @@ export class ServeState {
   async load(): Promise<void> {
     const result = await runCompile(this.root, false, null, this.config);
     this.update = result.update ?? null;
+    this.whatsNew = result.whats_new ?? null;
     if (result.changed) this.applyCompileResult(result);
     else this.reloadArtifacts();
   }

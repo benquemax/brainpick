@@ -4,7 +4,7 @@ about: concept
 title: "Spec: brain format"
 description: "The normative contract for a brain — the fixed _brain/ root, the five memory-type folders, the engine-consumed frontmatter keys and their additive-only policy, inline grounding, the data flow's folder order, the [brain] config section, the brain:// link syntax and the format version with its migration rule."
 tags: [spec, brain-format]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Spec: brain format
@@ -65,8 +65,12 @@ committed content and would hurt to change later.
   Extracted with `kind: "brain"`, never counted as ghosts; resolution is
   federation's job and out of scope for format 1.
 - **Versioning.** `[brain] format` is the stamp; a later format rewrites
-  committed content only through `brainpick migrate --to N` (deterministic,
-  dry-run diff) and keeps every earlier format servable.
+  committed content only through
+  [brainpick migrate](../cli/migrate.md) `--to N` (deterministic, writes by
+  default, `--dry-run` for the action list and diff; conformance class
+  `migrate` holds the 1 → 2 rewrite of the fixture brain `kotiaivot-v1` to a
+  golden tree) and keeps every earlier format servable; a brain whose stamp
+  is behind is told by the [What's new notice](../../whats-new.md).
 - **Conformance class `brain`.** `[brain]` parsing with defaults, env and
   the audience warning in both engines; `brain://` extraction; the fixture
   brain `kotiaivot` (two `skill` docs, one depending on the other, a tool,

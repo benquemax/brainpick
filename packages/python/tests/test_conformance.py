@@ -289,3 +289,37 @@ def test_delta_scenario(case, tmp_path):
             raise AssertionError(f"unknown action {step['action']}")
         result = run_compile(root)
         assert result.delta == json.loads(expected_line), step["id"]
+
+
+@pytest.mark.parametrize("case", _cases("migrate"), ids=_case_ids("migrate"))
+def test_migrate_golden_tree(case, tmp_path):
+    """spec/85: `brainpick migrate --to N` is a deterministic rewrite of committed
+    bytes, so the whole resulting tree — every file's bytes AND the set of paths —
+    is held to a golden. The fixture ships its `.gitignore` as `gitignore`."""
+    from brainpick.migrate import migrate
+
+    root = _bundle_copy(tmp_path, case["bundle"])
+    (root / "gitignore").rename(root / ".gitignore")
+    before = _tree(root)
+    migrate(root, to=case["to"], today=case["today"], dry_run=True)
+    assert _tree(root) == before, "--dry-run must write nothing"
+    migrate(root, to=case["to"], today=case["today"])
+    (root / ".gitignore").rename(root / "gitignore")  # the golden ships it un-dotted too
+    expected = _tree(EXPECTED / case["bundle"] / case["expected_tree"])
+    assert _tree(root) == expected
+
+
+def _tree(root) -> dict:
+    return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
+            for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+@pytest.mark.parametrize("case", _cases("whats-new"), ids=_case_ids("whats-new"))
+def test_whats_new_notice(case):
+    """spec/80 *The release ledger*: the notice is a pure function of the fixture
+    ledger, the running version, the version that last compiled and the brain's
+    stamp — the exact object, or None."""
+    from brainpick.releases import load_ledger, whats_new
+
+    ledger = load_ledger(SPEC / "fixtures" / "releases" / case["ledger"])
+    assert whats_new(ledger, case["current"], case["since"], case["format"]) == case["expected"]

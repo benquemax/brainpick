@@ -17,10 +17,12 @@ import { VERSION } from "./version";
 // show-client.ts to avoid a circular import (see that file's header comment).
 export { connectableHost, postShow, type ShowResult };
 
-/** spec/80: the proactive new-version notice — one line, never a failure. */
+/** spec/80: the proactive new-version notice — one line, never a failure —
+ * and the release-ledger notice, one more. */
 function printUpdate(result: CompileResult): void {
   const u = result.update;
   if (u) console.log(`note: brainpick ${u.latest} is available (you run ${u.current}): ${u.hint}`);
+  if (result.whats_new) console.log(`note: what's new — ${result.whats_new.hint}`);
 }
 
 function printCompiled(result: CompileResult): void {
@@ -489,6 +491,29 @@ program
   .action(async (opts: { root: string; yes?: boolean; dryRun?: boolean }) => {
     const { runInit } = await import("./scaffold");
     process.exitCode = await runInit(opts.root, { yes: opts.yes ?? false, dryRun: opts.dryRun ?? false });
+  });
+
+program
+  .command("migrate")
+  .description("rewrite a brain to a newer brain format (spec/85)")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .requiredOption("--to <N>", "the target brain format (e.g. 2)", intOption)
+  .option("--dry-run", "print the action list and a diff without writing anything")
+  .action(async (opts: { root: string; to: number; dryRun?: boolean }) => {
+    const { runMigrate } = await import("./migrate");
+    process.exitCode = runMigrate(opts.root, opts.to, opts.dryRun ?? false);
+  });
+
+program
+  .command("whats-new")
+  .description("what changed since this brain was last compiled, and what to do about it (spec/80)")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--since <version>", "show releases after this version (default: the version that last compiled)")
+  .option("--all", "print the whole release ledger")
+  .option("--json", "the raw ledger entries plus the notice")
+  .action(async (opts: { root: string; since?: string; all?: boolean; json?: boolean }) => {
+    const { runWhatsNew } = await import("./releases");
+    process.exitCode = runWhatsNew(opts.root, { since: opts.since ?? null, all: opts.all ?? false, json: opts.json ?? false });
   });
 
 program

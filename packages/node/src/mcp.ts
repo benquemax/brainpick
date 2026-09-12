@@ -146,6 +146,11 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
     // spec/85 To-do lists: open work is one read away
     hint = `${todoTotals.open} open todos — brain_read '${busiestTodoList(state.todos)}' lists them. ` + hint;
   }
+  const whatsNew = state.whatsNew;
+  if (whatsNew) {
+    // spec/80 the release ledger: what changed, and what to do
+    hint = `What's new — ${whatsNew.hint}. ` + hint;
+  }
   const update = state.update;
   if (update) {
     // spec/80: the notice leads the hint — first line of the first call
@@ -156,6 +161,7 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
     counts,
     tiers: state.tiers(),
     ...(update ? { update: { ...update } } : {}),
+    ...(whatsNew ? { whats_new: { ...whatsNew } } : {}),
     skills,
     todos: todoTotals,
     tree,

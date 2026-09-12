@@ -4,7 +4,7 @@ about: thing
 title: "brain_overview"
 description: "The orientation tool — bundle name, counts, tier availability, the skills and the index tree — the progressive-disclosure root, with no required arguments."
 tags: [mcp, agents]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # brain_overview
@@ -21,7 +21,8 @@ holds are the first thing an agent sees ([Skills](../../skills.md)).
 and names the busiest list. Default budget 800 tokens. It is the progressive-disclosure root — the call an
 agent makes first, before searching or reading — which is why the
 [Update notice](../../update-notice.md), when there is one, rides here as
-`update` and leads the `hint`.
+`update` and leads the `hint`, and the
+[What's new notice](../../whats-new.md) as `whats_new`, right behind it.
 
 Behind a federated server ([federation](../../federation.md)) it also returns
 `brains` — `{alias, role, here, root, docs, tiers}` per brain, never trimmed —

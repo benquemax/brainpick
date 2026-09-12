@@ -1,0 +1,41 @@
+# A fixture ledger for the whats-new conformance class (spec/80 *The release
+# ledger*) — small, with a dev-checkout `unreleased` head, a format move and
+# a patch release, so the notice's every rule has a case.
+releases:
+  - version: 1.2.0
+    date: unreleased
+    brain_format: 3
+    summary: An unreleased head a released engine must never show.
+    changes:
+      - kind: added
+        area: brain
+        text: Brain format 3.
+        agent_action: Run `brainpick migrate --to 3`.
+  - version: 1.1.1
+    date: 2026-09-20
+    brain_format: 2
+    summary: A patch.
+    changes:
+      - kind: fixed
+        area: cli
+        text: A fix.
+  - version: 1.1.0
+    date: 2026-09-13
+    brain_format: 2
+    summary: Brain format 2 and a migrate command.
+    changes:
+      - kind: added
+        area: brain
+        text: Brain format 2.
+        agent_action: Run `brainpick migrate --to 2`.
+      - kind: added
+        area: cli
+        text: "`brainpick migrate --to N`."
+  - version: 1.0.0
+    date: 2026-09-01
+    brain_format: 1
+    summary: The first release.
+    changes:
+      - kind: added
+        area: compile
+        text: Everything.

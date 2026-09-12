@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -10,11 +11,14 @@ from brainpick.compile.pipeline import CompileResult, check_fresh, run_compile
 
 
 def _print_update(result: CompileResult) -> None:
-    """spec/80: the proactive new-version notice — one line, never a failure."""
+    """spec/80: the proactive new-version notice — one line, never a failure —
+    and the release-ledger notice, one more."""
     if result.update is not None:
         u = result.update
         print(f"note: brainpick {u['latest']} is available (you run {u['current']}): {u['hint']}",
               flush=True)
+    if result.whats_new is not None:
+        print(f"note: what's new — {result.whats_new['hint']}", flush=True)
 
 
 def _print_compiled(result: CompileResult) -> None:
@@ -110,6 +114,57 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     from brainpick.scaffold import run_doctor
 
     return run_doctor(Path(args.root))
+
+
+def _cmd_migrate(args: argparse.Namespace) -> int:
+    from brainpick.migrate import MigrateError, migrate
+
+    try:
+        report = migrate(Path(args.root), to=args.to, dry_run=args.dry_run)
+    except MigrateError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if not report.actions:
+        print(f"already at format {report.to_format}; nothing to do")
+        return 0
+    for action in report.actions:
+        print(action)
+    if report.dry_run:
+        print(f"dry run: {len(report.actions)} actions, nothing written — the diff:")
+        print(report.diff, end="")
+        return 0
+    print(f"migrated to format {report.to_format} ({len(report.actions)} actions); "
+          "review with git diff, then run `brainpick compile`")
+    return 0
+
+
+def _cmd_whats_new(args: argparse.Namespace) -> int:
+    from brainpick import __version__
+    from brainpick.config import resolve_bundle
+    from brainpick.releases import load_ledger, releases_between, render_whats_new, whats_new
+
+    root, config = resolve_bundle(args.root)
+    since = args.since
+    if since is None:
+        manifest_path = root / ".brainpick" / "manifest.json"
+        if manifest_path.is_file():
+            try:
+                generator = json.loads(manifest_path.read_text(encoding="utf-8")).get("generator") or {}
+                since = generator.get("version") if isinstance(generator.get("version"), str) else None
+            except (OSError, ValueError):
+                since = None
+    brain_format = config.brain.format if config.brain.is_brain else None
+    ledger = load_ledger()
+    if args.json:
+        shown = ledger if args.all else releases_between(ledger, since, __version__)
+        if not shown and not args.all:
+            shown = [r for r in ledger if str(r["version"]) == __version__]
+        payload = {"current": __version__, "since": since, "releases": shown,
+                   "notice": whats_new(ledger, __version__, since, brain_format)}
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    print(render_whats_new(ledger, __version__, since, brain_format, everything=args.all), end="")
+    return 0
 
 
 def _cmd_token_create(args: argparse.Namespace) -> int:
@@ -625,6 +680,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser("doctor", help="diagnose config, bundle, artifacts, backends, and UI")
     p_doctor.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_doctor.set_defaults(func=_cmd_doctor)
+
+    p_migrate = sub.add_parser("migrate", help="rewrite a brain to a newer brain format (spec/85)")
+    p_migrate.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_migrate.add_argument("--to", type=int, required=True, metavar="N",
+                           help="the target brain format (e.g. 2)")
+    p_migrate.add_argument("--dry-run", action="store_true",
+                           help="print the action list and a diff without writing anything")
+    p_migrate.set_defaults(func=_cmd_migrate)
+
+    p_news = sub.add_parser("whats-new", help="what changed since this brain was last compiled, "
+                                              "and what to do about it (spec/80)")
+    p_news.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_news.add_argument("--since", default=None, metavar="VERSION",
+                        help="show releases after this version (default: the version that last compiled)")
+    p_news.add_argument("--all", action="store_true", help="print the whole release ledger")
+    p_news.add_argument("--json", action="store_true", help="the raw ledger entries plus the notice")
+    p_news.set_defaults(func=_cmd_whats_new)
 
     p_token = sub.add_parser("token", help="manage bearer tokens for agents (spec/80 auth)")
     token_sub = p_token.add_subparsers(dest="token_command", required=True)

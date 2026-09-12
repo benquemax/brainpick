@@ -4,7 +4,7 @@ about: process
 title: Compile pipeline
 description: How brainpick compiles a bundle — staged, hash-incremental, cron-able and watchable, with a fast freshness check for commit gates.
 tags: [tier, engine]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # Compile pipeline
@@ -37,7 +37,12 @@ Three ways to run it:
 Alongside the T1 artifacts, when the bundle lives in a git repository the
 pipeline distills its history into the advisory timeline that powers the
 [time machine](time-machine.md) — one `git log`, never a per-commit recompile,
-and a git failure just omits it.
+and a git failure just omits it. Two notices ride along on every compile,
+refreshing the AGENTS.md report and printed as `note:` lines: the
+[update notice](update-notice.md) (a newer engine is published) and the
+[what's new notice](whats-new.md) (what changed since the version that wrote
+the manifest this compile started from, and whether the brain's format is
+behind).
 
 T1 always runs and always succeeds on a readable bundle. A failing T2 or T3
 stage marks its tier stale and moves on — the deterministic layers never wait

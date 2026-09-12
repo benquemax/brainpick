@@ -98,6 +98,88 @@ and one line on `compile` output. `hint` is the exact upgrade command for
 the engine that noticed: `pip install -U brainpick` or
 `npm install -g brainpick`.
 
+## The release ledger and the what's-new notice
+
+The update notice says *a newer engine exists*; the what's-new notice says
+*what changed, and what to do about it*. Both engines ship the same
+**release ledger**, `spec/releases.yaml` (canonical; copied byte-identical
+into each package the way the Agent Skill is — `scripts/sync-releases.mjs`,
+parity-tested). It is structured so an agent never has to read a
+changelog:
+
+```yaml
+releases:
+  - version: 0.6.0          # newest first; the head may be `date: unreleased`
+    date: 2026-09-13        # ISO date, or the word `unreleased`
+    brain_format: 2         # the brain format this engine writes (spec/85)
+    summary: one line an agent can act on
+    changes:
+      - kind: added         # added | changed | fixed | removed
+        area: brain         # brain | cli | mcp | search | config | compile | webui | docs
+        text: what changed, in one or two sentences
+        agent_action: what an agent should do about it   # optional, imperative
+```
+
+`version` is the package version (pip and npm are lockstep); the head
+entry must equal the package version, or be marked `unreleased` and be
+newer than it — the release workflow checks. `brain_format` is per entry
+so the ledger tells when the format moved.
+
+**The notice.** Given the ledger, the running engine's `current` version,
+`since` (the `generator.version` of the manifest the compile started from
+— the version that *last compiled this brain* — or `null` when there was
+no manifest) and the brain's stamped `[brain] format` (`null` when not a
+brain), `whats_new(ledger, current, since, format)` yields `null` or
+
+```json
+{"since": "0.5.0", "current": "0.6.0", "releases": ["0.6.0"],
+ "format": {"current": 1, "latest": 2}, "hint": "…"}
+```
+
+- `releases`: the ledger versions `v` with `since < v ≤ current` (semantic
+  comparison on the `MAJOR.MINOR.PATCH` core, spec/80 `[update] check`),
+  newest first; `[]` when `since` is `null` or nothing lies between. Key
+  omitted, not `[]`, when empty. `since` is omitted when `null`. An
+  `unreleased` head is never listed: nothing has been released that one
+  could have missed.
+- `format`: present only when the bundle is a brain and its stamp is below
+  the newest `brain_format` among ledger entries ≤ `current` **or marked
+  `unreleased`** — the format a dev checkout's head declares is the one
+  that checkout writes (its `migrate` already knows it). A released
+  package never ships an unreleased head (the parity test and the release
+  workflow both check), so for it the two rules coincide.
+- `hint`: the parts joined by `; `, in this order, exactly: for releases
+  `brainpick <since> → <current>: <n> release(s) since this brain was last
+  compiled — run \`brainpick whats-new --since <since>\``; for the format
+  `brain format <current> → <latest>: run \`brainpick migrate --to
+  <latest>\``.
+- `null` when neither part applies — a brain compiled by this very
+  version at the current format has nothing to hear.
+
+Where it surfaces is normative, the same three places as the update
+notice: `compile` prints `note: what's new — <hint>`; the AGENTS.md report
+carries `- What's new: <hint>` after the bundle-root line (and after the
+`Engine:` line when both exist; outside the golden, since it depends on
+the installed version); `brain_overview` carries `whats_new` (the object
+above) and its `hint` starts with `What's new — <hint>. ` (after the
+update notice's prefix when both exist). A compile that rewrites the
+manifest stamps the current version into it, so the *release* part clears
+itself on the next compile that changes anything — the hint therefore
+names `--since`, so the agent can still ask for the full text afterwards.
+The *format* part stays until the brain is migrated.
+
+`brainpick whats-new [--since V] [--all] [--json]` prints the ledger
+entries the notice points at — summary, changes, and every
+`agent_action` collected under **Do next** — for `since` = `--since`, else
+the manifest's `generator.version`, else the current version alone (the
+running engine's own notes: always something useful, never "nothing").
+`--all` prints the whole ledger; `--json` the raw entries plus the notice.
+The format part is always appended when it applies.
+
+Conformance (class `whats-new`): a fixture ledger under
+`spec/fixtures/releases/` and cases giving `current`, `since`, `format`
+and the exact expected notice — both engines natively.
+
 ## `[bundle] id` — brain identity
 
 A random opaque identifier minted by `brainpick init` (recommended shape:

@@ -1,0 +1,249 @@
+# The release ledger (spec/80 *The release ledger and the what's-new notice*).
+#
+# Newest first. Both engines ship this file byte-identical (scripts/
+# sync-releases.mjs copies it into each package; parity tests hold the copies
+# to this canonical). `brainpick whats-new` reads it; the what's-new notice
+# in compile output, the AGENTS.md report and brain_overview points at it.
+#
+# Write for the agent that will act on it, not the human who will skim it:
+# `summary` is the one line worth reading; `agent_action` is imperative and
+# names the exact command or file when there is one. The head entry may be
+# `date: unreleased` while a release is being assembled — a released engine
+# never shows ledger entries newer than itself.
+#
+#   kind: added | changed | fixed | removed
+#   area: brain | cli | mcp | search | config | compile | webui | docs
+
+releases:
+  - version: 0.6.0
+    date: unreleased
+    brain_format: 2
+    summary: >-
+      Brain format 2 (day journals, to-do lists inside the brain), skills the
+      engine recognises, half-life ranking, a migrate command, and this ledger.
+    changes:
+      - kind: added
+        area: brain
+        text: >-
+          Brain format 2 (spec/85): one journal file per day (`journals/
+          YYYY-MM-DD.md`, only today at the top, earlier days under
+          `journals/archive/YYYY/MM/`) and the to-do list inside the brain as
+          `todo/open.md` (`type: todo`, `- [ ]` / `- [x] … (done: YYYY-MM-DD)`)
+          with closed items rolled into `todo/archive/YYYY-MM-DD.md`. Format 1
+          brains keep working unchanged.
+        agent_action: >-
+          Run `brainpick migrate --to 2` (add `--dry-run` to preview) in the
+          brain's repo, review `git diff`, compile, commit. Then journal into
+          `journals/<today>.md` and park work in `todo/open.md`, not `_todo.md`.
+      - kind: added
+        area: cli
+        text: >-
+          `brainpick migrate --to N` — the one command that rewrites committed
+          bytes: deterministic, mechanical, writes by default, `--dry-run`
+          prints the action list and a diff.
+      - kind: added
+        area: cli
+        text: >-
+          `brainpick whats-new` prints this ledger for the releases since the
+          brain was last compiled; compile, the AGENTS.md report and
+          brain_overview carry a one-line notice pointing at it.
+        agent_action: >-
+          When a compile or overview says "What's new", run `brainpick
+          whats-new` once and act on its "Do next" lines.
+      - kind: added
+        area: brain
+        text: >-
+          Skills (spec/85): `type: skill` docs are procedural memory the engine
+          recognises — frontmatter `depends_on` and `tools` become graph edges,
+          `t1/skills.json` and a generated `skills/skilltree.md` list them, and
+          brain_overview names them first. A `type: playbook` is a how-to for
+          humans, not a skill. `brainpick skill list|new` scaffold them.
+        agent_action: >-
+          Before improvising a procedure, read the matching skill from
+          brain_overview's `skills`; write new ones with `brainpick skill new`.
+      - kind: added
+        area: search
+        text: >-
+          Half-life ranking (spec/50): `[half_life] default` days and a
+          `[half_life.folders]` table fade stale docs by `2^(-age/half_life)`,
+          floored at 1/16; a doc's own `half_life` frontmatter overrides both.
+          Off (0) unless configured; the brain template sets a slow 365-day
+          default with faster journals and to-dos.
+        agent_action: >-
+          When rotten notes keep outranking fresh ones, steepen the folder's
+          half-life in `brainpick.toml` — never delete history to fix ranking.
+      - kind: added
+        area: search
+        text: >-
+          Tags are searchable and every long token carries a prefix stem, so
+          `kahvin` finds `kahvi`.
+      - kind: added
+        area: config
+        text: >-
+          `[update] check` — the engine looks up its latest published version
+          at most once a day and says so in compile output, the AGENTS.md report
+          and brain_overview; `BRAINPICK_UPDATE_CHECK=false` silences it.
+      - kind: changed
+        area: config
+        text: >-
+          Embedding detection is multilingual first: `bge-m3` leads, and
+          English-only models are named as such by `brainpick init`.
+      - kind: added
+        area: cli
+        text: >-
+          `brainpick integrate --export agent-skill` writes a pointer stub for
+          every exported skill into the host's skills folder.
+      - kind: changed
+        area: webui
+        text: depends_on edges are drawn in a style of their own.
+
+  - version: 0.5.0
+    date: 2026-09-11
+    brain_format: 1
+    summary: >-
+      Federation gains roles — one cortex plus any number of implants.
+    changes:
+      - kind: added
+        area: mcp
+        text: >-
+          `brainpick register --cortex` / `--implant` name the two roles of a
+          brain set (spec/75); scope `me` is the cortex. `--user` survives as
+          a hidden alias and `role = "user"` registries are still read.
+        agent_action: >-
+          Register your own memory with `--cortex` and each repository's
+          bundle with `--implant`; one user-scope `brainpick mcp` serves all.
+      - kind: changed
+        area: mcp
+        text: >-
+          An unqualified `brain_write` falls back to the cortex when there is
+          no *here* instead of declining; it still never guesses between
+          implants.
+
+  - version: 0.4.5
+    date: 2026-09-10
+    brain_format: 1
+    summary: "`brainpick serve --root` accepts a repo root above the bundle."
+    changes:
+      - kind: fixed
+        area: cli
+        text: >-
+          `serve --root` resolves `[bundle] root` like every other command, so
+          a repo-root `brainpick.toml` is no longer silently unread.
+
+  - version: 0.4.4
+    date: 2026-09-10
+    brain_format: 1
+    summary: The Node engine's brain_show proxies to a running serve too.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          Node `brain_show` over stdio reaches the UI through a running
+          `brainpick serve`, as the Python engine did since 0.4.3.
+
+  - version: 0.4.3
+    date: 2026-09-10
+    brain_format: 1
+    summary: brain_show over stdio reaches a running UI.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          `brain_show` called through `brainpick mcp` tries a running
+          `brainpick serve` for the same bundle first and only then falls back
+          to a local-only, honestly caveated presentation.
+        agent_action: >-
+          Keep `brainpick serve` running when you want brain_show to be seen.
+
+  - version: 0.4.2
+    date: 2026-09-09
+    brain_format: 1
+    summary: brain_write's henxels guard finds the repo-root contract.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          Guarded writes find `henxels.yaml` at the repo root beside `_brain/`
+          and the `henxels` CLI under `~/.local/bin` even with a stripped PATH.
+
+  - version: 0.4.1
+    date: 2026-09-08
+    brain_format: 1
+    summary: The embedding timeout is configurable.
+    changes:
+      - kind: added
+        area: config
+        text: >-
+          `[models.embedding] timeout` (seconds per batch, default 1800; env
+          `BRAINPICK_MODELS_EMBEDDING_TIMEOUT`) replaces a hardcoded 120 s.
+
+  - version: 0.4.0
+    date: 2026-09-07
+    brain_format: 1
+    summary: Truthful search `why`; `brainpick integrate dsh`.
+    changes:
+      - kind: changed
+        area: search
+        text: >-
+          `brain_search`'s `why` names the query tokens that matched and where.
+      - kind: added
+        area: cli
+        text: >-
+          `brainpick integrate dsh` prints the DeepSeek Harness cordis insert.
+
+  - version: 0.3.2
+    date: 2026-09-07
+    brain_format: 1
+    summary: The README ships a five-minute spoken episode.
+    changes:
+      - kind: added
+        area: docs
+        text: A spoken episode of the README, served from Pages.
+
+  - version: 0.3.1
+    date: 2026-09-07
+    brain_format: 1
+    summary: The hypothesis in the shipped README; the read path starts with git pull.
+    changes:
+      - kind: changed
+        area: brain
+        text: >-
+          The brain's read path starts with `git pull` and its write path ends
+          with a push (spec/85).
+        agent_action: Pull the brain before reading it; push before you finish.
+
+  - version: 0.3.0
+    date: 2026-09-07
+    brain_format: 1
+    summary: The brain format (spec/85), brain-aware init, `[bundle] exclude` honoured.
+    changes:
+      - kind: added
+        area: brain
+        text: >-
+          Brain format 1: an opinionated OKF bundle for agent memory with a
+          `[brain]` config section (`format`, `origin`, `audience`, `readers`)
+          parsed by both engines; `brainpick init` recognises a brain in place.
+      - kind: fixed
+        area: compile
+        text: >-
+          `[bundle] exclude` is honoured by compile and the freshness check.
+
+  - version: 0.2.0
+    date: 2026-09-06
+    brain_format: 0
+    summary: Federation — one `brainpick mcp` fronts many brains.
+    changes:
+      - kind: added
+        area: mcp
+        text: >-
+          A registry of brains (`brainpick register`), `alias:path` qualified
+          paths, a `scope` on search and overview, merged results by rank.
+
+  - version: 0.1.0
+    date: 2026-08-25
+    brain_format: 0
+    summary: First release on PyPI.
+    changes:
+      - kind: added
+        area: compile
+        text: The three tiers, the MCP tools, the CLI mirrors and the web UI.

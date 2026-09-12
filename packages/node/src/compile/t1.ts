@@ -1,4 +1,5 @@
 /** T1: the deterministic tier — graph, docs substrate, generated index (spec/20). */
+import type { WhatsNewNotice } from "../releases";
 import type { UpdateNotice } from "../update";
 import { cmpStr, sha256Hex } from "../core/canonical";
 import { posixDirname, type Document } from "../core/bundle";
@@ -315,6 +316,7 @@ export function renderReportBlock(
   similarityGaps: ReportGapPair[] | null = null,
   skills: SkillsArtifact | null = null,
   update: UpdateNotice | null = null,
+  whatsNew: WhatsNewNotice | null = null,
 ): string {
   const stats = (graph.stats ?? {}) as Partial<GraphStats>;
   const nodes = graph.nodes ?? [];
@@ -383,6 +385,10 @@ export function renderReportBlock(
   if (update !== null) {
     // spec/80: the one non-deterministic line, outside the golden
     lines.push(`- Engine: brainpick ${update.current} — ${update.latest} available: ${update.hint}`);
+  }
+  if (whatsNew !== null) {
+    // spec/80 the release ledger: the second such line
+    lines.push(`- What's new: ${whatsNew.hint}`);
   }
 
   const body = REPORT_PREAMBLE + "\n\n" + lines.join("\n") + "\n";

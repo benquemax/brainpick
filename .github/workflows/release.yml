@@ -55,6 +55,7 @@ jobs:
         run: |
           node scripts/sync-ui.mjs
           node scripts/sync-skill.mjs
+          node scripts/sync-releases.mjs
       - uses: astral-sh/setup-uv@v5
       - name: build wheel + sdist
         working-directory: packages/python

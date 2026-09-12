@@ -1,5 +1,33 @@
 # Update log
 
+## 2026-09-13
+
+- Added: `brainpick migrate --to N` (spec/85) — the one command that
+  rewrites committed bytes, in both engines. The 1 → 2 step splits month
+  journals into day files (today's at the top, the rest under
+  `archive/YYYY/MM/`), rewrites every link to a month or a day section onto
+  the day file, carries `_todo.md` into the brain as `todo/open.md` and
+  bumps the stamp. Writes by default and prints its action list — git is
+  the undo — `--dry-run` adds a unified diff and touches nothing. The
+  fixture brain `kotiaivot-v1` and its migrated golden tree pin the rewrite
+  byte for byte across engines (conformance class `migrate`).
+- Added: the release ledger and the what's-new notice (spec/80).
+  `spec/releases.yaml` — every release, its date, the brain format it
+  writes, its changes and the `agent_action` each asks for — ships
+  byte-identical in both packages. On every compile the engine diffs it
+  against the manifest's `generator.version` (the engine that last compiled
+  the brain) and the brain's `[brain] format`, and tells the agent what to
+  do: a `What's new:` line in the AGENTS.md report, `whats_new` in
+  `brain_overview` leading the hint, a `note:` on compile.
+  `brainpick whats-new [--since V] [--all] [--json]` prints the releases
+  with **Do next** collecting the actions. Offline, deterministic,
+  conformance class `whats-new`. Fetching a newer ledger from upstream is a
+  follow-up.
+- Docs: [What's new notice](whats-new.md), [brainpick migrate](reference/cli/migrate.md),
+  [brainpick whats-new](reference/cli/whats-new.md); the brain template,
+  to-do lists, agent integrations, brain_overview, compile and spec pages
+  point at them.
+
 ## 2026-09-11
 
 - Released 0.5.0: the federation changes below.

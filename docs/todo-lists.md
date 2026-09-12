@@ -4,7 +4,7 @@ about: concept
 title: "To-do lists"
 description: "Open work as part of the brain — a type: todo doc's checklist lines compile into todos.json, the overview counts them, a search hit says how many are open, and the day-per-file archive makes done an episode with a date; brainpick indexes the list and never edits it."
 tags: [brain-format, agents]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-13T12:30:00Z
 ---
 
 # To-do lists
@@ -12,7 +12,9 @@ timestamp: 2026-09-13T12:00:00Z
 A parking lot is memory too. Under brain format 1 the to-do list lived
 *beside* the [brain](brain.md) as `_todo.md` — project management, not
 knowledge — which made it invisible to `brain_search`: an agent asked "is
-anything about X still open?" had to grep. Format 2 moves it in. The
+anything about X still open?" had to grep. Format 2 moves it in — [brainpick migrate](reference/cli/migrate.md)
+carries an existing `_todo.md` across as `todo/open.md`, links re-rooted,
+the gitignore line dropped. The
 template keeps `todo/open.md`, the live list, and `todo/archive/
 YYYY-MM-DD.md`, what was closed that day — the same day-per-file rhythm as
 the [journals](data-flow-architecture.md), so `open.md` stays small and

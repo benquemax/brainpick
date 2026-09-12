@@ -41,6 +41,7 @@
     "dist",
     "static",
     "skill",
+    "releases",
     "README.md"
   ],
   "scripts": {

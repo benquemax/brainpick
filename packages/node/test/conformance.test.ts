@@ -4,7 +4,7 @@
  * runs against the same fixtures and goldens. This engine claims every 0.1
  * class — nothing here may skip (spec/README — CI watches skip counts).
  */
-import { readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { parse as parseYaml } from "yaml";
@@ -52,6 +52,14 @@ interface ConformanceCase {
   scope?: string;
   half_life?: { default?: number; folders?: Record<string, number> };
   now?: string;
+  to?: number;
+  today?: string;
+  expected_tree?: string;
+  ledger?: string;
+  current?: string;
+  since?: string | null;
+  format?: number | null;
+  expected?: Record<string, unknown> | null;
 }
 
 const CASES = (
@@ -294,6 +302,34 @@ describe("conformance", () => {
           if (c.expect_order) expect(paths).toEqual(c.expect_paths); // the rank merge is deterministic (spec/75)
           else expect(new Set(paths)).toEqual(new Set(c.expect_paths));
           for (const hit of hits) expect(hit.path.startsWith(hit.brain + ":")).toBe(true);
+        });
+        break;
+
+      case "migrate":
+        // spec/85: `brainpick migrate --to N` is a deterministic rewrite of committed
+        // bytes, so the whole resulting tree — every file's bytes AND the set of
+        // paths — is held to a golden. The fixture ships its `.gitignore` as `gitignore`.
+        test(c.id, async () => {
+          const { migrate } = await import("../src/migrate");
+          const root = copyBundle(c.bundle);
+          renameSync(join(root, "gitignore"), join(root, ".gitignore"));
+          const before = snapshot(root);
+          migrate(root, c.to!, { today: c.today!, dryRun: true });
+          expect(snapshot(root), "--dry-run must write nothing").toEqual(before);
+          migrate(root, c.to!, { today: c.today! });
+          renameSync(join(root, ".gitignore"), join(root, "gitignore")); // the golden ships it un-dotted too
+          expect(snapshot(root)).toEqual(snapshot(join(EXPECTED, c.bundle, c.expected_tree!)));
+        });
+        break;
+
+      case "whats-new":
+        // spec/80 *The release ledger*: the notice is a pure function of the fixture
+        // ledger, the running version, the version that last compiled and the
+        // brain's stamp — the exact object, or null.
+        test(c.id, async () => {
+          const { loadLedger, whatsNew } = await import("../src/releases");
+          const ledger = loadLedger(join(SPEC, "fixtures", "releases", c.ledger!));
+          expect(whatsNew(ledger, c.current!, c.since ?? null, c.format ?? null)).toEqual(c.expected);
         });
         break;
 

@@ -238,6 +238,8 @@ the line `- Engine: brainpick <current> — <latest> available: <hint>`
 follows the bundle root line. It is omitted entirely when nothing newer is
 known, so the golden — rendered with the check off — never carries it, and
 a report refreshed after an upgrade loses the line on the next compile.
+The what's-new notice (spec/80 *The release ledger*) is the second such
+line, `- What's new: <hint>`, after the `Engine:` line; the same rules.
 
 ## Generated skills/skilltree.md
 

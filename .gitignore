@@ -1,5 +1,5 @@
 # parking lot, plans & scratch — repo-local, never shared
-_todo.md
+/_todo.md
 _plans/
 _temp/*
 !_temp/.gitkeep
@@ -37,6 +37,9 @@ packages/node/static/*
 # playwright e2e run output (packages/webui)
 test-results/
 playwright-report/
+
+# the format-1 migrate fixture ships a _todo.md on purpose (spec/85)
+!spec/fixtures/bundles/kotiaivot-v1/_todo.md
 
 # machine-local bundle config (personal endpoints — the shared brainpick.toml is committable)
 **/brainpick.local.toml

@@ -208,6 +208,7 @@ def render_report_block(
     similarity_gaps: list[dict] | None = None,
     skills: dict | None = None,
     update: dict | None = None,
+    whats_new: dict | None = None,
 ) -> str:
     """The AGENTS.md brain report body (spec/20): a graph-before-grep directive,
     counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
@@ -278,6 +279,8 @@ def render_report_block(
     if update is not None:  # spec/80: the one non-deterministic line, outside the golden
         lines.append(f"- Engine: brainpick {update['current']} — {update['latest']} available:"
                      f" {update['hint']}")
+    if whats_new is not None:  # spec/80 the release ledger: the second such line
+        lines.append(f"- What's new: {whats_new['hint']}")
 
     body = _REPORT_PREAMBLE + "\n\n" + "\n".join(lines) + "\n"
     stamp = sha256_hex(body.encode("utf-8"))[:8]

@@ -1,0 +1,8 @@
+spec = "0.1"
+
+[bundle]
+root = "."
+
+[brain]
+format = 2              # the brainpick brain format (spec/85)
+audience = "personal"

@@ -130,6 +130,27 @@ def regen_delta(case: dict) -> None:
         print(f"golden: {out.relative_to(REPO)}")
 
 
+def regen_migrate(case: dict) -> None:
+    """spec/85: the migrated bundle, every file — the golden is the whole tree
+    (the harness compares path sets too, so a stale extra file fails it)."""
+    from brainpick.migrate import migrate
+
+    bundle = case["bundle"]
+    dst = EXPECTED / bundle / case["expected_tree"]
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / bundle
+        shutil.copytree(BUNDLES / bundle, root)
+        (root / "gitignore").rename(root / ".gitignore")
+        migrate(root, to=case["to"], today=case["today"])
+        (root / ".gitignore").rename(root / "gitignore")  # shipped un-dotted, like the fixture's
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(root, dst)
+    for path in sorted(dst.rglob("*")):
+        if path.is_file():
+            print(f"golden: {path.relative_to(REPO)}")
+
+
 def main() -> None:
     for case in CASES:
         if case["class"] == "compile":
@@ -147,6 +168,8 @@ def main() -> None:
             regen_similarity_gaps(case)
         elif case["class"] == "delta":
             regen_delta(case)
+        elif case["class"] == "migrate":
+            regen_migrate(case)
     print("done — review the diffs like code before committing.")
 
 

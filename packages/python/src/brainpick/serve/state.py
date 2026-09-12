@@ -202,6 +202,7 @@ class ServeState:
         self.presentation_seq = 0
         self.presentation: dict | None = None
         self.update: dict | None = None  # spec/80: the new-version notice, when one is known
+        self.whats_new: dict | None = None  # spec/80: the release-ledger notice, when one applies
         self.loop: asyncio.AbstractEventLoop | None = None
         self._subscribers: set[asyncio.Queue] = set()
 
@@ -211,6 +212,7 @@ class ServeState:
         """Compile if stale (a serve is a compile), then hold the artifacts."""
         result = run_compile(self.root, config=self.config)
         self.update = result.update
+        self.whats_new = result.whats_new
         if result.changed:
             self.apply_compile_result(result)
         else:
