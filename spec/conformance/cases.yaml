@@ -78,6 +78,28 @@ cases:
     expect_paths: [skills/kahvin-keitto.md, knowledge/kahvi.md, skills/veden-keitto.md]
     expect_order: true
 
+  # Tags are searchable (spec/50): `vesi` appears in veden-keitto.md ONLY as
+  # a tag — nowhere in its title, description or body. An engine that drops
+  # tags from the searchable text returns nothing and fails.
+  - id: search-keyword-tag-only
+    class: query
+    bundle: kotiaivot
+    query: "vesi"
+    mode: keyword
+    limit: 8
+    expect_paths: [skills/veden-keitto.md]
+
+  # Stem terms (spec/50): `kahvia` (partitive) occurs nowhere; its 4-char
+  # prefix `kahv` is shared with `kahvi`/`kahvin`, so every page that says
+  # or tags coffee is reached. An exact-token-only engine returns nothing.
+  - id: search-keyword-stem
+    class: query
+    bundle: kotiaivot
+    query: "kahvia"
+    mode: keyword
+    limit: 8
+    expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, skills/kahvin-keitto.md, skills/veden-keitto.md]
+
   - id: search-keyword-aurinko
     class: query
     bundle: kotiaurinko

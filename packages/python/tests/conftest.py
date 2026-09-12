@@ -20,6 +20,14 @@ def kotiaurinko(tmp_path: Path) -> Path:
     return dst
 
 
+@pytest.fixture
+def kotiaivot(tmp_path: Path) -> Path:
+    """A disposable copy of the kotiaivot fixture brain (spec/85 skills fixture)."""
+    dst = tmp_path / "kotiaivot"
+    shutil.copytree(FIXTURE_BUNDLES / "kotiaivot", dst)
+    return dst
+
+
 def stage_t3_export(root: Path, bundle: str = "kotiaurinko") -> None:
     """Stage the hand-authored T3 export into a compiled bundle and flip its
     manifest tier to fresh — no extractor runs (spec/40). The twin of the Node

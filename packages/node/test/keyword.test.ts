@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "vitest";
 
 import { scan } from "../src/core/bundle";
 import { buildDocsRecords } from "../src/compile/t1";
-import { search, tokenize } from "../src/query/keyword";
+import { search, searchTerms, tokenize } from "../src/query/keyword";
 import { cleanup, copyBundle } from "./helpers";
 
 afterEach(cleanup);
@@ -39,4 +39,33 @@ test("search result shape", () => {
 test("no hits", () => {
   const records = buildDocsRecords(scan(copyBundle()));
   expect(search(records, "zzzzz kuulumaton", 5)).toEqual([]);
+});
+
+// -- tags and stem terms (spec/50) ---------------------------------------------
+
+test("searchTerms adds a 4-char prefix for tokens of 5+", () => {
+  expect(searchTerms("kahvia kahvi Agents cup")).toEqual(["kahvia", "kahv", "kahvi", "kahv", "agents", "agen", "cup"]);
+  expect(searchTerms("a bb ccc dddd")).toEqual(["a", "bb", "ccc", "dddd"]); // < 5 chars: untouched
+});
+
+test("tags are searchable", () => {
+  const records = buildDocsRecords(scan(copyBundle("kotiaivot"), undefined, ["raw/*"]));
+  // `vesi` is veden-keitto's TAG only — not in title, description or body
+  expect(search(records, "vesi", 8).map((h) => h.path)).toEqual(["skills/veden-keitto.md"]);
+});
+
+test("an inflected query reaches its stem", () => {
+  const records = buildDocsRecords(scan(copyBundle("kotiaivot"), undefined, ["raw/*"]));
+  expect(new Set(search(records, "kahvia", 8).map((h) => h.path))).toEqual(
+    new Set(["knowledge/kahvi.md", "knowledge/vieraat.md", "skills/kahvin-keitto.md", "skills/veden-keitto.md"]),
+  );
+});
+
+test("an exact token still outranks a stem-only match", () => {
+  const records = buildDocsRecords(scan(copyBundle()));
+  const exact = search(records, "aurinko", 8);
+  expect(exact[0]!.path).toBe("aurinko.md");
+  const stem = search(records, "aurinkoa", 8);
+  expect(new Set(stem.map((h) => h.path))).toEqual(new Set(exact.map((h) => h.path)));
+  expect(stem[0]!.score).toBeLessThan(exact[0]!.score);
 });

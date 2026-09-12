@@ -13,15 +13,30 @@ K1 = 1.2
 B = 0.75
 SKILL_BOOST = 1.2  # spec/50: a matching skill outranks prose that merely shares its words
 SNIPPET_WINDOW = 240
+STEM_MIN_TOKEN = 5  # spec/50: tokens this long also contribute a prefix "stem" term…
+STEM_LEN = 4        # …of this many characters — language-agnostic, no stemmer
 
 
 def tokenize(text: str) -> list[str]:
     return _TOKEN.findall(text.lower())
 
 
+def search_terms(text: str) -> list[str]:
+    """BM25 terms (spec/50): every token, and after each token of STEM_MIN_TOKEN+
+    characters its STEM_LEN-character prefix, so `kahvia`/`kahvin`/`kahvi` share
+    `kahv` and an inflected query reaches its root without a per-language stemmer."""
+    terms: list[str] = []
+    for token in tokenize(text):
+        terms.append(token)
+        if len(token) >= STEM_MIN_TOKEN:
+            terms.append(token[:STEM_LEN])
+    return terms
+
+
 def _searchable(record: dict) -> str:
     title, description = record["title"], record["description"] or ""
-    return "\n".join([title, title, title, description, description, record["text"]])
+    tags = " ".join(record.get("tags") or [])
+    return "\n".join([title, title, title, tags, tags, description, description, record["text"]])
 
 
 def search(records: list[dict], query: str, limit: int = 8) -> list[dict]:
@@ -29,11 +44,11 @@ def search(records: list[dict], query: str, limit: int = 8) -> list[dict]:
     if not corpus:
         return []
 
-    term_freqs = [Counter(tokenize(_searchable(r))) for r in corpus]
+    term_freqs = [Counter(search_terms(_searchable(r))) for r in corpus]
     doc_lengths = [sum(tf.values()) for tf in term_freqs]
     avg_length = sum(doc_lengths) / len(doc_lengths) if corpus else 0.0
 
-    query_terms = tokenize(query)
+    query_terms = search_terms(query)
     if not query_terms or avg_length == 0:
         return []
 

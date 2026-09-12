@@ -3,7 +3,7 @@ type: playbook
 about: concept
 title: Wiki conventions
 description: How concepts in this wiki are written, typed and linked — including the practical, day-to-day guide to classifying type and about — and why this wiki doubles as brainpick's dogfood corpus.
-timestamp: 2026-07-10T18:00:00Z
+timestamp: 2026-09-13T09:00:00Z
 ---
 
 # Wiki conventions
@@ -104,7 +104,10 @@ few narrower ones for the reference volume's own sub-areas) turns into
 **tag entities** in the same algorithmic knowledge graph, giving the
 otherwise link-only T3 layer real subject clusters to show. Prefer reusing
 an existing tag over minting a new one-off — the vocabulary's value is in
-its repetition.
+its repetition. Tags are also indexed for keyword search, weighted like the
+description ([Search modes](search-modes.md)): a tag is the word a reader
+would search for that the body may never spell out, so choose it as a
+retrieval key, not a decoration.
 
 ## This wiki is also test mass
 

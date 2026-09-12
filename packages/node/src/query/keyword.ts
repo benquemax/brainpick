@@ -12,6 +12,8 @@ export const K1 = 1.2;
 export const SKILL_BOOST = 1.2; // spec/50: a matching skill outranks prose that merely shares its words
 export const B = 0.75;
 export const SNIPPET_WINDOW = 240;
+export const STEM_MIN_TOKEN = 5; // spec/50: tokens this long also contribute a prefix "stem" term…
+export const STEM_LEN = 4; // …of this many characters — language-agnostic, no stemmer
 
 /** The retriever that produced a hit (spec/50; under fusion, the
  * highest-contributing one). `title` is the deterministic navigational match that
@@ -31,10 +33,23 @@ export function tokenize(text: string): string[] {
   return text.toLowerCase().match(TOKEN) ?? [];
 }
 
+/** BM25 terms (spec/50): every token, and after each token of STEM_MIN_TOKEN+
+ * characters its STEM_LEN-character prefix, so `kahvia`/`kahvin`/`kahvi` share
+ * `kahv` and an inflected query reaches its root without a per-language stemmer. */
+export function searchTerms(text: string): string[] {
+  const terms: string[] = [];
+  for (const token of tokenize(text)) {
+    terms.push(token);
+    if (token.length >= STEM_MIN_TOKEN) terms.push(token.slice(0, STEM_LEN));
+  }
+  return terms;
+}
+
 function searchable(record: DocRecord): string {
   const title = record.title;
   const description = record.description || "";
-  return [title, title, title, description, description, record.text].join("\n");
+  const tags = (record.tags ?? []).join(" ");
+  return [title, title, title, tags, tags, description, description, record.text].join("\n");
 }
 
 export function search(records: DocRecord[], query: string, limit = 8): SearchHit[] {
@@ -43,7 +58,7 @@ export function search(records: DocRecord[], query: string, limit = 8): SearchHi
 
   const termFreqs = corpus.map((r) => {
     const tf = new Map<string, number>();
-    for (const token of tokenize(searchable(r))) tf.set(token, (tf.get(token) ?? 0) + 1);
+    for (const token of searchTerms(searchable(r))) tf.set(token, (tf.get(token) ?? 0) + 1);
     return tf;
   });
   const docLengths = termFreqs.map((tf) => {
@@ -53,7 +68,7 @@ export function search(records: DocRecord[], query: string, limit = 8): SearchHi
   });
   const avgLength = docLengths.reduce((a, b) => a + b, 0) / docLengths.length;
 
-  const queryTerms = tokenize(query);
+  const queryTerms = searchTerms(query);
   if (queryTerms.length === 0 || avgLength === 0) return [];
 
   const docCount = corpus.length;

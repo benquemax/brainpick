@@ -105,10 +105,23 @@ permit it (a bundle asset, not a concept). Response `201 {"path":
 
 Search scoring (normative for conformance): BM25 (k1=1.2, b=0.75) over
 `docs.jsonl` records. The searchable text of a document is the `title`
-repeated three times, the `description` twice, and `text` once, joined by
-newlines — a deterministic field weighting both runtimes reproduce
-trivially — lowercased, tokenized on Unicode non-alphanumeric boundaries
-(`_` is a boundary). Reserved documents are excluded from search results.
+repeated three times, the `tags` (space-joined, in record order) twice, the
+`description` twice, and `text` once, joined by newlines — a deterministic
+field weighting both runtimes reproduce trivially — lowercased, tokenized on
+Unicode non-alphanumeric boundaries (`_` is a boundary). Tags are the
+author's deliberate retrieval keys and often name what the body never
+spells out (`governance` on an authentication page); an index that dropped
+them threw away the one list of keywords the author wrote down.
+
+**Stem terms.** Every token of at least **5** characters additionally
+contributes its **4**-character prefix as a term, in documents and queries
+alike — a language-agnostic stem so an inflected form reaches its root
+without a stemmer or a per-language dependency: `kahvia`/`kahvin`/`kahvi`
+all yield `kahv`, `agents`/`agent` yield `agen`, `compiled`/`compiling`
+yield `comp`. An exact token still scores higher than a stem-only match
+(it matches both terms), and a stem shared by many unrelated words earns a
+low IDF, so stems are a recall tail, not a ranking change. Shorter tokens
+are left alone. Reserved documents are excluded from search results.
 A skill's BM25 score (spec/20 *Skills and frontmatter edges*) is multiplied
 by **1.2** before ranking: the read path starts with skills (spec/85), so a
 skill whose trigger description matches the query must not sink below prose

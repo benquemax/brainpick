@@ -4,7 +4,6 @@ memory the engine recognises by `type`, links by `depends_on`, points at by
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -25,14 +24,6 @@ from brainpick.query.keyword import search
 from brainpick.serve.state import ServeState
 from brainpick.config import load_config
 
-from conftest import FIXTURE_BUNDLES
-
-
-@pytest.fixture
-def kotiaivot(tmp_path: Path) -> Path:
-    dst = tmp_path / "kotiaivot"
-    shutil.copytree(FIXTURE_BUNDLES / "kotiaivot", dst)
-    return dst
 
 
 def _state(root: Path) -> ServeState:
