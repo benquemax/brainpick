@@ -1,0 +1,173 @@
+{
+  "edges": [
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvi",
+      "source": "index.md",
+      "target": "knowledge/kahvi.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvin keitto",
+      "source": "index.md",
+      "target": "skills/kahvin-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Veden keitto",
+      "source": "index.md",
+      "target": "skills/veden-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvin keitto",
+      "source": "knowledge/kahvi.md",
+      "target": "skills/kahvin-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Veden keitto",
+      "source": "knowledge/kahvi.md",
+      "target": "skills/veden-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvi",
+      "source": "skills/kahvin-keitto.md",
+      "target": "knowledge/kahvi.md"
+    },
+    {
+      "count": 1,
+      "kind": "depends_on",
+      "label": "Veden keitto",
+      "source": "skills/kahvin-keitto.md",
+      "target": "skills/veden-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Veden keitto",
+      "source": "skills/kahvin-keitto.md",
+      "target": "skills/veden-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvin keitto",
+      "source": "skills/skilltree.md",
+      "target": "skills/kahvin-keitto.md"
+    },
+    {
+      "count": 2,
+      "kind": "link",
+      "label": "Veden keitto",
+      "source": "skills/skilltree.md",
+      "target": "skills/veden-keitto.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvi",
+      "source": "skills/veden-keitto.md",
+      "target": "knowledge/kahvi.md"
+    }
+  ],
+  "ghosts": [],
+  "islands": [],
+  "nodes": [
+    {
+      "about": null,
+      "description": null,
+      "id": "index.md",
+      "in": 0,
+      "orphan": false,
+      "out": 3,
+      "reserved": true,
+      "tags": [],
+      "timestamp": null,
+      "title": "Kotiaivot",
+      "type": null
+    },
+    {
+      "about": null,
+      "description": "What coffee is and why the morning starts with it.",
+      "id": "knowledge/kahvi.md",
+      "in": 3,
+      "orphan": false,
+      "out": 2,
+      "reserved": false,
+      "tags": [
+        "kahvi"
+      ],
+      "timestamp": "2026-07-01T07:00:00Z",
+      "title": "Kahvi",
+      "type": "Concept"
+    },
+    {
+      "about": null,
+      "description": "Use when brewing the morning coffee — the whole procedure, kettle to cup.",
+      "id": "skills/kahvin-keitto.md",
+      "in": 3,
+      "orphan": false,
+      "out": 3,
+      "reserved": false,
+      "tags": [
+        "kahvi"
+      ],
+      "timestamp": "2026-07-01T07:10:00Z",
+      "title": "Kahvin keitto",
+      "type": "skill"
+    },
+    {
+      "about": null,
+      "description": null,
+      "id": "skills/skilltree.md",
+      "in": 0,
+      "orphan": false,
+      "out": 2,
+      "reserved": true,
+      "tags": [],
+      "timestamp": null,
+      "title": "Skill tree",
+      "type": null
+    },
+    {
+      "about": null,
+      "description": "Use when you need boiling water — for coffee, tea, or pasta.",
+      "id": "skills/veden-keitto.md",
+      "in": 5,
+      "orphan": false,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "vesi"
+      ],
+      "timestamp": "2026-07-01T07:05:00Z",
+      "title": "Veden keitto",
+      "type": "playbook"
+    }
+  ],
+  "stats": {
+    "docs": 5,
+    "edges": 11,
+    "ghosts": 0,
+    "islands": 0,
+    "orphans": 0,
+    "tags": 2
+  },
+  "tags": {
+    "kahvi": [
+      "knowledge/kahvi.md",
+      "skills/kahvin-keitto.md"
+    ],
+    "vesi": [
+      "skills/veden-keitto.md"
+    ]
+  }
+}

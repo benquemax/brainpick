@@ -41,6 +41,15 @@ export function presentOverview(p: Record<string, unknown>): string {
         .map(([k, v]) => `${k} ${String(v)}`)
         .join(" · "),
   ];
+  const skills = (p["skills"] ?? []) as OverviewDoc[];
+  if (skills.length) {
+    lines.push("");
+    lines.push("skills (read before improvising):");
+    for (const skill of skills) {
+      const desc = skill.description ? ` — ${skill.description}` : "";
+      lines.push(`  ${skill.path}  ${skill.title}${desc}`);
+    }
+  }
   for (const group of (p["tree"] ?? []) as Array<{ group: string; docs: OverviewDoc[] }>) {
     lines.push("");
     lines.push(`${group.group}/`);

@@ -6,9 +6,12 @@ import math
 import re
 from collections import Counter
 
+from brainpick.core.bundle import is_skill
+
 _TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
 K1 = 1.2
 B = 0.75
+SKILL_BOOST = 1.2  # spec/50: a matching skill outranks prose that merely shares its words
 SNIPPET_WINDOW = 240
 
 
@@ -46,6 +49,8 @@ def search(records: list[dict], query: str, limit: int = 8) -> list[dict]:
             idf = math.log((doc_count - doc_freq[term] + 0.5) / (doc_freq[term] + 0.5) + 1)
             score += idf * (tf[term] * (K1 + 1)) / (tf[term] + K1 * (1 - B + B * dl / avg_length))
         if score > 0:
+            if is_skill(record.get("type")):
+                score *= SKILL_BOOST
             hits.append({
                 "description": record["description"],
                 "path": record["path"],

@@ -1,0 +1,37 @@
+{
+  "bundle_root": ".",
+  "compiled_at": "1970-01-01T00:00:00Z",
+  "files": {
+    "index.md": {
+      "bytes": 766,
+      "sha256": "129e839ae37cbc2a7fcf9724e8aa796bc4f0f20e896cf1737b827707046609b1"
+    },
+    "knowledge/kahvi.md": {
+      "bytes": 360,
+      "sha256": "18ca3265030d3b6d7c7e86f8e8a56bc64c9c42366545a6fa58a44061397d99b1"
+    },
+    "skills/kahvin-keitto.md": {
+      "bytes": 684,
+      "sha256": "1ed965b6cd5d045372a7ee7d40096ddf8cfb47ea303090ef0d32d8268d0eb605"
+    },
+    "skills/skilltree.md": {
+      "bytes": 405,
+      "sha256": "f28fc1d8d4121ab7caa3462d8fe4a7b6e5e56039f0c6ef63ac0dbe1abc26ae65"
+    },
+    "skills/veden-keitto.md": {
+      "bytes": 331,
+      "sha256": "9acd71a44caba18e4f55c1ae1aab1c26f29922e829f46897c3539fb7d4e42a95"
+    }
+  },
+  "index_md": {
+    "content_hash": "129e839ae37cbc2a7fcf9724e8aa796bc4f0f20e896cf1737b827707046609b1",
+    "managed": "section"
+  },
+  "seq": 1,
+  "spec_version": "0.1",
+  "tiers": {
+    "t1": "fresh",
+    "t2": "off",
+    "t3": "fresh"
+  }
+}

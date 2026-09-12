@@ -520,3 +520,24 @@ def test_register_from_hosts_registers_bundles_and_reports_the_rest(tmp_path, ca
     # nothing to find is a report, not a failure
     assert main(["register", "--from-hosts"], env={"HOME": str(tmp_path / "empty"), "BRAINPICK_REGISTRY": str(registry)}) == 0
     assert "no per-project" in capsys.readouterr().out
+
+
+def test_qualify_paths_reaches_skill_payloads():
+    """spec/75 meets spec/70: the skills list in brain_overview and the `skill`
+    block in brain_read carry paths too — depends_on/tools are plain string
+    lists, dependents are {path,title} entries."""
+    from brainpick.federation import qualify_paths
+
+    overview = {"skills": [{"path": "skills/a.md", "title": "A", "description": None,
+                            "depends_on": ["skills/b.md"], "tools": ["tools/x"]}]}
+    assert qualify_paths("me", overview) == {"skills": [{
+        "path": "me:skills/a.md", "title": "A", "description": None,
+        "depends_on": ["me:skills/b.md"], "tools": ["me:tools/x"]}]}
+    read = {"path": "skills/b.md", "skill": {
+        "depends_on": [{"path": "skills/c.md", "title": "C"}],
+        "dependents": [{"path": "skills/a.md", "title": "A"}],
+        "tools": [{"path": "tools/x", "exists": True}]}}
+    assert qualify_paths("me", read)["skill"] == {
+        "depends_on": [{"path": "me:skills/c.md", "title": "C"}],
+        "dependents": [{"path": "me:skills/a.md", "title": "A"}],
+        "tools": [{"path": "me:tools/x", "exists": True}]}

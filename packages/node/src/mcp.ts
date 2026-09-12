@@ -115,15 +115,32 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
     tree.push({ group: directory || "concepts", docs });
   }
 
+  // skills first (spec/85): the procedures the brain already holds, listed apart
+  // from the folder tree so an agent sees them before it improvises one
+  const skills = state.skills.map((s) => ({
+    path: s.path,
+    title: s.title,
+    description: s.description,
+    depends_on: [...s.depends_on],
+    tools: [...s.tools],
+  }));
+  let hint = "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.";
+  if (skills.length) {
+    hint =
+      `${skills.length} skills — read the matching one before improvising a procedure; ` +
+      "brain_read on a skill lists its prerequisites and tools. " +
+      hint;
+  }
   const result: Record<string, unknown> = {
     bundle: basename(state.root),
     counts,
     tiers: state.tiers(),
+    skills,
     tree,
     top_ghosts: topGhosts(state.graph),
     similarity_gaps_open_count: similarityGapsOpenCount(state.root),
     truncated: false,
-    hint: "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.",
+    hint,
   };
   while (tokensOf(result) > budget && tree.some((group) => group.docs.length > 0)) {
     for (let i = tree.length - 1; i >= 0; i--) {
@@ -302,6 +319,19 @@ function singleRead(
     truncated: false,
     hint: `brain_neighbors '${record.path}' walks the links around this doc.`,
   };
+  const skill = state.skillFor(record.path);
+  if (skill !== null) {
+    // spec/70: prerequisites first, tools are the agent's to run
+    result["skill"] = skill;
+    const parts: string[] = [];
+    if (skill.depends_on.length) parts.push("read depends_on first: " + skill.depends_on.map((d) => d.path).join(", "));
+    if (skill.tools.length) {
+      parts.push(
+        "tools: " + skill.tools.map((t) => t.path).join(", ") + " — run them yourself; brainpick never executes a tool",
+      );
+    }
+    if (parts.length) result["hint"] = parts.join("; ") + ".";
+  }
   if (tokensOf(result) > budget) {
     const overhead = tokensOf({ ...result, content: "" });
     const allowed = Math.max(160, (budget - overhead) * 4);

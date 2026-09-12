@@ -28,6 +28,15 @@ there are none), never subject to budget trimming (bounded size already).
 similarity-gap pairs — always present, `0` when T2 or the module is off,
 never budget-trimmed. Default budget 800.
 
+`skills` (spec/20 *Skills and frontmatter edges*) is always present: every
+skill in the brain as `{"path", "title", "description", "depends_on":
+[paths], "tools": [paths]}`, sorted by path, `[]` when there are none.
+Skills are the read path's first stop (spec/85), so they are listed apart
+from the folder tree — an agent that reads only the overview learns which
+procedures exist before it improvises one. Budget trimming empties the
+`tree` before it touches `skills`. When skills exist, `hint` says so and
+names `brain_read` as the way to a skill's prerequisites and tools.
+
 ## brain_search({query, mode?, limit?, scope?, budget_tokens?})
 
 `mode ∈ auto|keyword|semantic|graph` (default `auto`). → `{"hits":
@@ -43,6 +52,14 @@ instead of content. → `{"path", "frontmatter", "outline": ["## …"],
 "content", "neighbors": {"in": [...], "out": [...]}, "truncated", "hint"}`
 where neighbor entries are `{"path", "title"}`. Over budget → outline +
 leading excerpt + hint to request `sections`. Default budget 2000.
+
+When the doc is a skill (spec/20), the payload adds `"skill": {"depends_on":
+[{"path", "title"}], "dependents": [{"path", "title"}], "tools": [{"path",
+"exists"}]}` — the resolved prerequisites (read them first), the skills that
+build on this one, and the tools it drives, each with whether the file is
+present in the bundle (`exists`). Missing prerequisites are ghosts and are
+not listed here. The `hint` names the tools and says the agent runs them
+itself — brainpick never executes a tool.
 
 ## brain_neighbors({doc, depth?, layer?, budget_tokens?})
 

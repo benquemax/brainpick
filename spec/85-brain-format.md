@@ -40,7 +40,7 @@ an episode — `_todo.md`, scratch — stays **beside** the brain, not in it.
 | Folder | Memory type | Holds | Reserved files |
 |---|---|---|---|
 | `knowledge/` | semantic | evergreen concept docs, one concept per page | — |
-| `skills/` | procedural | distilled, actionable procedures (`type: playbook`) | `skilltree.md` (generated) |
+| `skills/` | procedural | distilled, actionable procedures (`type: skill`; `playbook` accepted) and, beside them, the `tools/` they drive | `skilltree.md` (generated) |
 | `journals/` | episodic | one file per month, `YYYY-MM.md`, a `## YYYY-MM-DD` section per day, newest first; only the current month at the top level, earlier months in `journals/archive/` | `index.md` |
 | `vision/` | direction | the northstar as a book; `index.md` is its table of contents | `index.md` |
 | `plans/` | decided work | one plan per page; undecided ideas do not belong here | `index.md` |
@@ -76,8 +76,43 @@ not frontmatter — see *Grounding* below.
 
 | Key | On | Type | Meaning |
 |---|---|---|---|
-| `depends_on` | `skills/*` | list of doc paths (bundle-relative, `.md`) | skills this skill assumes; the edges of the generated `skilltree.md` |
-| `export` | `skills/*` | `agent-skill` | the doc is also exported as a harness-loaded Agent Skill (`SKILL.md`) by `brainpick integrate` |
+| `depends_on` | skills | list of doc paths (bundle-relative, `.md`) | skills this skill assumes; `depends_on` edges in T1 (spec/20) and the edges of the generated `skilltree.md` |
+| `tools` | skills | list of file paths (bundle-relative) | the deterministic scripts this skill drives; indexed and pointed at, never executed by an engine |
+| `export` | skills | `agent-skill` | the doc is also exported as a harness-loaded Agent Skill (`SKILL.md`) by `brainpick integrate` |
+
+### Skills
+
+A **skill** is procedural memory: a distilled, tested procedure an agent
+follows, with the repetitive parts demoted to scripts it drives. A doc is
+a skill by its `type` — `skill`, or the older `playbook`, matched
+case-insensitively — wherever it lives (spec/20); the `skills/` folder is
+the template's convention, never the engine's test. `skill` is the type the
+template writes from format 1.1 on; `playbook` stays a skill forever
+(additive-only policy) so a brain born earlier keeps its procedures.
+
+Skills exist because of a cost hierarchy: a script is cheaper than a model
+running a workflow, which is cheaper than a human. The loop a skill
+supports — notice repetition, distil it into a skill, extract the
+deterministic parts into `tools`, evaluate after every use and improve —
+is the agent's; the engine makes it cheap: skills are listed first in
+`brain_overview`, boosted in `brain_search` (spec/50), and `brain_read` on
+a skill returns its prerequisites, dependents and tools (spec/70).
+`brain_write` in `replace` mode bumps `timestamp`, so improving a skill
+costs exactly one call.
+
+`depends_on` is a prerequisite relation — read/load these first — not a
+version constraint: skills in one brain are versioned together by Git, and
+a cross-brain prerequisite is a `brain://` link. A tool is a plain file the
+bundle holds; its interpreter, sandbox and permissions are the agent's
+harness's concern. An engine MUST NOT run a tool on any caller's behalf,
+including over MCP: the server is not the sandbox.
+
+`skills/skilltree.md` is a generated reserved file: a top-down listing of
+every skill with its prerequisites indented under it, plus the tools each
+drives — the dependency DAG rendered for a reader. Engines MAY generate it;
+the template's contract excludes it from frontmatter and orphan checks. A
+cycle in `depends_on` is an authoring error the engine reports as a compile
+warning; it never blocks T1.
 
 **Additive-only policy.** A brain-format key, once published, is never
 renamed or removed; a newer format adds keys, and every key is optional for
@@ -119,10 +154,10 @@ checkout that is behind its remote, and MUST NOT pull on the agent's behalf.
 
 The **read path** is the mirror: `skills/` first, then `knowledge/`, then
 `journals/`, and `raw/` only by grep, to ground or to distil. Engines
-SHOULD reflect this in `brain_overview` by listing `type: playbook` docs
-first — the *type*, not the folder — and MAY use `type` as a ranking signal
-in `brain_search` (spec/70). Ranking is engine-side and advisory; the
-order is normative for the template and the first skill.
+MUST reflect this in `brain_overview` by listing skills — the *type*, not
+the folder — in their own `skills` section (spec/70) and in the keyword
+ranking by the skill boost (spec/50). Ranking is engine-side; the order is
+normative for the template and the first skill.
 
 ## `[brain]` config
 
@@ -203,9 +238,17 @@ Class `brain`:
   `audience` warns (both engines).
 - `brain://` links are extracted with `kind: "brain"`, `brain_id` and `path`,
   and excluded from ghosts.
-- A fixture brain (`spec/fixtures/brain-minimal/`) with the template's
-  layout compiles to golden T1 artifacts in which `type: playbook` docs
-  precede the rest in the overview, and nothing under `raw/` appears in the
+- A fixture brain (`spec/fixtures/bundles/kotiaivot/`) with the template's
+  layout — two skills (one `type: skill`, one `type: playbook`) where one
+  depends on the other and drives a tool under `tools/` — compiles to
+  golden T1 artifacts carrying the `depends_on` edge (spec/20), a
+  `skills/skilltree.md` byte-identical across engines, and an AGENTS.md
+  report block with a `Skills` section; nothing under `raw/` appears in the
   manifest.
+- `brain_overview` lists both skills under `skills` with their prerequisites
+  and tools; `brain_read` on the dependent skill returns its `skill` block
+  (spec/70); a keyword search whose terms match a skill's trigger
+  description ranks that skill above a prose doc with the same terms
+  (spec/50) — a conformance `query` case asserts the ORDER.
 - `[bundle] exclude` is honoured by every scan — manifest, graph, freshness
   (spec/80) — in both engines.

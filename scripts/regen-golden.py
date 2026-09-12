@@ -80,9 +80,10 @@ def regen_report(case: dict) -> None:
         bp = root / ".brainpick"
         graph = json.loads((bp / "t1" / "graph.json").read_text(encoding="utf-8"))
         tiers = json.loads((bp / "manifest.json").read_text(encoding="utf-8"))["tiers"]
+        skills = json.loads((bp / "t1" / "skills.json").read_text(encoding="utf-8"))
         dst = EXPECTED / bundle / case["artifact"]
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(render_report_block(graph, tiers) + "\n", encoding="utf-8")
+        dst.write_text(render_report_block(graph, tiers, skills=skills) + "\n", encoding="utf-8")
         print(f"golden: {dst.relative_to(REPO)}")
 
 

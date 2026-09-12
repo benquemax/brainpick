@@ -13,7 +13,8 @@ from brainpick.core.frontmatter import split_frontmatter
 from brainpick.core.links import RawLink, extract_links
 
 ALWAYS_EXCLUDED_DIRS = {".brainpick", ".git", "_temp", "node_modules"}
-RESERVED_NAMES = {"index.md", "log.md"}
+RESERVED_NAMES = {"index.md", "log.md", "skilltree.md"}
+SKILL_TYPES = {"skill", "playbook"}  # spec/85: a skill by type, wherever it lives
 _H1 = re.compile(r"^# +(.+?)\s*$", re.MULTILINE)
 
 
@@ -44,6 +45,24 @@ class Document:
     body: str
     links: list[ResolvedLink] = field(default_factory=list)
     ghosts: list[Ghost] = field(default_factory=list)
+    skill: bool = False                                   # spec/20 Skills and frontmatter edges
+    depends_on: list[str] = field(default_factory=list)   # RESOLVED prerequisites, declared order
+    tools: list[str] = field(default_factory=list)        # declared tool paths, as written
+
+
+def is_skill(type_value) -> bool:
+    """A doc is a skill by its `type` — `skill` or the older `playbook`, trimmed,
+    case-insensitive — never by folder (spec/85)."""
+    return type_value is not None and str(type_value).strip().lower() in SKILL_TYPES
+
+
+def _normalize_list(value) -> list[str]:
+    """depends_on / tools: absent -> [], scalar wraps, values coerce to strings."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v) for v in value if v is not None]
+    return [str(value)]
 
 
 def _normalize_timestamp(value) -> str | None:
@@ -64,6 +83,28 @@ def _normalize_tags(value) -> list[str]:
     if isinstance(value, list):
         return [str(v) for v in value]
     return [str(value)]
+
+
+def resolve_doc_target(source: str, target: str, file_set: set[str]) -> str | None:
+    """A frontmatter doc target (depends_on): rooted from the bundle root first —
+    `a/b`, `a/b.md`, `a/b/index.md` — then relative to the source's directory,
+    as given, then with `.md` appended (spec/20)."""
+    target = str(target or "").strip()
+    if not target:
+        return None
+    base = target.lstrip("/")
+    for cand in (base, base + ".md", posixpath.join(base, "index.md")):
+        if cand in file_set:
+            return cand
+    if target.startswith("/"):
+        return None
+    joined = posixpath.normpath(posixpath.join(posixpath.dirname(source), target))
+    if joined.startswith(".."):
+        return None
+    for cand in (joined, joined + ".md"):
+        if cand in file_set:
+            return cand
+    return None
 
 
 def title_of(meta: dict, body: str, path: str) -> str:
@@ -155,6 +196,21 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             else:
                 links.append(ResolvedLink(kind=raw.kind, target=resolved, text=raw.text))
 
+        reserved = posixpath.basename(path) in RESERVED_NAMES
+        skill = is_skill(meta.get("type")) and not reserved
+        depends_on: list[str] = []
+        tools: list[str] = []
+        if skill:
+            for declared in _normalize_list(meta.get("depends_on")):
+                resolved = resolve_doc_target(path, declared, file_set)
+                if resolved == path:
+                    continue  # self-dependencies are dropped, like self-links
+                if resolved is None:
+                    ghosts.append(Ghost(target=declared))
+                elif resolved not in depends_on:
+                    depends_on.append(resolved)
+            tools = _normalize_list(meta.get("tools"))
+
         docs.append(Document(
             path=path,
             sha256=sha256_hex(raw_bytes),
@@ -165,9 +221,12 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             description=None if meta.get("description") is None else str(meta["description"]),
             tags=_normalize_tags(meta.get("tags")),
             timestamp=_normalize_timestamp(meta.get("timestamp")),
-            reserved=posixpath.basename(path) in RESERVED_NAMES,
+            reserved=reserved,
             body=body,
             links=links,
             ghosts=ghosts,
+            skill=skill,
+            depends_on=depends_on,
+            tools=tools,
         ))
     return docs

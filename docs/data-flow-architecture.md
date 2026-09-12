@@ -4,7 +4,7 @@ about: concept
 title: "Data flow architecture"
 description: "How information moves through a brain — episodes in the journal distil into evergreen knowledge and then into actionable skills, retrieval runs the mirror path from most distilled to least, and each layer points upward instead of repeating — the principle that makes a brain memory rather than a pile of pages."
 tags: [brain-format]
-timestamp: 2026-09-07T17:00:00Z
+timestamp: 2026-09-12T16:40:00Z
 ---
 
 # Data flow architecture
@@ -79,13 +79,13 @@ and people commit to it between sessions — so the read path starts with
 An answer built on a stale checkout is built on knowledge the brain has
 already corrected; the first skill makes this its first instruction.
 
-The spec asks brainpick to reflect the read path in `brain_overview` by
-listing `type: playbook` docs first — the *type*, never the folder, because
+brainpick reflects the read path in `brain_overview` by listing skills
+first — `type: skill` or `playbook`, the *type*, never the folder, because
 brainpick does not read folder names
-([Structure agnosticism](structure-agnosticism.md)) — and permits `type` as
-a ranking signal in `brain_search` ([Search modes](search-modes.md)). The
-order is normative for the template and the first skill; the ranking is an
-engine detail.
+([Structure agnosticism](structure-agnosticism.md)) — and boosts a matching
+skill ×1.2 in `brain_search` ([Search modes](search-modes.md)). The order is
+normative for the template and the first skill; the boost is the engine's
+one type-keyed ranking signal ([Skills](skills.md)).
 
 ## The nudge: improve as you go
 
@@ -103,5 +103,8 @@ are [Guarded writes](guarded-writes.md).
 Skills declare what they assume in `depends_on` frontmatter; `skilltree.md`
 is generated from those edges and never edited — edit the skills. The tree
 is the brain's procedural map: the roots are skills that assume nothing,
-the leaves are the most specific procedures. See
-[The brain template](brain-template.md) for the contract that enforces it.
+the leaves are the most specific procedures. `depends_on` is an edge in the
+link graph, an unresolved one a ghost, a cycle a compile warning; the
+deterministic parts of a skill demote into `tools` the agent runs itself
+([Skills](skills.md)). See [The brain template](brain-template.md) for the
+contract that enforces it.

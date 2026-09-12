@@ -5,9 +5,10 @@
  * serve/state.py; Node's single event loop makes the Python thread-safety
  * plumbing (loop handoff) unnecessary.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import type { SkillRecord } from "../compile/skills";
 import type { DocRecord, Graph, GraphEdge } from "../compile/t1";
 import { runCompile, type CompileResult } from "../compile/pipeline";
 import type { Config } from "../config";
@@ -275,10 +276,33 @@ export class EventQueue {
 }
 
 /** Current graph + seq, the delta ring, and the subscriber registry. */
+export interface SkillBlock {
+  depends_on: Array<{ path: string; title: string }>;
+  dependents: Array<{ path: string; title: string }>;
+  tools: Array<{ path: string; exists: boolean }>;
+}
+
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** t1/skills.json (spec/20) — an artifact compiled before it existed reads as
+ * "no skills" rather than crashing the server; the next compile writes it. */
+function loadSkills(bp: string): SkillRecord[] {
+  const path = join(bp, "t1", "skills.json");
+  if (!isFile(path)) return [];
+  return (JSON.parse(readFileSync(path, "utf8")) as { skills?: SkillRecord[] }).skills ?? [];
+}
+
 export class ServeState {
   readonly root: string;
   readonly config: Config;
   graph: Graph = { edges: [], ghosts: [], islands: [], nodes: [], stats: {} as Graph["stats"], tags: {} };
+  skills: SkillRecord[] = [];
   manifest: Record<string, unknown> = {};
   records: DocRecord[] = [];
   kg: KnowledgeGraph | null = null; // the T3 export, when one is staged (spec/40)
@@ -314,7 +338,20 @@ export class ServeState {
     const lines = readFileSync(join(bp, "t1", "docs.jsonl"), "utf8").split("\n");
     this.records = lines.filter((line) => line !== "").map((line) => JSON.parse(line) as DocRecord);
     this.kg = loadKg(bp); // null when no T3 export is present — query degrades
+    this.skills = loadSkills(bp);
     this.seq = this.manifest["seq"] as number;
+  }
+
+  /** The brain_read `skill` block (spec/70) for a skill doc, null otherwise. */
+  skillFor(path: string): SkillBlock | null {
+    const skill = this.skills.find((s) => s.path === path);
+    if (!skill) return null;
+    const titles = new Map(this.graph.nodes.map((node) => [node.id, node.title]));
+    return {
+      depends_on: skill.depends_on.map((p) => ({ path: p, title: titles.get(p) ?? p })),
+      dependents: this.skills.filter((s) => s.depends_on.includes(path)).map((s) => ({ path: s.path, title: s.title })),
+      tools: skill.tools.map((t) => ({ path: t, exists: isFile(join(this.root, t)) })),
+    };
   }
 
   tiers(): Record<string, unknown> {

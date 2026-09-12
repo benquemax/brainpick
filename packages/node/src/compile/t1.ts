@@ -1,6 +1,7 @@
 /** T1: the deterministic tier — graph, docs substrate, generated index (spec/20). */
 import { cmpStr, sha256Hex } from "../core/canonical";
 import { posixDirname, type Document } from "../core/bundle";
+import type { SkillsArtifact } from "./skills";
 
 export const BEGIN_PREFIX = "<!-- brainpick:begin index (hash:";
 export const END_MARKER = "<!-- brainpick:end index -->";
@@ -89,6 +90,14 @@ export function buildGraph(docs: Document[]): Graph {
       const existing = collapsed.get(key);
       if (existing) existing.count += 1;
       else collapsed.set(key, { source: doc.path, target: link.target, kind: link.kind, count: 1, label: link.text });
+    }
+    // a skill's declared prerequisites are authored edges (spec/20): count 1,
+    // the target's title as label
+    for (const target of doc.dependsOn) {
+      const key = `${doc.path}\u0000${target}\u0000depends_on`;
+      if (!collapsed.has(key)) {
+        collapsed.set(key, { source: doc.path, target, kind: "depends_on", count: 1, label: byPath.get(target)!.title });
+      }
     }
     for (const ghost of doc.ghosts) {
       const key = `${doc.path}\u0000${ghost.target}`;
@@ -301,6 +310,7 @@ export function renderReportBlock(
   tiers: Record<string, unknown>,
   bundleRoot = ".",
   similarityGaps: ReportGapPair[] | null = null,
+  skills: SkillsArtifact | null = null,
 ): string {
   const stats = (graph.stats ?? {}) as Partial<GraphStats>;
   const nodes = graph.nodes ?? [];
@@ -350,6 +360,18 @@ export function renderReportBlock(
       for (const p of ranked) lines.push(`  - ${p.a} ↔ ${p.b} — ${p.score}`);
     } else {
       lines.push("  - (none)");
+    }
+  }
+
+  // the skills section (spec/85): present only when the bundle holds a skill
+  const listed = skills?.skills ?? [];
+  if (listed.length) {
+    lines.push("- Skills (read before improvising):");
+    for (const skill of listed) {
+      let entry = `  - ${skill.title} (${skill.path})`;
+      if (skill.description) entry += ` — ${skill.description}`;
+      lines.push(entry);
+      if (skill.tools.length) lines.push(`    · tools: ${skill.tools.join(", ")}`);
     }
   }
 

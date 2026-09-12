@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+# keita — grind, dose, pour. Documented by ../skills/kahvin-keitto.md.
+echo "kahvi valmis"

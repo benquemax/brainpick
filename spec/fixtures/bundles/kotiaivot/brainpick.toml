@@ -1,0 +1,8 @@
+spec = "0.1"
+
+[bundle]
+root = "."
+exclude = ["raw/*"]
+
+[brain]
+format = 1

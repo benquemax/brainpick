@@ -2,9 +2,9 @@
 type: reference
 about: thing
 title: "brain_overview"
-description: "The orientation tool — bundle name, counts, tier availability and the index tree — the progressive-disclosure root, with no required arguments."
+description: "The orientation tool — bundle name, counts, tier availability, the skills and the index tree — the progressive-disclosure root, with no required arguments."
 tags: [mcp, agents]
-timestamp: 2026-09-06T11:30:00Z
+timestamp: 2026-09-12T16:40:00Z
 ---
 
 # brain_overview
@@ -12,6 +12,10 @@ timestamp: 2026-09-06T11:30:00Z
 `brain_overview()` takes no required arguments. It returns orientation: the
 bundle name, `counts` (docs, edges, tags, orphans, ghosts), `tiers`, and a
 `tree` of the index grouped with one-sentence descriptions, plus a `hint`.
+Before the tree comes `skills` — every `type: skill`/`playbook` doc as
+`{path, title, description, depends_on, tools}`, an empty list in a wiki —
+trimmed only after the tree is empty, so the procedures the brain already
+holds are the first thing an agent sees ([Skills](../../skills.md)).
 Default budget 800 tokens. It is the progressive-disclosure root — the call an
 agent makes first, before searching or reading.
 

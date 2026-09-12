@@ -24,6 +24,25 @@ cases:
     class: compile-idempotent
     bundle: kotiaurinko
 
+  # kotiaivot (spec/85): a brain — [brain] format = 1, skills/ with a
+  # `type: skill` doc that depends_on a `type: playbook` doc and drives a
+  # tool, raw/ excluded. Proves the depends_on edge and skills.json (spec/20),
+  # the generated skilltree.md, and that raw/ never reaches the manifest.
+  - id: compile-kotiaivot-t1
+    class: compile
+    bundle: kotiaivot
+    artifacts:
+      - .brainpick/manifest.json
+      - .brainpick/t1/graph.json
+      - .brainpick/t1/docs.jsonl
+      - .brainpick/t1/skills.json
+      - index.md
+      - skills/skilltree.md
+
+  - id: compile-kotiaivot-idempotent
+    class: compile-idempotent
+    bundle: kotiaivot
+
   # class: check-fresh — after a compile, --check-fresh exits 0; after
   # mutating the named file, it exits 1.
   - id: check-fresh-kotiaurinko
@@ -39,9 +58,25 @@ cases:
     artifact: t2/chunks.jsonl
 
   # class: query — run searches against the compiled fixture and assert the
-  # top-k result SET (order-insensitive, scores ignored). Cases with
+  # top-k result SET (order-insensitive, scores ignored) — or the ORDER
+  # when `expect_order: true`. Cases with
   # `embedder: mock` compile T2 with the normative mock embedder (spec/30)
   # first: chunker → vectors → store → retrieval → router, end to end.
+  - id: search-keyword-skill-boost
+    class: query
+    bundle: kotiaivot
+    query: "morning coffee"
+    mode: keyword
+    limit: 8
+    # Reviewed: knowledge/kahvi.md says "morning" and "coffee" in its
+    # description AND body, so raw BM25 ranks it first (0.99 vs 0.87). The skill
+    # kahvin-keitto.md matches on its trigger description — and the skill boost
+    # (spec/50, ×1.2) lifts it above the prose page: the read path starts with
+    # skills. veden-keitto.md matches "coffee" only via its own description.
+    # An engine without the boost returns kahvi.md first and fails.
+    expect_paths: [skills/kahvin-keitto.md, knowledge/kahvi.md, skills/veden-keitto.md]
+    expect_order: true
+
   - id: search-keyword-aurinko
     class: query
     bundle: kotiaurinko
@@ -154,6 +189,13 @@ cases:
   - id: report-kotiaurinko
     class: report
     bundle: kotiaurinko
+    artifact: agents-report.md
+
+  # kotiaivot's report carries the Skills section (spec/20) — present only
+  # when the bundle holds a skill, so kotiaurinko's golden proves the omission.
+  - id: report-kotiaivot
+    class: report
+    bundle: kotiaivot
     artifact: agents-report.md
 
   # class: kg-algorithmic — the T3 algorithmic BACKEND (spec/40). Compile the

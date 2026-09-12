@@ -4,7 +4,7 @@ about: concept
 title: "Spec: brain format"
 description: "The normative contract for a brain — the fixed _brain/ root, the five memory-type folders, the engine-consumed frontmatter keys and their additive-only policy, inline grounding, the data flow's folder order, the [brain] config section, the brain:// link syntax and the format version with its migration rule."
 tags: [spec, brain-format]
-timestamp: 2026-09-07T16:00:00Z
+timestamp: 2026-09-12T16:40:00Z
 ---
 
 # Spec: brain format
@@ -17,8 +17,8 @@ committed content and would hurt to change later.
   brains' links and registries name it. `_temp/` is always excluded;
   project management (`_todo.md`) stays beside the brain.
 - **Folders are memory types — for the template.** `knowledge/`
-  (semantic), `skills/` (procedural, `type: playbook`, with generated
-  `skilltree.md`), `journals/` (episodic — one file per month `YYYY-MM.md`,
+  (semantic), `skills/` (procedural, `type: skill` — `playbook` stays
+  recognised — with generated `skilltree.md`), `journals/` (episodic — one file per month `YYYY-MM.md`,
   a `## YYYY-MM-DD` section per day newest first, earlier months in
   `journals/archive/`), `vision/` (a book with an `index.md` contents page)
   and `plans/` (decided work), plus `raw/` for undistilled source material
@@ -30,17 +30,26 @@ committed content and would hurt to change later.
   ([Structure agnosticism](../../structure-agnosticism.md)); the month roll
   is the agent's act, not an engine command.
 - **Frontmatter.** OKF's fields are OKF's. The format adds only keys the
-  engine consumes: `depends_on` (skill edges) and `export: agent-skill`
-  (write the skill out as a harness `SKILL.md`). Additive-only: never
+  engine consumes, all on skills: `depends_on` (prerequisite edges, kind
+  `depends_on`; unresolved → ghost), `tools` (plain file paths the skill
+  drives — indexed, never executed) and `export: agent-skill` (write the
+  skill out as a harness `SKILL.md`, still to come). Additive-only: never
   renamed or removed, optional for at least one version after appearing,
   unknown keys ignored.
+- **Skills.** A doc is a skill by `type` alone (`skill` or `playbook`,
+  case-insensitive), never by folder; reserved files never are. Every
+  compile writes `t1/skills.json`; a brain with a skill gets a generated
+  `skilltree.md` beside its first skill; `brain_overview` lists skills
+  first, `brain_read` returns their structure, keyword search boosts them
+  ×1.2, and the brain report gains a *Skills* section. The engine never
+  runs a tool ([Skills](../../skills.md)).
 - **Grounding.** Inline, a plain link at the claim; the target's kind
   (journal entry, external URL, `brain://`, or an admitted assumption in
   words) is the provenance. Journal entries are primary sources and exempt.
 - **Data flow.** Write path `journal → knowledge → skills`, pointers upward
-  instead of copies; read path the mirror. Folder order is normative;
-  `brain_overview` lists `skills/` first, search ranking by folder is
-  advisory.
+  instead of copies; read path the mirror. Folder order is normative for
+  the template; `brain_overview` lists skills first by `type`, and the
+  search boost is the one type-keyed ranking signal.
 - **`[brain]` config.** `format` (0 = not a brain), `origin` (git URL, a
   lookup key), `audience` (`personal` | `team` | `public`, unknown warns →
   personal), `readers`. All optional; `BRAINPICK_BRAIN_*` env overrides on
@@ -53,10 +62,11 @@ committed content and would hurt to change later.
   committed content only through `brainpick migrate --to N` (deterministic,
   dry-run diff) and keeps every earlier format servable.
 - **Conformance class `brain`.** `[brain]` parsing with defaults, env and
-  the audience warning in both engines; `brain://` extraction; a minimal
-  fixture brain whose overview lists `type: playbook` docs first and whose
-  manifest holds nothing from `raw/`; `[bundle] exclude` honoured by every
-  scan in both engines.
+  the audience warning in both engines; `brain://` extraction; the fixture
+  brain `kotiaivot` (a `skill`, a `playbook` it depends on, a tool, a
+  `raw/`) whose skills.json, skilltree.md, depends_on edge, boosted search
+  order and report block are goldens, and whose manifest holds nothing from
+  `raw/`; `[bundle] exclude` honoured by every scan in both engines.
 
 The reasoning is on [Data flow architecture](../../data-flow-architecture.md),
 [Grounding](../../grounding.md) and [Brain subsidiarity](../../brain-subsidiarity.md);

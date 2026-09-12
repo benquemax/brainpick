@@ -221,7 +221,30 @@ class ServeState:
         lines = (bp / "t1" / "docs.jsonl").read_text(encoding="utf-8").splitlines()
         self.records = [json.loads(line) for line in lines if line]
         self.kg = load_kg(bp)  # None when no T3 export is present — query degrades
+        self.skills = self._load_skills(bp)
         self.seq = self.manifest["seq"]
+
+    @staticmethod
+    def _load_skills(bp: Path) -> list[dict]:
+        """t1/skills.json (spec/20) — an artifact compiled before it existed reads
+        as "no skills" rather than crashing the server; the next compile writes it."""
+        path = bp / "t1" / "skills.json"
+        if not path.is_file():
+            return []
+        return json.loads(path.read_text(encoding="utf-8")).get("skills", [])
+
+    def skill_for(self, path: str) -> dict | None:
+        """The brain_read `skill` block (spec/70) for a skill doc, None otherwise."""
+        skill = next((s for s in self.skills if s["path"] == path), None)
+        if skill is None:
+            return None
+        titles = {node["id"]: node["title"] for node in self.graph["nodes"]}
+        return {
+            "depends_on": [{"path": p, "title": titles.get(p, p)} for p in skill["depends_on"]],
+            "dependents": [{"path": s["path"], "title": s["title"]}
+                           for s in self.skills if path in s["depends_on"]],
+            "tools": [{"path": t, "exists": (self.root / t).is_file()} for t in skill["tools"]],
+        }
 
     # -- state transitions -------------------------------------------------------
 

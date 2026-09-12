@@ -13,6 +13,8 @@ import { afterEach, describe, expect, test } from "vitest";
 import { scan } from "../src/core/bundle";
 import { canonicalJsonl, type JsonValue } from "../src/core/canonical";
 import { checkFresh, runCompile } from "../src/compile/pipeline";
+import type { SkillsArtifact } from "../src/compile/skills";
+import { loadConfig } from "../src/config";
 import { buildDocsRecords, renderReportBlock, type DocRecord, type Graph } from "../src/compile/t1";
 import { buildChunks } from "../src/compile/t2";
 import { Brain, BrainSet } from "../src/federation";
@@ -153,10 +155,12 @@ describe("conformance", () => {
           if (c.embedder === "mock") {
             hits = await mockQueryHits(root, c);
           } else {
-            const records = buildDocsRecords(scan(root));
+            const config = loadConfig(root); // honour [bundle] exclude (a brain's raw/)
+            const records = buildDocsRecords(scan(root, config.bundle.include, config.bundle.exclude));
             hits = search(records, c.query!, c.limit!);
           }
-          expect(new Set(hits.map((h) => h.path))).toEqual(new Set(c.expect_paths!));
+          if (c.expect_order) expect(hits.map((h) => h.path)).toEqual(c.expect_paths!);
+          else expect(new Set(hits.map((h) => h.path))).toEqual(new Set(c.expect_paths!));
         });
         break;
 
@@ -169,7 +173,8 @@ describe("conformance", () => {
           const tiers = (
             JSON.parse(readFileSync(join(bp, "manifest.json"), "utf8")) as { tiers: Record<string, string> }
           ).tiers;
-          const actual = renderReportBlock(graph, tiers) + "\n";
+          const skills = JSON.parse(readFileSync(join(bp, "t1", "skills.json"), "utf8")) as SkillsArtifact;
+          const actual = renderReportBlock(graph, tiers, ".", null, skills) + "\n";
           const expected = readFileSync(join(EXPECTED, c.bundle, c.artifact!), "utf8");
           expect(actual, `${c.artifact} drifted from golden`).toBe(expected);
         });

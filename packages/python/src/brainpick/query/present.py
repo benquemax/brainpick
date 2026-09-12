@@ -30,6 +30,12 @@ def present_overview(payload: dict) -> str:
     ]
     if "similarity_gaps_open_count" in payload:
         lines.append(f"similarity gaps: {payload['similarity_gaps_open_count']} open")
+    if payload.get("skills"):
+        lines.append("")
+        lines.append("skills (read before improvising):")
+        for skill in payload["skills"]:
+            desc = f" — {skill['description']}" if skill.get("description") else ""
+            lines.append(f"  {skill['path']}  {skill['title']}{desc}")
     for group in payload.get("tree", []):
         lines.append("")
         lines.append(f"{group['group']}/")

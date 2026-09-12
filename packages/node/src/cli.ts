@@ -233,6 +233,10 @@ program
 // -- the four query mirrors (spec/70 payloads in the terminal) ---------------------
 
 /** Print a mirror's result: `out` to stdout (results / JSON), `err` to stderr. */
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
 function emit(result: { out?: string; err?: string }): void {
   if (result.err) console.error(result.err);
   if (result.out !== undefined) console.log(result.out);
@@ -281,6 +285,43 @@ program
     const { overviewMirror } = await import("./query/mirrors");
     emit(await overviewMirror(resolve(opts.root), Boolean(opts.json)));
   });
+
+const skill = program.command("skill").description("procedural memory: list the brain's skills or scaffold a new one");
+skill
+  .command("list")
+  .description("every skill with its prerequisites and tools")
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--json", "print {skills: [...]} as JSON")
+  .action(async (opts: { root: string; json?: boolean }) => {
+    const { skillList } = await import("./skill");
+    const result = await skillList(resolve(opts.root), Boolean(opts.json));
+    emit(result);
+    process.exitCode = result.code;
+  });
+skill
+  .command("new <name>")
+  .description("scaffold a compliant skill doc and compile")
+  .option("--title <title>", "frontmatter title (default: the name)")
+  .option("--description <text>", 'the trigger, "Use when …" — what search and the overview show')
+  .option("--depends-on <path>", "a prerequisite skill's bundle-relative path (repeatable)", collect, [])
+  .option("--tool <path>", "a tool the skill drives, bundle-relative (repeatable)", collect, [])
+  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .action(
+    async (
+      name: string,
+      opts: { title?: string; description?: string; dependsOn: string[]; tool: string[]; root: string },
+    ) => {
+      const { skillNew } = await import("./skill");
+      const result = await skillNew(resolve(opts.root), name, {
+        title: opts.title ?? null,
+        description: opts.description ?? null,
+        dependsOn: opts.dependsOn,
+        tools: opts.tool,
+      });
+      emit(result);
+      process.exitCode = result.code;
+    },
+  );
 
 program
   .command("show [nodes...]")

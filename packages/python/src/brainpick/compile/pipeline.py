@@ -19,6 +19,12 @@ from brainpick.compile.t1 import (
     render_report_block,
 )
 from brainpick.compile.similarity_gaps import run_similarity_gaps_stage, similarity_gaps_gate
+from brainpick.compile.skills import (
+    build_skills,
+    dependency_cycles,
+    render_skilltree,
+    skilltree_path,
+)
 from brainpick.compile.t2 import build_chunks, run_t2_stage, t2_gate
 from brainpick.compile.t3 import run_t3_stage, t3_gate
 from brainpick.config import Config, resolve_bundle
@@ -61,6 +67,24 @@ def _read_or_none(path: Path) -> str | None:
     return path.read_text(encoding="utf-8") if path.is_file() else None
 
 
+def _prospective_skilltree(root: Path, docs, config: Config) -> tuple[str | None, str, str | None]:
+    """(where skilltree.md belongs, what it should contain, what it contains now)
+    — a brain with skills gets a generated tree (spec/20); a wiki never does, and
+    a brain that lost its last skill keeps whatever is on disk (path None)."""
+    if not config.brain.is_brain:
+        return None, "", None
+    skills = build_skills(docs, root)
+    rel = skilltree_path(skills)
+    if rel is None:
+        return None, "", None
+    return rel, render_skilltree(skills, rel), _read_or_none(root / rel)
+
+
+def _cycle_warnings(skills: dict) -> list[str]:
+    return [f"skills: depends_on cycle — {' ↔ '.join(cycle)} (fix the frontmatter; the tree still renders)"
+            for cycle in dependency_cycles(skills)]
+
+
 def _similarity_gaps_for_report(bp: Path) -> list[dict] | None:
     """The report reads whatever is currently on disk (spec/45) — None (the
     section is omitted) when the artifact doesn't exist, its `pairs` list
@@ -69,7 +93,7 @@ def _similarity_gaps_for_report(bp: Path) -> list[dict] | None:
     return None if text is None else json.loads(text)["pairs"]
 
 
-def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict) -> None:
+def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict | None = None) -> None:
     """Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
     already live — the bundle root, and the repo root above it when the bundle is
     a subdir. Never creates the file; writes only when the block actually changed."""
@@ -92,7 +116,7 @@ def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict) -> None:
         if existing is None:
             continue
         bundle_display = os.path.relpath(root, base).replace(os.sep, "/")
-        block = render_report_block(graph, tiers, bundle_display, similarity_gaps)
+        block = render_report_block(graph, tiers, bundle_display, similarity_gaps, skills=skills)
         updated = apply_report_section(existing, block)
         if updated is not None and updated != existing:
             _atomic_write(agents, updated.encode("utf-8"))
@@ -159,11 +183,21 @@ def run_compile(
     if index_changed:
         _atomic_write(root / INDEX_FILE, index_text.encode("utf-8"))
         docs = _scan_bundle(root, config)  # the bundle now includes the index as written
+    # The generated skill tree (spec/20) is written like the index: before the
+    # scan the artifacts derive from, so the manifest records it as written.
+    tree_rel, tree_text, disk_tree = _prospective_skilltree(root, docs, config)
+    tree_changed = tree_rel is not None and tree_text != disk_tree
+    if tree_changed:
+        _atomic_write(root / tree_rel, tree_text.encode("utf-8"))
+        docs = _scan_bundle(root, config)
 
     graph = build_graph(docs)
     graph_text = canonical_json(graph)
     records = build_docs_records(docs)
     docs_text = canonical_jsonl(records)
+    skills = build_skills(docs, root)
+    skills_text = canonical_json(skills)
+    warnings.extend(_cycle_warnings(skills))
 
     old_manifest_text = _read_or_none(bp / "manifest.json")
     old_manifest = json.loads(old_manifest_text) if old_manifest_text else None
@@ -173,8 +207,10 @@ def run_compile(
     t1_changed = not (
         old_manifest is not None
         and not index_changed
+        and not tree_changed
         and old_graph_text == graph_text
         and _read_or_none(bp / "t1" / "docs.jsonl") == docs_text
+        and _read_or_none(bp / "t1" / "skills.json") == skills_text
     )
 
     # T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
@@ -238,7 +274,7 @@ def run_compile(
     tiers = {"t1": "fresh", "t2": t2_status, "t3": t3_status}
     # The opt-in AGENTS.md brain report rides along on every compile so it stays
     # true even when nothing else changed (e.g. the markers were just installed).
-    _refresh_report(root, bp, graph, tiers)
+    _refresh_report(root, bp, graph, tiers, skills)
     artifacts_changed = t1_changed or t2_changed or t3_changed
     unchanged = not artifacts_changed and old_manifest is not None and old_tiers == tiers
     if unchanged and not full:
@@ -246,6 +282,7 @@ def run_compile(
 
     _atomic_write(bp / "t1" / "graph.json", graph_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "docs.jsonl", docs_text.encode("utf-8"))
+    _atomic_write(bp / "t1" / "skills.json", skills_text.encode("utf-8"))
     _write_timeline(root, config)  # advisory (spec/90) — rides along, never blocks
 
     if old_manifest is None:
@@ -387,12 +424,17 @@ def check_fresh(root: str | Path, config: Config | None = None) -> Freshness:
     index_text, disk_index = _prospective_index(root, docs)
     if index_text != disk_index:
         return Freshness(False, "stale — run: brainpick compile")
+    tree_rel, tree_text, disk_tree = _prospective_skilltree(root, docs, config)
+    if tree_rel is not None and tree_text != disk_tree:
+        return Freshness(False, "stale — run: brainpick compile")
 
     graph_text = canonical_json(build_graph(docs))
     docs_text = canonical_jsonl(build_docs_records(docs))
+    skills_text = canonical_json(build_skills(docs, root))
     if (
         _read_or_none(bp / "t1" / "graph.json") != graph_text
         or _read_or_none(bp / "t1" / "docs.jsonl") != docs_text
+        or _read_or_none(bp / "t1" / "skills.json") != skills_text
     ):
         return Freshness(False, "stale — run: brainpick compile")
     return Freshness(True, "fresh")

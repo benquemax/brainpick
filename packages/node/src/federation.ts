@@ -524,7 +524,11 @@ export function resolveBrainSet(roots: string[], options: ResolveOptions = {}): 
 }
 
 const PATH_KEYS = new Set(["path", "source", "target", "center"]);
-const NESTED_KEYS = new Set(["in", "out", "nodes", "edges", "docs", "tree", "neighbors", "top_ghosts", "disambiguation"]);
+const NESTED_KEYS = new Set([
+  "in", "out", "nodes", "edges", "docs", "tree", "neighbors", "top_ghosts", "disambiguation",
+  "skills", "skill", "depends_on", "dependents", "tools",
+]);
+const PATH_LIST_KEYS = new Set(["depends_on", "tools"]); // skills' plain path lists (spec/70)
 
 /** Prefix every path-bearing field in a nested payload with alias: (spec/75). */
 export function qualifyPaths<T>(alias: string, obj: T): T {
@@ -533,7 +537,9 @@ export function qualifyPaths<T>(alias: string, obj: T): T {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
       if (PATH_KEYS.has(key) && typeof value === "string" && value !== "") out[key] = qualify(alias, value);
-      else if (NESTED_KEYS.has(key)) out[key] = qualifyPaths(alias, value);
+      else if (PATH_LIST_KEYS.has(key) && Array.isArray(value) && value.every((v) => typeof v === "string")) {
+        out[key] = (value as string[]).map((v) => (v ? qualify(alias, v) : v));
+      } else if (NESTED_KEYS.has(key)) out[key] = qualifyPaths(alias, value);
       else out[key] = value;
     }
     return out as T;

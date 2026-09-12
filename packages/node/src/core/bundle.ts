@@ -9,7 +9,8 @@ import { PY_SPACE_CLASS } from "./pyfmt";
 import { pyStr, YamlTimestamp } from "./yaml11";
 
 export const ALWAYS_EXCLUDED_DIRS = new Set([".brainpick", ".git", "_temp", "node_modules"]);
-export const RESERVED_NAMES = new Set(["index.md", "log.md"]);
+export const RESERVED_NAMES = new Set(["index.md", "log.md", "skilltree.md"]);
+export const SKILL_TYPES = new Set(["skill", "playbook"]); // spec/85: a skill by type, wherever it lives
 
 export const DEFAULT_INCLUDE: readonly string[] = ["**/*.md"];
 
@@ -40,6 +41,42 @@ export interface Document {
   body: string;
   links: ResolvedLink[];
   ghosts: Ghost[];
+  skill: boolean; // spec/20 Skills and frontmatter edges
+  dependsOn: string[]; // RESOLVED prerequisites, declared order
+  tools: string[]; // declared tool paths, as written
+}
+
+/** A doc is a skill by its `type` — `skill` or the older `playbook`, trimmed,
+ * case-insensitive — never by folder (spec/85). */
+export function isSkill(typeValue: unknown): boolean {
+  if (typeValue === null || typeValue === undefined) return false;
+  return SKILL_TYPES.has(pyStr(typeValue).trim().toLowerCase());
+}
+
+/** depends_on / tools: absent -> [], scalar wraps, values coerce to strings. */
+export function normalizeList(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) return value.filter((v) => v !== null && v !== undefined).map(pyStr);
+  return [pyStr(value)];
+}
+
+/** A frontmatter doc target (depends_on): rooted from the bundle root first —
+ * `a/b`, `a/b.md`, `a/b/index.md` — then relative to the source's directory,
+ * as given, then with `.md` appended (spec/20). */
+export function resolveDocTarget(source: string, target: string, fileSet: Set<string>): string | null {
+  target = String(target ?? "").trim();
+  if (!target) return null;
+  const base = target.replace(/^\/+/, "");
+  for (const cand of [base, base + ".md", posixJoin(base, "index.md")]) {
+    if (fileSet.has(cand)) return cand;
+  }
+  if (target.startsWith("/")) return null;
+  const joined = posixNormpath(posixJoin(posixDirname(source), target));
+  if (joined.startsWith("..")) return null;
+  for (const cand of [joined, joined + ".md"]) {
+    if (fileSet.has(cand)) return cand;
+  }
+  return null;
 }
 
 export function normalizeTimestamp(value: unknown): string | null {
@@ -262,6 +299,20 @@ export function scan(
       else links.push({ kind: raw.kind, target: resolved, text: raw.text });
     }
 
+    const reserved = RESERVED_NAMES.has(posixBasename(path));
+    const skill = isSkill(meta["type"]) && !reserved;
+    const dependsOn: string[] = [];
+    let tools: string[] = [];
+    if (skill) {
+      for (const declared of normalizeList(meta["depends_on"])) {
+        const resolved = resolveDocTarget(path, declared, fileSet);
+        if (resolved === path) continue; // self-dependencies are dropped, like self-links
+        if (resolved === null) ghosts.push({ target: declared });
+        else if (!dependsOn.includes(resolved)) dependsOn.push(resolved);
+      }
+      tools = normalizeList(meta["tools"]);
+    }
+
     docs.push({
       path,
       sha256: sha256Hex(rawBytes),
@@ -273,10 +324,13 @@ export function scan(
         meta["description"] === null || meta["description"] === undefined ? null : pyStr(meta["description"]),
       tags: normalizeTags(meta["tags"]),
       timestamp: normalizeTimestamp(meta["timestamp"]),
-      reserved: RESERVED_NAMES.has(posixBasename(path)),
+      reserved,
       body,
       links,
       ghosts,
+      skill,
+      dependsOn,
+      tools,
     });
   }
   return docs;

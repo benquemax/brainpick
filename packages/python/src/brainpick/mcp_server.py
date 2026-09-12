@@ -87,15 +87,27 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
         ]
         tree.append({"group": directory or "concepts", "docs": docs})
 
+    # skills first (spec/85): the procedures the brain already holds, listed apart
+    # from the folder tree so an agent sees them before it improvises one
+    skills = [
+        {"path": s["path"], "title": s["title"], "description": s["description"],
+         "depends_on": list(s["depends_on"]), "tools": list(s["tools"])}
+        for s in state.skills
+    ]
+    hint = "brain_search finds docs by keyword; brain_read opens one by path, stem, or title."
+    if skills:
+        hint = (f"{len(skills)} skills — read the matching one before improvising a procedure; "
+                "brain_read on a skill lists its prerequisites and tools. " + hint)
     result = {
         "bundle": state.root.name,
         "counts": counts,
         "tiers": state.manifest.get("tiers", {}),
+        "skills": skills,
         "tree": tree,
         "top_ghosts": top_ghosts(state.graph),
         "similarity_gaps_open_count": _similarity_gaps_open_count(state.root),
         "truncated": False,
-        "hint": "brain_search finds docs by keyword; brain_read opens one by path, stem, or title.",
+        "hint": hint,
     }
     while tokens_of(result) > budget and any(group["docs"] for group in tree):
         next(group for group in reversed(tree) if group["docs"])["docs"].pop()
@@ -254,6 +266,17 @@ def _single_read(state: ServeState, doc: str, sections: list[str] | None = None,
         "truncated": False,
         "hint": f"brain_neighbors '{record['path']}' walks the links around this doc.",
     }
+    skill = state.skill_for(record["path"])
+    if skill is not None:  # spec/70: prerequisites first, tools are the agent's to run
+        result["skill"] = skill
+        parts = []
+        if skill["depends_on"]:
+            parts.append("read depends_on first: " + ", ".join(d["path"] for d in skill["depends_on"]))
+        if skill["tools"]:
+            parts.append("tools: " + ", ".join(t["path"] for t in skill["tools"])
+                         + " — run them yourself; brainpick never executes a tool")
+        if parts:
+            result["hint"] = "; ".join(parts) + "."
     if tokens_of(result) > budget:
         overhead = tokens_of({**result, "content": ""})
         allowed = max(160, (budget - overhead) * 4)

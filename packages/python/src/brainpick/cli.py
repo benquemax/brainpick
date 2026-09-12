@@ -222,6 +222,63 @@ def _cmd_overview(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_skill_list(args: argparse.Namespace) -> int:
+    state, code = _query_setup(args)
+    if state is None:
+        return code
+    from brainpick.query.present import to_json
+    from brainpick.skill_cmd import present_skills
+
+    skills = [
+        {"path": s["path"], "title": s["title"], "description": s["description"],
+         "depends_on": list(s["depends_on"]), "tools": list(s["tools"])}
+        for s in state.skills
+    ]
+    print(to_json({"skills": skills}) if args.json else present_skills(skills))
+    return 0
+
+
+def _cmd_skill_new(args: argparse.Namespace) -> int:
+    """Scaffold one compliant skill (spec/85) beside the existing ones, then
+    compile so the tree, the overview and the report already know it."""
+    from brainpick.compile.skills import build_skills
+    from brainpick.config import resolve_bundle
+    from brainpick.core.bundle import scan
+    from brainpick.skill_cmd import kebab, render_skill, skills_dir
+
+    root, config = resolve_bundle(args.root)
+    docs = scan(root, include=tuple(config.bundle.include), exclude=tuple(config.bundle.exclude))
+    existing = build_skills(docs, root)["skills"]
+    directory = skills_dir(root, existing)
+    rel = f"{directory}/{kebab(args.name)}.md" if directory else f"{kebab(args.name)}.md"
+    target = root / rel
+    if target.exists():
+        print(f"error: {rel} already exists — edit it, or pick another name", file=sys.stderr)
+        return 1
+
+    known = {d.path for d in docs}
+    titles = {d.path: d.title for d in docs}
+    for dep in args.depends_on:
+        if dep not in known:
+            print(f"warning: depends_on {dep} is not a doc in this bundle — it will be a ghost",
+                  file=sys.stderr)
+    for tool in args.tool:
+        if not (root / tool).is_file():
+            print(f"warning: tool {tool} does not exist yet under {root}", file=sys.stderr)
+
+    title = args.title or args.name.strip()
+    description = args.description or f"Use when … (describe the trigger for {title})."
+    text = render_skill(title, description, list(args.depends_on), list(args.tool), titles, directory)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    result = run_compile(root, config=config)
+    for warning in result.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    print(f"{rel}")
+    print(f"edit the Trigger, Steps and Tools sections; `brainpick skill list --root {root}` shows it.")
+    return 0
+
+
 def _cmd_integrate(args: argparse.Namespace) -> int:
     from brainpick.integrate import run_integrate
 
@@ -505,6 +562,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_overview.add_argument("--root", default=".", help="bundle root (default: current directory)")
     p_overview.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
     p_overview.set_defaults(func=_cmd_overview)
+
+    p_skill = sub.add_parser("skill", help="procedural memory: list the brain's skills or scaffold a new one")
+    skill_sub = p_skill.add_subparsers(dest="skill_command", required=True)
+    s_list = skill_sub.add_parser("list", help="every skill with its prerequisites and tools")
+    s_list.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    s_list.add_argument("--json", action="store_true", help="print {skills: [...]} as JSON")
+    s_list.set_defaults(func=_cmd_skill_list)
+    s_new = skill_sub.add_parser("new", help="scaffold a compliant skill doc and compile")
+    s_new.add_argument("name", help="the skill's name (its file stem is the kebab-case of this)")
+    s_new.add_argument("--title", default=None, help="frontmatter title (default: the name)")
+    s_new.add_argument("--description", default=None,
+                       help='the trigger, "Use when …" — what search and the overview show')
+    s_new.add_argument("--depends-on", action="append", default=[], metavar="PATH",
+                       help="a prerequisite skill's bundle-relative path (repeatable)")
+    s_new.add_argument("--tool", action="append", default=[], metavar="PATH",
+                       help="a tool the skill drives, bundle-relative (repeatable)")
+    s_new.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    s_new.set_defaults(func=_cmd_skill_new)
 
     p_show = sub.add_parser("show",
                             help="present a subgraph live in every open UI (posts to a running server)")

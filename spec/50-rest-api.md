@@ -109,4 +109,10 @@ repeated three times, the `description` twice, and `text` once, joined by
 newlines — a deterministic field weighting both runtimes reproduce
 trivially — lowercased, tokenized on Unicode non-alphanumeric boundaries
 (`_` is a boundary). Reserved documents are excluded from search results.
+A skill's BM25 score (spec/20 *Skills and frontmatter edges*) is multiplied
+by **1.2** before ranking: the read path starts with skills (spec/85), so a
+skill whose trigger description matches the query must not sink below prose
+docs that merely mention the same words. The boost applies only to documents
+the query already matched — it never surfaces a skill on its own — and is
+the one `type`-keyed ranking signal both engines implement.
 Conformance asserts the top-k result SET, not scores.

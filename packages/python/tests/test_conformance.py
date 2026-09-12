@@ -10,6 +10,7 @@ import shutil
 import pytest
 import yaml
 
+from brainpick.config import resolve_bundle
 from brainpick.compile.pipeline import check_fresh, run_compile
 from brainpick.compile.t1 import build_docs_records, render_report_block
 from brainpick.compile.t2 import build_chunks
@@ -118,9 +119,14 @@ def test_query(case, tmp_path):
     if case.get("embedder") == "mock":
         hits = _mock_query_hits(root, case)
     else:
-        records = build_docs_records(scan(root))
+        _, config = resolve_bundle(root)  # honour [bundle] exclude (a brain's raw/)
+        records = build_docs_records(
+            scan(root, include=tuple(config.bundle.include), exclude=tuple(config.bundle.exclude)))
         hits = search(records, case["query"], limit=case["limit"])
-    assert {h["path"] for h in hits} == set(case["expect_paths"])
+    if case.get("expect_order"):
+        assert [h["path"] for h in hits] == list(case["expect_paths"])
+    else:
+        assert {h["path"] for h in hits} == set(case["expect_paths"])
 
 
 @pytest.mark.parametrize("case", _cases("federated-query"), ids=_case_ids("federated-query"))
@@ -152,7 +158,8 @@ def test_report_golden(case, tmp_path):
     bp = root / ".brainpick"
     graph = json.loads((bp / "t1" / "graph.json").read_text(encoding="utf-8"))
     tiers = json.loads((bp / "manifest.json").read_text(encoding="utf-8"))["tiers"]
-    actual = render_report_block(graph, tiers) + "\n"
+    skills = json.loads((bp / "t1" / "skills.json").read_text(encoding="utf-8"))
+    actual = render_report_block(graph, tiers, skills=skills) + "\n"
     expected = (EXPECTED / case["bundle"] / case["artifact"]).read_text(encoding="utf-8")
     assert actual == expected, f"{case['artifact']} drifted from golden"
 

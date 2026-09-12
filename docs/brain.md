@@ -4,7 +4,7 @@ about: concept
 title: "The brain"
 description: "A brain is a wiki meant to be an agent's memory — an OKF bundle with memory-type folders, a declared data flow architecture, inline grounding, an audience and an identity other brains can address; what makes it more than a wiki, and what brainpick does with the difference."
 tags: [brain-format]
-timestamp: 2026-09-07T18:00:00Z
+timestamp: 2026-09-12T16:40:00Z
 ---
 
 # The brain
@@ -79,9 +79,10 @@ migrates.
   `brainpick.toml` ([brain.format](reference/config/brain-format.md)); both
   engines read the section today. Having `brainpick init` recognise `_brain/`
   and write it unasked is the next step on [Onboarding](onboarding.md).
-- The spec asks `brain_overview` to list `type: playbook` docs first — the
-  read order of the data flow ([MCP tools](mcp-tools.md)); today the overview
-  groups by folder alphabetically, and the ordering is a pending engine step.
+- `brain_overview` lists the brain's skills before the folder tree — the
+  read order of the data flow ([MCP tools](mcp-tools.md)) — keyed on `type`
+  (`skill`, or the older `playbook`), and `brain_read` on one returns its
+  prerequisites and tools ([Skills](skills.md)).
 - Freshness is the reader's job today: the first skill says *pull before you
   read, push after you write*. Having the engine notice a stale checkout
   (a `brain_overview` line: "behind origin by N commits") is a candidate

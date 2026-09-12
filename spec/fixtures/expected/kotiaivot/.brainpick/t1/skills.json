@@ -1,0 +1,22 @@
+{
+  "skills": [
+    {
+      "depends_on": [
+        "skills/veden-keitto.md"
+      ],
+      "description": "Use when brewing the morning coffee — the whole procedure, kettle to cup.",
+      "path": "skills/kahvin-keitto.md",
+      "title": "Kahvin keitto",
+      "tools": [
+        "tools/keita"
+      ]
+    },
+    {
+      "depends_on": [],
+      "description": "Use when you need boiling water — for coffee, tea, or pasta.",
+      "path": "skills/veden-keitto.md",
+      "title": "Veden keitto",
+      "tools": []
+    }
+  ]
+}

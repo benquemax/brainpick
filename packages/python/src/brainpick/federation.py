@@ -470,8 +470,11 @@ def qualify_paths(alias: str, obj, keys=("path", "source", "target", "center", "
         for key, value in obj.items():
             if key in keys and isinstance(value, str) and value:
                 out[key] = qualify(alias, value)
+            elif key in ("depends_on", "tools") and isinstance(value, list) \
+                    and all(isinstance(v, str) for v in value):
+                out[key] = [qualify(alias, v) if v else v for v in value]  # skills' path lists
             elif key in ("in", "out", "nodes", "edges", "docs", "tree", "neighbors", "top_ghosts",
-                         "disambiguation"):
+                         "disambiguation", "skills", "skill", "depends_on", "dependents", "tools"):
                 out[key] = qualify_paths(alias, value, keys)
             else:
                 out[key] = value

@@ -16,7 +16,8 @@ A document is any bundle file matching the include globs. Per document:
   bundle-governance concern, not a T1 one.
 - `tags`: frontmatter list, absent → `[]`; non-list scalars wrap to a
   one-element list; values coerced to strings.
-- `reserved`: `true` for any `index.md` or `log.md`.
+- `reserved`: `true` for any `index.md`, `log.md` or `skilltree.md` (the
+  generated skill tree, spec/85 — navigation, like the index).
 - Frontmatter is the YAML mapping between a leading `---` line and the next
   `---` line; tolerant — unparseable YAML, a non-mapping, or values the
   dialect resolves but cannot construct (an impossible date like
@@ -48,6 +49,31 @@ A resolved link is an edge; an unresolved one is a **ghost**. Self-links
 are dropped. Multiple links A→B collapse to one edge with `count` and the
 first occurrence's text as `label`.
 
+### Skills and frontmatter edges
+
+A document is a **skill** when its `type`, trimmed and lowercased, is
+`skill` or `playbook` (spec/85). Recognition is keyed on frontmatter only —
+never on a folder name — and reserved files are never skills. A skill's
+frontmatter MAY carry two brain-format keys the engine consumes:
+
+- `depends_on`: a list of doc targets this skill assumes. Each entry
+  resolves like a rooted link target from the bundle root (`a/b`, `a/b.md`,
+  `a/b/index.md`), then like a relative target from the skill's own
+  directory. A resolved entry is an edge with `kind: "depends_on"`, `count`
+  1 and the **target's title** as `label`; an unresolved entry is a ghost,
+  exactly like a dangling link, so an unwritten prerequisite shows in the
+  ghost queue. Self-dependencies are dropped. Non-list scalars wrap to a
+  one-element list; values coerce to strings.
+- `tools`: a list of file paths — the deterministic scripts this skill
+  drives. Each resolves from the bundle root, then from the skill's
+  directory; a tool is a plain file the bundle holds (it is not a document:
+  it never matches the include globs, never enters the graph). Engines
+  index and point at tools; they **never execute them** — running a tool
+  is the agent's act, under the agent's own sandbox and approval policy.
+
+On a non-skill document both keys are ignored. `depends_on` edges count
+toward `in`/`out`, orphan status and islands like any other edge.
+
 ## t1/graph.json (normative)
 
 ```json
@@ -65,7 +91,8 @@ first occurrence's text as `label`.
 ```
 
 - `nodes`: every document, sorted by `id`. `in`/`out` count graph edges
-  (ghosts excluded). `kind` is `link` or `wikilink`.
+  (ghosts excluded). `kind` is `link`, `wikilink` or `depends_on` (a
+  skill's declared prerequisite — see *Skills and frontmatter edges*).
 - `edges`: sorted by (`source`, `target`, `kind`). `ghosts`: sorted by
   (`source`, `target`).
 - `orphan`: a non-reserved node with zero inbound edges from non-reserved
@@ -89,6 +116,27 @@ and reading:
 
 `text` is the body with frontmatter removed, original line endings
 normalized to LF, without further transformation.
+
+## t1/skills.json (normative)
+
+The skills of the bundle (*Skills and frontmatter edges*), the substrate
+`brain_overview`, `brain_read` and the report block draw on so none of them
+re-parses frontmatter:
+
+```json
+{
+  "skills": [
+    {"depends_on": ["skills/veden-keitto.md"], "description": "Use when brewing the morning coffee.",
+     "path": "skills/kahvin-keitto.md", "title": "Kahvin keitto", "tools": ["tools/keita"]}
+  ]
+}
+```
+
+Sorted by `path`; `depends_on` holds only the **resolved** prerequisites in
+declared order (ghosts are in `graph.json`); `tools` holds the declared
+tool paths, resolved to bundle-relative form when the file exists, kept as
+declared otherwise. Written on every full compile, `{"skills": []}` when
+there are none; part of the freshness comparison like `graph.json`.
 
 ## Generated index.md
 
@@ -137,9 +185,47 @@ first, target path tie-break; counts distinct source docs referencing that
 target — see `top_ghosts` below), the top 5 similarity-gap pairs by score
 (`- a ↔ b — score`, highest first, pair tie-break by (`a`, `b`); spec/45) —
 present only when `t1/similarity-gaps.json` exists, omitted entirely (not an
-empty section) when T2 or the module is off — and the bundle root.
+empty section) when T2 or the module is off — the skills section, and the
+bundle root. The skills section (`- Skills (read before improvising):`)
+lists every skill as `- title (path) — description` sorted by path,
+description omitted when `null`, with `  · tools: a, b` appended when the
+skill declares tools; it is present only when the bundle holds at least one
+skill, omitted entirely otherwise (a wiki is not a brain).
 Deterministic; cross-engine byte-identical (a conformance golden accompanies
 the first implementation).
+
+## Generated skills/skilltree.md
+
+When the bundle declares itself a brain (`[brain] format ≥ 1`, spec/85)
+and holds at least one skill, compile writes `skilltree.md` into the
+directory of the first skill by path (the template's `skills/`) — before
+the scan that produces the artifacts, like `index.md`, so the manifest
+records it as written and `--check-fresh` sees a stale tree. A wiki (no
+`[brain]` section) never gets one — its contract did not plan for the
+file — and an existing `skilltree.md` is left alone when no skill remains.
+The file is reserved like `index.md`/`log.md`: frontmatter-free, never a
+skill, never listed in the index, its links navigation rather than
+knowledge. It is regenerated whole — there is no hand-written part.
+
+```markdown
+# Skill tree
+
+_Generated by `brainpick compile` from `depends_on` frontmatter — edit the
+skills, never this file._
+
+- [Kahvin keitto](kahvin-keitto.md) — Use when brewing the morning coffee.
+  - needs [Veden keitto](veden-keitto.md)
+  - tools: `../tools/keita`
+- [Veden keitto](veden-keitto.md) — Use when you need boiling water.
+```
+
+One top-level entry per skill sorted by path, link text the title, link
+target relative to the file; under it one `needs` line per resolved
+prerequisite in `depends_on` order, then one `tools:` line listing the
+declared tool paths relative to the file, each in backticks, comma-joined.
+Lines are omitted when empty. A ghost prerequisite is not listed (it is in
+the ghost queue). A cycle is reported as a compile warning naming the
+skills; the tree still renders every skill exactly once.
 
 ## Advisory T1 artifacts
 

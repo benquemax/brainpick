@@ -3,7 +3,7 @@
 import { existsSync, unlinkSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
-import { loadConfig, resolveGraphBackend, type Config } from "../config";
+import { isBrain, loadConfig, resolveGraphBackend, type Config } from "../config";
 import { scan, type Document } from "../core/bundle";
 import { canonicalJson, canonicalJsonl, cmpStr, type JsonValue } from "../core/canonical";
 import { atomicWrite, readTextOrNull } from "../core/fs";
@@ -11,6 +11,7 @@ import { deepEqual, diffGraphs, type GraphDelta } from "../deltas";
 import { findRepoRoot } from "../detect";
 import { buildTimeline } from "../timeline";
 import { SPEC_VERSION, VERSION } from "../version";
+import { buildSkills, dependencyCycles, renderSkilltree, skilltreePath, type SkillsArtifact } from "./skills";
 import { runSimilarityGapsStage, similarityGapsGate } from "./similarity-gaps";
 import {
   applyIndexSection,
@@ -57,6 +58,23 @@ function prospectiveIndex(root: string, docs: Document[]): [string, string | nul
   return [applyIndexSection(disk, block), disk];
 }
 
+/** (where skilltree.md belongs, what it should contain, what it contains now)
+ * — a brain with skills gets a generated tree (spec/20); a wiki never does, and
+ * a brain that lost its last skill keeps whatever is on disk (path null). */
+function prospectiveSkilltree(root: string, docs: Document[], config: Config): [string | null, string, string | null] {
+  if (!isBrain(config)) return [null, "", null];
+  const skills = buildSkills(docs, root);
+  const rel = skilltreePath(skills);
+  if (rel === null) return [null, "", null];
+  return [rel, renderSkilltree(skills, rel), readTextOrNull(join(root, rel))];
+}
+
+function cycleWarnings(skills: SkillsArtifact): string[] {
+  return dependencyCycles(skills).map(
+    (cycle) => `skills: depends_on cycle — ${cycle.join(" ↔ ")} (fix the frontmatter; the tree still renders)`,
+  );
+}
+
 function generator(): { impl: string; name: string; version: string } {
   return { impl: "node", name: "brainpick", version: VERSION };
 }
@@ -73,7 +91,13 @@ function similarityGapsForReport(bp: string): Array<{ a: string; b: string; scor
 /** Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
  * already live — the bundle root, and the repo root above it when the bundle is
  * a subdir. Never creates the file; writes only when the block actually changed. */
-function refreshReport(root: string, bp: string, graph: Graph, tiers: Record<string, unknown>): void {
+function refreshReport(
+  root: string,
+  bp: string,
+  graph: Graph,
+  tiers: Record<string, unknown>,
+  skills: SkillsArtifact | null = null,
+): void {
   const bundleRoot = resolve(root);
   const candidates = [bundleRoot];
   const repo = findRepoRoot(bundleRoot);
@@ -88,7 +112,7 @@ function refreshReport(root: string, bp: string, graph: Graph, tiers: Record<str
     const existing = readTextOrNull(agents);
     if (existing === null) continue;
     const bundleDisplay = (relative(base, bundleRoot) || ".").split(sep).join("/");
-    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps);
+    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps, skills);
     const updated = applyReportSection(existing, block);
     if (updated !== null && updated !== existing) atomicWrite(agents, updated);
   }
@@ -131,11 +155,22 @@ export async function runCompile(
     atomicWrite(join(root, INDEX_FILE), indexText);
     docs = scanBundle(root, cfg); // the bundle now includes the index as written
   }
+  // The generated skill tree (spec/20) is written like the index: before the
+  // scan the artifacts derive from, so the manifest records it as written.
+  const [treeRel, treeText, diskTree] = prospectiveSkilltree(root, docs, cfg);
+  const treeChanged = treeRel !== null && treeText !== diskTree;
+  if (treeChanged) {
+    atomicWrite(join(root, treeRel!), treeText);
+    docs = scanBundle(root, cfg);
+  }
 
   const graph = buildGraph(docs);
   const graphText = canonicalJson(graph as unknown as JsonValue);
   const records = buildDocsRecords(docs);
   const docsText = canonicalJsonl(records as unknown as JsonValue[]);
+  const skills = buildSkills(docs, root);
+  const skillsText = canonicalJson(skills as unknown as JsonValue);
+  warnings.push(...cycleWarnings(skills));
 
   const oldManifestText = readTextOrNull(join(bp, "manifest.json"));
   const oldManifest = oldManifestText ? (JSON.parse(oldManifestText) as Record<string, unknown>) : null;
@@ -145,8 +180,10 @@ export async function runCompile(
   const t1Changed = !(
     oldManifest !== null &&
     !indexChanged &&
+    !treeChanged &&
     oldGraphText === graphText &&
-    readTextOrNull(join(bp, "t1", "docs.jsonl")) === docsText
+    readTextOrNull(join(bp, "t1", "docs.jsonl")) === docsText &&
+    readTextOrNull(join(bp, "t1", "skills.json")) === skillsText
   );
 
   // T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
@@ -207,7 +244,7 @@ export async function runCompile(
   const tiers = { t1: "fresh", t2: t2Status, t3: t3Status };
   // The opt-in AGENTS.md brain report rides along on every compile so it stays
   // true even when nothing else changed (e.g. the markers were just installed).
-  refreshReport(root, bp, graph, tiers);
+  refreshReport(root, bp, graph, tiers, skills);
   const artifactsChanged = t1Changed || t2Changed || t3Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {
@@ -216,6 +253,7 @@ export async function runCompile(
 
   atomicWrite(join(bp, "t1", "graph.json"), graphText);
   atomicWrite(join(bp, "t1", "docs.jsonl"), docsText);
+  atomicWrite(join(bp, "t1", "skills.json"), skillsText);
   writeTimeline(root, cfg); // advisory (spec/90) — rides along, never blocks
 
   // tier-status-only transitions rewrite the manifest without spending a seq
@@ -372,17 +410,24 @@ export function checkFresh(root: string): Freshness {
     return { fresh: false, reason: "never compiled — run: brainpick compile" };
   }
 
-  const docs = scanBundle(root, loadConfig(root));
+  const cfg = loadConfig(root);
+  const docs = scanBundle(root, cfg);
   const [indexText, diskIndex] = prospectiveIndex(root, docs);
   if (indexText !== diskIndex) {
+    return { fresh: false, reason: "stale — run: brainpick compile" };
+  }
+  const [treeRel, treeText, diskTree] = prospectiveSkilltree(root, docs, cfg);
+  if (treeRel !== null && treeText !== diskTree) {
     return { fresh: false, reason: "stale — run: brainpick compile" };
   }
 
   const graphText = canonicalJson(buildGraph(docs) as unknown as JsonValue);
   const docsText = canonicalJsonl(buildDocsRecords(docs) as unknown as JsonValue[]);
+  const skillsText = canonicalJson(buildSkills(docs, root) as unknown as JsonValue);
   if (
     readTextOrNull(join(bp, "t1", "graph.json")) !== graphText ||
-    readTextOrNull(join(bp, "t1", "docs.jsonl")) !== docsText
+    readTextOrNull(join(bp, "t1", "docs.jsonl")) !== docsText ||
+    readTextOrNull(join(bp, "t1", "skills.json")) !== skillsText
   ) {
     return { fresh: false, reason: "stale — run: brainpick compile" };
   }

@@ -42,6 +42,10 @@ def build_graph(docs: list[Document]) -> dict:
                 collapsed[key][0] += 1
             else:
                 collapsed[key] = [1, link.text]
+        # a skill's declared prerequisites are authored edges (spec/20): count 1,
+        # the target's title as label
+        for target in doc.depends_on:
+            collapsed.setdefault((doc.path, target, "depends_on"), [1, by_path[target].title])
         for ghost in doc.ghosts:
             ghosts.append({"source": doc.path, "target": ghost.target})
 
@@ -201,12 +205,15 @@ def top_ghosts(graph: dict, limit: int = 5) -> list[dict]:
 def render_report_block(
     graph: dict, tiers: dict, bundle_root: str = ".",
     similarity_gaps: list[dict] | None = None,
+    skills: dict | None = None,
 ) -> str:
     """The AGENTS.md brain report body (spec/20): a graph-before-grep directive,
     counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
     the top-5 ghost queue by reference count, the top-5 similarity-gap pairs
     (spec/45, omitted entirely — not an empty section — when
-    `similarity_gaps` is None, i.e. the artifact doesn't exist), and the
+    `similarity_gaps` is None, i.e. the artifact doesn't exist), the skills
+    section (spec/85, present only when the bundle holds at least one skill —
+    orientation-time visibility is what makes an agent use them), and the
     bundle root. Deterministic; cross-engine byte-identical."""
     stats = graph.get("stats", {})
     nodes = graph.get("nodes", [])
@@ -253,6 +260,17 @@ def render_report_block(
             lines += [f"  - {p['a']} ↔ {p['b']} — {p['score']}" for p in ranked]
         else:
             lines.append("  - (none)")
+
+    listed = skills["skills"] if skills else []
+    if listed:
+        lines.append("- Skills (read before improvising):")
+        for skill in listed:
+            entry = f"  - {skill['title']} ({skill['path']})"
+            if skill["description"]:
+                entry += f" — {skill['description']}"
+            lines.append(entry)
+            if skill["tools"]:
+                lines.append(f"    · tools: {', '.join(skill['tools'])}")
 
     lines.append(f"- Bundle root: {bundle_root}")
 

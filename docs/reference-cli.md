@@ -4,7 +4,7 @@ about: concept
 title: "CLI reference"
 description: "Every brainpick subcommand and its flags, derived from the argparse CLI — compile and serve, the read mirrors, writes, presentations, onboarding and auth."
 tags: [cli, spec]
-timestamp: 2026-09-06T11:30:00Z
+timestamp: 2026-09-12T16:40:00Z
 ---
 
 # CLI reference
@@ -28,6 +28,7 @@ the read tools in the terminal, present live, onboard, and manage auth.
 - [brainpick read](reference/cli/read.md) — read one doc, forgivingly resolved.
 - [brainpick neighbors](reference/cli/neighbors.md) — walk the link graph around a doc.
 - [brainpick show](reference/cli/show.md) — present a subgraph live in every open UI.
+- [brainpick skill](reference/cli/skill.md) — list a brain's skills, or scaffold a compliant new one.
 
 ## Onboard, integrate, diagnose
 

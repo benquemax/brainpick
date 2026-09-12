@@ -1,5 +1,6 @@
 /** Keyword retrieval: BM25 over docs.jsonl records (spec/50 — normative for
  * conformance). Depends on nothing beyond T1, so search works everywhere. */
+import { isSkill } from "../core/bundle";
 import { cmpStr } from "../core/canonical";
 import { pySplitWhitespace } from "../core/pyfmt";
 import type { DocRecord } from "../compile/t1";
@@ -8,6 +9,7 @@ import type { DocRecord } from "../compile/t1";
 // letters and numbers (\p{N} covers Nd/Nl/No like str.isalnum()).
 const TOKEN = /[\p{L}\p{N}]+/gu;
 export const K1 = 1.2;
+export const SKILL_BOOST = 1.2; // spec/50: a matching skill outranks prose that merely shares its words
 export const B = 0.75;
 export const SNIPPET_WINDOW = 240;
 
@@ -74,6 +76,7 @@ export function search(records: DocRecord[], query: string, limit = 8): SearchHi
       score += (idf * (tf * (K1 + 1))) / (tf + K1 * (1 - B + (B * dl) / avgLength));
     }
     if (score > 0) {
+      if (isSkill(record.type)) score *= SKILL_BOOST;
       hits.push({
         description: record.description,
         path: record.path,
