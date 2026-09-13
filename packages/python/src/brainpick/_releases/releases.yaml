@@ -16,7 +16,7 @@
 
 releases:
   - version: 0.6.1
-    date: unreleased
+    date: 2026-09-14
     brain_format: 2
     summary: >-
       The brain ritual is v2: compile with `--root .` from the repo root.

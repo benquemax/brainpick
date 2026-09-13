@@ -2,6 +2,8 @@
 
 ## 2026-09-14
 
+- Released 0.6.1: the brain ritual is v2 and a misaimed `--root` warns
+  ([The brain ritual](brain-ritual.md), [bundle.root](reference/config/bundle-root.md)).
 - Fixed: [The brain ritual](brain-ritual.md) is v2 — step 1 now says
   `brainpick compile --root .` from the repo root. v1's `--root <bundle>`,
   mechanised from `brainpick register`'s path, aimed at the bundle
