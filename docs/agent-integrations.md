@@ -4,7 +4,7 @@ about: concept
 title: Agent integrations
 description: How brainpick meets agents where they live — a shipped Agent Skill, one-command integrations for each harness, four CLI query mirrors, and an AGENTS.md brain report that teaches graph-before-grep.
 tags: [agents]
-timestamp: 2026-09-13T14:00:00Z
+timestamp: 2026-09-14T12:00:00Z
 ---
 
 # Agent integrations
@@ -88,6 +88,12 @@ index. The report is deterministic and byte-identical across engines: a
 graph-before-grep directive, the counts, the tier status, the top hub documents by
 total degree, the orphans, and the bundle root. Compile only *refreshes* an existing
 block; it never creates the file, and unmarked `AGENTS.md` files are never touched.
+The `Bundle root:` line doubles as the block's ownership claim: compile looks in
+the bundle's own `AGENTS.md` and in the one at the git root above it, but writes
+only a block that names the bundle being compiled (or the fresh placeholder,
+which the first compile claims). A block naming another bundle — the repo's own
+brain, when what is being compiled is a scratch bundle under `_temp/` — is left
+byte-for-byte alone with a warning naming both.
 Two lines are deliberately outside that determinism: when a newer brainpick is
 published, an `Engine:` line names it and the upgrade command
 ([Update notice](update-notice.md)); when releases have happened since the

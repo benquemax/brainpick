@@ -232,6 +232,18 @@ skill, omitted entirely otherwise (a wiki is not a brain).
 Deterministic; cross-engine byte-identical (a conformance golden accompanies
 the first implementation).
 
+Compile looks for the markers in two files: the bundle root's `AGENTS.md`
+and the one at the git repo root above it (when the bundle is a subdir).
+The `- Bundle root:` line is the block's **ownership claim** — the bundle's
+path relative to the file that carries the block. A block is refreshed only
+when it is the freshly installed placeholder (`hash:pending`, no bundle root
+line yet — the first compile claims it) or its bundle root line names the
+bundle being compiled. A block that names another bundle belongs to another
+brain — a scratch bundle compiled inside a repo whose `AGENTS.md` reports
+that repo's own brain, say — and MUST be left byte-for-byte alone, with a
+warning naming both bundles. Nearest-`.git` is where compile *looks*, never
+by itself a reason to *write*.
+
 ### The brain ritual block
 
 Beside the report, `brainpick integrate` (every target) installs a second

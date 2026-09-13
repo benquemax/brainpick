@@ -19,6 +19,7 @@ from brainpick.compile.t1 import (
     build_graph,
     render_index_block,
     render_report_block,
+    report_block_owner,
 )
 from brainpick.compile.similarity_gaps import run_similarity_gaps_stage, similarity_gaps_gate
 from brainpick.compile.skills import (
@@ -102,7 +103,9 @@ def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict
                     update: dict | None = None, whats_new: dict | None = None) -> None:
     """Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
     already live — the bundle root, and the repo root above it when the bundle is
-    a subdir. Never creates the file; writes only when the block actually changed."""
+    a subdir. Never creates the file; writes only when the block actually changed,
+    and only a block this bundle owns: one whose `Bundle root:` line names it, or
+    the fresh placeholder (spec/20). Another bundle's block is left alone."""
     from brainpick.detect import find_repo_root
 
     candidates = [root]
@@ -122,6 +125,11 @@ def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict
         if existing is None:
             continue
         bundle_display = os.path.relpath(root, base).replace(os.sep, "/")
+        owner = report_block_owner(existing)
+        if owner is not None and owner != bundle_display:
+            logger.warning("report: %s carries the report of another bundle (%s) — left alone; "
+                           "this compile is %s", agents, owner, bundle_display)
+            continue
         block = render_report_block(graph, tiers, bundle_display, similarity_gaps, skills=skills,
                                     update=update, whats_new=whats_new)
         updated = apply_report_section(existing, block)

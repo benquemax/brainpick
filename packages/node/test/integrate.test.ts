@@ -3,7 +3,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { runCompile } from "../src/compile/pipeline";
 import { REPORT_BEGIN_PREFIX, REPORT_END_MARKER } from "../src/compile/t1";
@@ -133,6 +133,45 @@ describe("the compile-side fill (spec/20 mechanics)", () => {
     await runCompile(bundle);
     const first = readFileSync(agents);
     await runCompile(bundle);
+    expect(readFileSync(agents).equals(first)).toBe(true);
+  });
+
+  test("compile never claims another bundle's report", async () => {
+    // spec/20: the report's `Bundle root:` line is an ownership claim. A scratch
+    // bundle compiled elsewhere in the same repo must leave the repo's block alone.
+    const { repo, bundle } = gitRepoWithBundle();
+    const agents = join(repo, "AGENTS.md");
+    writeFileSync(agents, `x\n\n${REPORT_BEGIN_PREFIX}p) -->\n_\n${REPORT_END_MARKER}\n`, "utf8");
+    await runCompile(bundle);
+    const claimed = readFileSync(agents);
+    expect(claimed.toString("utf8")).toContain("- Bundle root: wiki\n");
+
+    const scratch = join(repo, "_temp", "scratch");
+    cpSync(join(FIXTURE_BUNDLES, "kotiaivot"), scratch, { recursive: true });
+    const warned: string[] = [];
+    const spy = vi.spyOn(console, "warn").mockImplementation((m: unknown) => void warned.push(String(m)));
+    try {
+      await runCompile(scratch);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(readFileSync(agents).equals(claimed)).toBe(true);
+    expect(warned.some((m) => m.includes("_temp/scratch") && m.includes("wiki") && m.includes("AGENTS.md"))).toBe(true);
+
+    await runCompile(bundle); // the owner still refreshes it
+    expect(readFileSync(agents).equals(claimed)).toBe(true);
+  });
+
+  test("compile refreshes a report whose bundle is its own repo", async () => {
+    const repo = join(tempDir(), "repo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    cpSync(join(FIXTURE_BUNDLES, "kotiaurinko"), repo, { recursive: true });
+    const agents = join(repo, "AGENTS.md");
+    writeFileSync(agents, `${REPORT_BEGIN_PREFIX}p) -->\n_\n${REPORT_END_MARKER}\n`, "utf8");
+    await runCompile(repo);
+    expect(readFileSync(agents, "utf8")).toContain("- Bundle root: .\n");
+    const first = readFileSync(agents);
+    await runCompile(repo);
     expect(readFileSync(agents).equals(first)).toBe(true);
   });
 });

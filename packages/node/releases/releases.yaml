@@ -15,6 +15,24 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.6.2
+    date: unreleased
+    brain_format: 2
+    summary: >-
+      Compile no longer claims another bundle's AGENTS.md report: the block's
+      `Bundle root:` line is its ownership claim, and a block naming a
+      different bundle is left alone with a warning.
+    changes:
+      - kind: fixed
+        area: compile
+        text: >-
+          Compiling a bundle inside a repo whose AGENTS.md reports a different
+          bundle (a scratch bundle under `_temp/`, say) rewrote that report
+          with the wrong numbers, because compile wrote to the nearest git
+          root's AGENTS.md unconditionally. The `Bundle root:` line is now the
+          block's ownership claim (spec/20): only the bundle it names — or the
+          fresh placeholder, which the first compile claims — refreshes it;
+          any other compile warns and leaves it byte-for-byte alone.
   - version: 0.6.1
     date: 2026-09-14
     brain_format: 2

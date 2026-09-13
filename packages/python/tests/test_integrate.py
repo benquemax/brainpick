@@ -154,6 +154,40 @@ def test_compile_report_fill_is_idempotent(repo):
     assert agents.read_bytes() == first  # a second compile rewrites nothing
 
 
+def test_compile_never_claims_another_bundles_report(repo, caplog):
+    """spec/20: the report's `Bundle root:` line is an ownership claim. A scratch
+    bundle compiled elsewhere in the same repo must leave the repo's block alone."""
+    root, bundle = repo
+    agents = root / "AGENTS.md"
+    agents.write_text(f"x\n\n{REPORT_BEGIN_PREFIX}p) -->\n_\n{REPORT_END_MARKER}\n", encoding="utf-8")
+    run_compile(bundle)
+    claimed = agents.read_bytes()
+    assert b"- Bundle root: wiki\n" in claimed
+
+    scratch = root / "_temp" / "scratch"
+    shutil.copytree(FIXTURE_BUNDLES / "kotiaivot", scratch)
+    with caplog.at_level("WARNING"):
+        run_compile(scratch)
+    assert agents.read_bytes() == claimed
+    assert any("_temp/scratch" in r.message and "wiki" in r.message and "AGENTS.md" in r.message
+               for r in caplog.records)
+
+    run_compile(bundle)  # the owner still refreshes it
+    assert agents.read_bytes() == claimed
+
+
+def test_compile_refreshes_a_report_whose_bundle_is_its_own_repo(tmp_path):
+    (tmp_path / ".git").mkdir()
+    shutil.copytree(FIXTURE_BUNDLES / "kotiaurinko", tmp_path, dirs_exist_ok=True)
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text(f"{REPORT_BEGIN_PREFIX}p) -->\n_\n{REPORT_END_MARKER}\n", encoding="utf-8")
+    run_compile(tmp_path)
+    assert b"- Bundle root: .\n" in agents.read_bytes()
+    first = agents.read_bytes()
+    run_compile(tmp_path)
+    assert agents.read_bytes() == first
+
+
 # -- exported skills: pointer stubs beside the brainpick skill (spec/85) ---------
 
 

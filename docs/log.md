@@ -2,6 +2,11 @@
 
 ## 2026-09-14
 
+- Fixed: compile no longer claims another bundle's AGENTS.md report. The
+  block's `Bundle root:` line is its ownership claim (spec/20): a scratch
+  bundle compiled under `_temp/` inside a repo whose `AGENTS.md` reports
+  that repo's brain left the block alone with a warning, instead of
+  rewriting it with the scratch numbers ([Agent integrations](agent-integrations.md)).
 - Released 0.6.1: the brain ritual is v2 and a misaimed `--root` warns
   ([The brain ritual](brain-ritual.md), [bundle.root](reference/config/bundle-root.md)).
 - Fixed: [The brain ritual](brain-ritual.md) is v2 — step 1 now says

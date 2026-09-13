@@ -23,6 +23,7 @@ import {
   buildGraph,
   renderIndexBlock,
   renderReportBlock,
+  reportBlockOwner,
   type DocRecord,
   type Graph,
   type GraphStats,
@@ -97,7 +98,9 @@ function similarityGapsForReport(bp: string): Array<{ a: string; b: string; scor
 
 /** Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
  * already live — the bundle root, and the repo root above it when the bundle is
- * a subdir. Never creates the file; writes only when the block actually changed. */
+ * a subdir. Never creates the file; writes only when the block actually changed,
+ * and only a block this bundle owns: one whose `Bundle root:` line names it, or
+ * the fresh placeholder (spec/20). Another bundle's block is left alone. */
 function refreshReport(
   root: string,
   bp: string,
@@ -121,6 +124,13 @@ function refreshReport(
     const existing = readTextOrNull(agents);
     if (existing === null) continue;
     const bundleDisplay = (relative(base, bundleRoot) || ".").split(sep).join("/");
+    const owner = reportBlockOwner(existing);
+    if (owner !== null && owner !== bundleDisplay) {
+      console.warn(
+        `report: ${agents} carries the report of another bundle (${owner}) — left alone; this compile is ${bundleDisplay}`,
+      );
+      continue;
+    }
     const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps, skills, update, whatsNew);
     const updated = applyReportSection(existing, block);
     if (updated !== null && updated !== existing) atomicWrite(agents, updated);

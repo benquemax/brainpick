@@ -408,3 +408,18 @@ export function applyReportSection(existing: string | null, block: string): stri
   end += REPORT_END_MARKER.length;
   return existing.slice(0, begin) + block + existing.slice(end);
 }
+
+/** The bundle a report block claims (spec/20): the value of its `- Bundle root:`
+ * line. null when there is no block or it is still the freshly installed
+ * placeholder (no claim yet — the first compile makes one). */
+export function reportBlockOwner(existing: string | null): string | null {
+  if (existing === null) return null;
+  const begin = existing.indexOf(REPORT_BEGIN_PREFIX);
+  if (begin === -1) return null;
+  const end = existing.indexOf(REPORT_END_MARKER, begin);
+  if (end === -1) return null;
+  for (const line of existing.slice(begin, end).split("\n")) {
+    if (line.startsWith("- Bundle root: ")) return line.slice("- Bundle root: ".length).trim();
+  }
+  return null;
+}

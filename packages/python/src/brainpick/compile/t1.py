@@ -301,3 +301,21 @@ def apply_report_section(existing: str | None, block: str) -> str | None:
         return None
     end += len(REPORT_END_MARKER)
     return existing[:begin] + block + existing[end:]
+
+
+def report_block_owner(existing: str | None) -> str | None:
+    """The bundle a report block claims (spec/20): the value of its `- Bundle root:`
+    line. None when there is no block or it is still the freshly installed
+    placeholder (no claim yet — the first compile makes one)."""
+    if existing is None:
+        return None
+    begin = existing.find(REPORT_BEGIN_PREFIX)
+    if begin == -1:
+        return None
+    end = existing.find(REPORT_END_MARKER, begin)
+    if end == -1:
+        return None
+    for line in existing[begin:end].splitlines():
+        if line.startswith("- Bundle root: "):
+            return line[len("- Bundle root: "):].strip()
+    return None
