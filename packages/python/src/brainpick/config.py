@@ -292,9 +292,11 @@ def _warn_unknown(filename: str, data: dict, defaults: Config) -> None:
 
 def _read_layers(root: Path, defaults: Config) -> dict:
     data: dict = {}
+    found = False
     for path in (root / CONFIG_FILE, root / LOCAL_CONFIG_FILE):
         if not path.is_file():
             continue
+        found = True
         try:
             layer = tomllib.loads(path.read_text(encoding="utf-8"))
         except tomllib.TOMLDecodeError as error:
@@ -302,7 +304,34 @@ def _read_layers(root: Path, defaults: Config) -> dict:
             continue
         _warn_unknown(path.name, layer, defaults)
         data = _deep_merge(data, layer)
+    if not found:
+        _warn_misaimed_root(root)
     return data
+
+
+def _warn_misaimed_root(root: Path) -> None:
+    """spec/80: no config layer at `root`, but the parent's brainpick.toml declares
+    this very directory as its bundle — the user aimed --root at the bundle instead
+    of the config and is about to compile with defaults. Warn, never walk upward
+    (an intentional --root at a zero-config folder must stay silent)."""
+    root = root.resolve()
+    parent = root.parent
+    if parent == root:
+        return
+    parent_config = parent / CONFIG_FILE
+    if not parent_config.is_file():
+        return
+    try:
+        declared = tomllib.loads(parent_config.read_text(encoding="utf-8")).get("bundle", {}).get("root")
+    except tomllib.TOMLDecodeError:
+        return
+    if not isinstance(declared, str) or (parent / declared).resolve() != root:
+        return
+    warnings.warn(
+        f"no {CONFIG_FILE} at {root} — using defaults; {parent_config} declares this "
+        f"directory as its bundle root: did you mean --root {parent}?",
+        stacklevel=4,
+    )
 
 
 def resolve_graph_backend(config: Config) -> str:

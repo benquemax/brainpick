@@ -1,5 +1,18 @@
 # Update log
 
+## 2026-09-14
+
+- Fixed: [The brain ritual](brain-ritual.md) is v2 — step 1 now says
+  `brainpick compile --root .` from the repo root. v1's `--root <bundle>`,
+  mechanised from `brainpick register`'s path, aimed at the bundle
+  subdirectory of a repo-root config and compiled with defaults; integrate
+  replaces installed v1 blocks in place. The Agent Skill and every `--root`
+  help string say the same: `--root` is where `brainpick.toml` lives.
+- Added: both engines warn on that exact misaim — no config at `--root`
+  while the parent's `brainpick.toml` declares it as [bundle.root](reference/config/bundle-root.md)
+  — naming the defaults in use and the `--root` meant (spec/80). Never an
+  upward walk: a zero-config folder stays silent.
+
 ## 2026-09-13
 
 - Released 0.6.0: brain format 2 and everything that makes a brain shared

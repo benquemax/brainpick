@@ -103,7 +103,7 @@ program
 program
   .command("compile")
   .description("compile the bundle into .brainpick/ artifacts")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--full", "ignore the manifest, rebuild all")
   .option("--check-fresh", "verify freshness without writing (exit 1 when stale)")
   .addOption(
@@ -167,7 +167,7 @@ program
 program
   .command("serve")
   .description("serve REST + live deltas + web UI + MCP in one process")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--host <host>", "bind host (default: config or 127.0.0.1)")
   .option("--port <port>", "bind port (default: config or 4747)", intOption)
   .option("--no-watch", "serve without the file watcher")
@@ -256,7 +256,7 @@ program
   .description("search the compiled brain (the brain_search tool, in the terminal)")
   .option("--mode <mode>", "auto | keyword | semantic | graph (unknown falls back to auto)", "auto")
   .option("--limit <n>", "max hits (default: 8)", intOption, 8)
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--json", "print the raw MCP payload as JSON")
   .action(async (query: string, opts: { mode: string; limit: number; root: string; json?: boolean }) => {
     const { searchMirror } = await import("./query/mirrors");
@@ -266,7 +266,7 @@ program
 program
   .command("read <doc>")
   .description("read one doc from the brain (path, stem, or approximate title)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--json", "print the raw MCP payload as JSON")
   .action(async (doc: string, opts: { root: string; json?: boolean }) => {
     const { readMirror } = await import("./query/mirrors");
@@ -278,7 +278,7 @@ program
   .description("walk the link graph around a doc")
   .option("--depth <n>", "hops to walk, 1–3 (default: 1)", intOption, 1)
   .option("--layer <layer>", "links | entities | both (entities degrades to links until T3)", "links")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--json", "print the raw MCP payload as JSON")
   .action(async (doc: string, opts: { depth: number; layer: string; root: string; json?: boolean }) => {
     const { neighborsMirror } = await import("./query/mirrors");
@@ -288,7 +288,7 @@ program
 program
   .command("overview")
   .description("one screen of the whole brain: counts, tiers, every doc")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--json", "print the raw MCP payload as JSON")
   .action(async (opts: { root: string; json?: boolean }) => {
     const { overviewMirror } = await import("./query/mirrors");
@@ -299,7 +299,7 @@ const skill = program.command("skill").description("procedural memory: list the 
 skill
   .command("list")
   .description("every skill with its prerequisites and tools")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--json", "print {skills: [...]} as JSON")
   .action(async (opts: { root: string; json?: boolean }) => {
     const { skillList } = await import("./skill");
@@ -314,7 +314,7 @@ skill
   .option("--description <text>", 'the trigger, "Use when …" — what search and the overview show')
   .option("--depends-on <path>", "a prerequisite skill's bundle-relative path (repeatable)", collect, [])
   .option("--tool <path>", "a tool the skill drives, bundle-relative (repeatable)", collect, [])
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(
     async (
       name: string,
@@ -342,7 +342,7 @@ program
   .option("--host <host>", "server host (default: config or 127.0.0.1)")
   .option("--port <port>", "server port (default: config or 4747)", intOption)
   .option("--token <token>", "bearer token for a guarded server")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--json", "print the raw server response as JSON")
   .action(
     async (
@@ -378,7 +378,7 @@ program
 program
   .command("integrate <target>")
   .description("install brainpick into an agent harness (skill, MCP, report)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--dry-run", "print what integrate would do without writing anything")
   .action(async (target: string, opts: { root: string; dryRun?: boolean }) => {
     const { runIntegrate } = await import("./integrate");
@@ -426,7 +426,7 @@ token
   .command("create")
   .description("mint a token — the secret prints exactly once")
   .option("--name <name>", "a label for the token (e.g. the agent's name)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(async (opts: { name?: string; root: string }) => {
     const { runTokenCreate } = await import("./auth");
     process.exitCode = runTokenCreate(opts.root, { name: opts.name ?? null });
@@ -435,7 +435,7 @@ token
 token
   .command("list")
   .description("list tokens (ids and names — never secrets)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(async (opts: { root: string }) => {
     const { runTokenList } = await import("./auth");
     process.exitCode = runTokenList(opts.root);
@@ -444,7 +444,7 @@ token
 token
   .command("revoke <id>")
   .description("revoke a token by id — it stops working immediately")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(async (id: string, opts: { root: string }) => {
     const { runTokenRevoke } = await import("./auth");
     process.exitCode = runTokenRevoke(opts.root, id);
@@ -456,7 +456,7 @@ password
   .command("set")
   .description("set the password (TTY prompt, or --stdin for pipes)")
   .option("--stdin", "read the password from stdin")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(async (opts: { stdin?: boolean; root: string }) => {
     const { promptHidden, readStdinLine, runPasswordSetValue } = await import("./auth");
     let value: string;
@@ -476,7 +476,7 @@ password
 password
   .command("clear")
   .description("remove the password — the UI opens without a login")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(async (opts: { root: string }) => {
     const { runPasswordClear } = await import("./auth");
     process.exitCode = runPasswordClear(opts.root);
@@ -485,7 +485,7 @@ password
 program
   .command("init")
   .description("detect the bundle and backends, write config, compile T1")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--yes", "accept the opt-in choices (e.g. record OPENAI_API_KEY for T2)")
   .option("--dry-run", "print what init would do without writing anything")
   .action(async (opts: { root: string; yes?: boolean; dryRun?: boolean }) => {
@@ -496,7 +496,7 @@ program
 program
   .command("migrate")
   .description("rewrite a brain to a newer brain format (spec/85)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .requiredOption("--to <N>", "the target brain format (e.g. 2)", intOption)
   .option("--dry-run", "print the action list and a diff without writing anything")
   .action(async (opts: { root: string; to: number; dryRun?: boolean }) => {
@@ -507,7 +507,7 @@ program
 program
   .command("whats-new")
   .description("what changed since this brain was last compiled, and what to do about it (spec/80)")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .option("--since <version>", "show releases after this version (default: the version that last compiled)")
   .option("--all", "print the whole release ledger")
   .option("--json", "the raw ledger entries plus the notice")
@@ -519,7 +519,7 @@ program
 program
   .command("doctor")
   .description("diagnose config, bundle, artifacts, backends, and UI")
-  .option("--root <path>", "bundle root (default: current directory)", ".")
+  .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
   .action(async (opts: { root: string }) => {
     const { runDoctor } = await import("./scaffold");
     process.exitCode = await runDoctor(opts.root);

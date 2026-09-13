@@ -555,7 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_compile = sub.add_parser("compile", help="compile the bundle into .brainpick/ artifacts")
-    p_compile.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_compile.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_compile.add_argument("--full", action="store_true", help="ignore the manifest, rebuild all")
     p_compile.add_argument("--check-fresh", action="store_true",
                            help="verify freshness without writing (exit 1 when stale)")
@@ -568,7 +568,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_compile.set_defaults(func=_cmd_compile)
 
     p_serve = sub.add_parser("serve", help="serve REST + live deltas + web UI + MCP in one process")
-    p_serve.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_serve.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_serve.add_argument("--host", default=None, help="bind host (default: config or 127.0.0.1)")
     p_serve.add_argument("--port", type=int, default=None, help="bind port (default: config or 4747)")
     p_serve.add_argument("--no-watch", action="store_true", help="serve without the file watcher")
@@ -603,13 +603,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--mode", default="auto",
                           help="auto | keyword | semantic | graph (unknown falls back to auto)")
     p_search.add_argument("--limit", type=int, default=8, help="max hits (default: 8)")
-    p_search.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_search.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_search.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
     p_search.set_defaults(func=_cmd_search)
 
     p_read = sub.add_parser("read", help="read one doc from the brain (path, stem, or approximate title)")
     p_read.add_argument("doc", help="a path (kuu.md), a stem (kuu), or an approximate title")
-    p_read.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_read.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_read.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
     p_read.set_defaults(func=_cmd_read)
 
@@ -618,19 +618,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_neighbors.add_argument("--depth", type=int, default=1, help="hops to walk, 1–3 (default: 1)")
     p_neighbors.add_argument("--layer", default="links",
                              help="links | entities | both (entities degrades to links until T3)")
-    p_neighbors.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_neighbors.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_neighbors.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
     p_neighbors.set_defaults(func=_cmd_neighbors)
 
     p_overview = sub.add_parser("overview", help="one screen of the whole brain: counts, tiers, every doc")
-    p_overview.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_overview.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_overview.add_argument("--json", action="store_true", help="print the raw MCP payload as JSON")
     p_overview.set_defaults(func=_cmd_overview)
 
     p_skill = sub.add_parser("skill", help="procedural memory: list the brain's skills or scaffold a new one")
     skill_sub = p_skill.add_subparsers(dest="skill_command", required=True)
     s_list = skill_sub.add_parser("list", help="every skill with its prerequisites and tools")
-    s_list.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    s_list.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     s_list.add_argument("--json", action="store_true", help="print {skills: [...]} as JSON")
     s_list.set_defaults(func=_cmd_skill_list)
     s_new = skill_sub.add_parser("new", help="scaffold a compliant skill doc and compile")
@@ -642,7 +642,7 @@ def build_parser() -> argparse.ArgumentParser:
                        help="a prerequisite skill's bundle-relative path (repeatable)")
     s_new.add_argument("--tool", action="append", default=[], metavar="PATH",
                        help="a tool the skill drives, bundle-relative (repeatable)")
-    s_new.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    s_new.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     s_new.set_defaults(func=_cmd_skill_new)
 
     p_show = sub.add_parser("show",
@@ -657,20 +657,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("--host", default=None, help="server host (default: config or 127.0.0.1)")
     p_show.add_argument("--port", type=int, default=None, help="server port (default: config or 4747)")
     p_show.add_argument("--token", default=None, help="bearer token for a guarded server")
-    p_show.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_show.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_show.add_argument("--json", action="store_true", help="print the raw server response as JSON")
     p_show.set_defaults(func=_cmd_show)
 
     p_integrate = sub.add_parser("integrate", help="install brainpick into an agent harness (skill, MCP, report)")
     p_integrate.add_argument("target", metavar="<target>",
                              help="the harness to wire up: claude-code | opencode | agents-md | dsh")
-    p_integrate.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_integrate.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_integrate.add_argument("--dry-run", action="store_true",
                              help="print what integrate would do without writing anything")
     p_integrate.set_defaults(func=_cmd_integrate)
 
     p_init = sub.add_parser("init", help="detect the bundle and backends, write config, compile T1")
-    p_init.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_init.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_init.add_argument("--yes", action="store_true",
                         help="accept the opt-in choices (e.g. record OPENAI_API_KEY for T2)")
     p_init.add_argument("--dry-run", action="store_true",
@@ -678,11 +678,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.set_defaults(func=_cmd_init)
 
     p_doctor = sub.add_parser("doctor", help="diagnose config, bundle, artifacts, backends, and UI")
-    p_doctor.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_doctor.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_doctor.set_defaults(func=_cmd_doctor)
 
     p_migrate = sub.add_parser("migrate", help="rewrite a brain to a newer brain format (spec/85)")
-    p_migrate.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_migrate.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_migrate.add_argument("--to", type=int, required=True, metavar="N",
                            help="the target brain format (e.g. 2)")
     p_migrate.add_argument("--dry-run", action="store_true",
@@ -691,7 +691,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_news = sub.add_parser("whats-new", help="what changed since this brain was last compiled, "
                                               "and what to do about it (spec/80)")
-    p_news.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    p_news.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     p_news.add_argument("--since", default=None, metavar="VERSION",
                         help="show releases after this version (default: the version that last compiled)")
     p_news.add_argument("--all", action="store_true", help="print the whole release ledger")
@@ -702,24 +702,24 @@ def build_parser() -> argparse.ArgumentParser:
     token_sub = p_token.add_subparsers(dest="token_command", required=True)
     t_create = token_sub.add_parser("create", help="mint a token — the secret prints exactly once")
     t_create.add_argument("--name", default=None, help="a label for the token (e.g. the agent's name)")
-    t_create.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    t_create.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     t_create.set_defaults(func=_cmd_token_create)
     t_list = token_sub.add_parser("list", help="list tokens (ids and names — never secrets)")
-    t_list.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    t_list.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     t_list.set_defaults(func=_cmd_token_list)
     t_revoke = token_sub.add_parser("revoke", help="revoke a token by id — it stops working immediately")
     t_revoke.add_argument("token_id", metavar="<id>", help="the token id (brainpick token list)")
-    t_revoke.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    t_revoke.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     t_revoke.set_defaults(func=_cmd_token_revoke)
 
     p_password = sub.add_parser("password", help="manage the web UI password (spec/80 auth)")
     password_sub = p_password.add_subparsers(dest="password_command", required=True)
     pw_set = password_sub.add_parser("set", help="set the password (TTY prompt, or --stdin for pipes)")
     pw_set.add_argument("--stdin", action="store_true", help="read the password from stdin")
-    pw_set.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    pw_set.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     pw_set.set_defaults(func=_cmd_password_set)
     pw_clear = password_sub.add_parser("clear", help="remove the password — the UI opens without a login")
-    pw_clear.add_argument("--root", default=".", help="bundle root (default: current directory)")
+    pw_clear.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
     pw_clear.set_defaults(func=_cmd_password_clear)
     return parser
 

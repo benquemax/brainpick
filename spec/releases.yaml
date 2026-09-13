@@ -15,6 +15,36 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.6.1
+    date: unreleased
+    brain_format: 2
+    summary: >-
+      The brain ritual is v2: compile with `--root .` from the repo root.
+      v1 said `--root <bundle>`, which on a repo-root brainpick.toml with
+      `[bundle] root` compiled with defaults and desynced the freshness
+      marker; both engines now warn on that exact misaim.
+    changes:
+      - kind: fixed
+        area: cli
+        text: >-
+          Ritual block v2 — step 1 reads `brainpick compile --root .` from
+          the repo root: `--root` is where `brainpick.toml` lives, never the
+          bundle subdirectory it points at. The Agent Skill and every
+          `--root` help string say the same. Integrate replaces an installed
+          v1 block in place.
+        agent_action: >-
+          Re-run `brainpick integrate agents-md` (or `claude-code` /
+          `opencode` / `dsh`) in every repo carrying the ritual block, and
+          fix any fleet instruction that mechanises `--root` from
+          `brainpick register`'s path to `--root .` at the repo root.
+      - kind: added
+        area: config
+        text: >-
+          A `--root` that finds no config while the parent's brainpick.toml
+          declares that directory as its `[bundle] root` warns — naming the
+          defaults in use and the `--root` meant — instead of compiling
+          with defaults in silence (spec/80). Never an upward walk: a
+          zero-config folder stays silent.
   - version: 0.6.0
     date: 2026-09-12
     brain_format: 2

@@ -238,7 +238,7 @@ Beside the report, `brainpick integrate` (every target) installs a second
 fenced block in the same `AGENTS.md`:
 
 ```
-<!-- brainpick:begin ritual (v1) -->
+<!-- brainpick:begin ritual (v2) -->
 …
 <!-- brainpick:end ritual -->
 ```
@@ -248,9 +248,13 @@ package byte-identical (like the Agent Skill; parity-tested), and it is
 what makes a brain *shared* memory rather than a read-only index: it tells
 the agent to **pull and compile at session start**, **consult the brain
 before grepping or answering from memory**, **record while working**, and
-**commit and push before finishing**. Compile never touches this block
-(it is not generated — the `(v1)` is the text's own version, bumped when
-the canonical changes) and never creates it. Integrate installs it directly
+**commit and push before finishing**. The compile step is
+`brainpick compile --root .` from the repo root — `--root` is where the
+config lives (spec/80), never the bundle directory a config points at; v1
+said `--root <bundle>`, which on a repo-root config with `[bundle] root`
+compiled with defaults. Compile never touches this block (it is not
+generated — the `(v2)` is the text's own version, bumped when the canonical
+changes) and never creates it. Integrate installs it directly
 below the report block when absent; when a block is present with an older
 `(vN)` it is replaced in place; at the current version it is left alone.
 The rendered text is a conformance golden (class `ritual`), so both engines

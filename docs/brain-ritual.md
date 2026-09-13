@@ -4,7 +4,7 @@ about: concept
 title: The brain ritual
 description: "Four habits that make a brain shared memory rather than a read-only index — pull and compile first, consult before grepping, record while working, commit and push last — installed by brainpick integrate as a fenced block in AGENTS.md and repeated in the Agent Skill."
 tags: [agents, brain]
-timestamp: 2026-09-13T14:00:00Z
+timestamp: 2026-09-14T10:00:00Z
 ---
 
 # The brain ritual
@@ -17,14 +17,17 @@ memory. The **ritual** is the whole loop, and
 harness already looks:
 
 ```
-<!-- brainpick:begin ritual (v1) -->
+<!-- brainpick:begin ritual (v2) -->
 …
 <!-- brainpick:end ritual -->
 ```
 
 1. **Start: pull, then compile.** `git pull --ff-only` in every brain repo,
-   then `brainpick compile --root <bundle>` — `.brainpick/` is gitignored,
-   so a pull alone leaves the brain stale, and compile is where the
+   then `brainpick compile --root .` from the repo root — `--root` names
+   where `brainpick.toml` lives and [bundle.root](reference/config/bundle-root.md)
+   names the bundle from there; aiming `--root` at the bundle subdirectory
+   compiles with defaults. `.brainpick/` is gitignored, so a pull alone
+   leaves the brain stale, and compile is where the
    [What's new notice](whats-new.md) speaks. If it does, `brainpick
    whats-new` and its *Do next* list come before the task.
 2. **Consult before grepping or answering from memory.** `brain_overview`,
@@ -42,9 +45,11 @@ harness already looks:
 The text is one canonical file, `integrations/ritual/RITUAL.md`, shipped in
 both packages byte-identical and pinned as a conformance golden (class
 `ritual`), so every engine installs the same words. It is *static*: the
-`(v1)` is the text's own version, not a hash — compile never regenerates
+`(v2)` is the text's own version, not a hash — compile never regenerates
 the block, and integrate replaces it in place only when a newer canonical
-ships. `agents-md` creates the file when there is none; the harness targets
+ships. v2 corrected v1's compile line, which said `--root <bundle>` and,
+mechanised from `brainpick register`'s path, aimed at the bundle instead
+of the config — every repo integrate touches again self-heals. `agents-md` creates the file when there is none; the harness targets
 (`claude-code`, `opencode`, `dsh`) install the block only into an
 `AGENTS.md` that exists, directly below the [brain report](agent-integrations.md),
 and say so when there is none. The Agent Skill repeats the four habits, so

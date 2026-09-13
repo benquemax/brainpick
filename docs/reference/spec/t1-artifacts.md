@@ -27,7 +27,7 @@ concrete form of the [artifact spec](../../artifact-spec.md) and the T1 rung of
 [the tiers](../../the-tiers.md); the opt-in AGENTS.md brain report shares the
 same fence mechanics as [agent integrations](../../agent-integrations.md).
 Beside the report, `brainpick integrate` installs the static
-[brain ritual](../../brain-ritual.md) block (`brainpick:begin ritual (v1)`),
+[brain ritual](../../brain-ritual.md) block (`brainpick:begin ritual (v2)`),
 a conformance golden (class `ritual`) compile never touches.
 
 Back to [Spec reference](../../reference-spec.md).

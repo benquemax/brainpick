@@ -1,7 +1,7 @@
 /** Config loading (spec/80): defaults, TOML values, env overrides, unknown-key
  * warnings (the twin of packages/python/tests/test_config.py). */
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import { afterEach, expect, test } from "vitest";
 
@@ -299,4 +299,44 @@ test("brain unknown audience warns and falls back", () => {
   const { cfg, warnings } = load(withToml('[brain]\naudience = "everyone"\n'));
   expect(cfg.brain.audience).toBe("personal");
   expect(warnings.some((w) => w.includes("audience"))).toBe(true);
+});
+
+// -- a misaimed --root (spec/80) ---------------------------------------------------
+
+test("a --root at the bundle of a parent config warns and keeps defaults", () => {
+  const repo = withToml('[bundle]\nroot = "_brain"\nexclude = ["raw/*"]\n');
+  const bundle = join(repo, "_brain");
+  mkdirSync(bundle);
+  const { cfg, warnings } = load(bundle);
+  expect(cfg.bundle.exclude).toEqual([]); // defaults, never a silent upward walk
+  const hit = warnings.find((w) => w.includes("did you mean --root"));
+  expect(hit).toBeDefined();
+  expect(hit).toContain(`no brainpick.toml at ${resolve(bundle)}`);
+  expect(hit).toContain("using defaults");
+  expect(hit).toContain(`--root ${resolve(repo)}`);
+});
+
+test("a zero-config folder stays silent", () => {
+  const plain = join(tempDir(), "plain");
+  mkdirSync(plain);
+  expect(load(plain).warnings).toEqual([]);
+});
+
+test("a parent config pointing elsewhere stays silent", () => {
+  const repo = withToml('[bundle]\nroot = "other"\n');
+  mkdirSync(join(repo, "_brain"));
+  expect(load(join(repo, "_brain")).warnings).toEqual([]);
+});
+
+test("a parent config governing itself stays silent", () => {
+  const repo = withToml('[index]\nmode = "off"\n');
+  mkdirSync(join(repo, "sub"));
+  expect(load(join(repo, "sub")).warnings).toEqual([]);
+});
+
+test("a local layer at the aimed root means it was aimed on purpose", () => {
+  const repo = withToml('[bundle]\nroot = "_brain"\n');
+  mkdirSync(join(repo, "_brain"));
+  writeFileSync(join(repo, "_brain", "brainpick.local.toml"), '[index]\nmode = "off"\n', "utf8");
+  expect(load(join(repo, "_brain")).warnings.some((w) => w.includes("did you mean"))).toBe(false);
 });

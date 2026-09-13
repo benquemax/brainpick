@@ -3,7 +3,7 @@
  * shared file — precedence CLI > env > local.toml > toml > defaults. */
 import { randomBytes } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { parse as parseToml } from "smol-toml";
 
@@ -372,6 +372,38 @@ export function resolveGraphBackend(config: Config): "off" | "algorithmic" {
   return mode === "off" ? "off" : "algorithmic";
 }
 
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** spec/80: no config layer at `root`, but the parent's brainpick.toml declares
+ * this very directory as its bundle — the user aimed --root at the bundle
+ * instead of the config and is about to compile with defaults. Warn, never
+ * walk upward (an intentional --root at a zero-config folder stays silent). */
+function warnMisaimedRoot(root: string, warn: Warn): void {
+  const here = resolve(root);
+  const parent = dirname(here);
+  if (parent === here) return;
+  const parentConfig = join(parent, CONFIG_FILE);
+  if (!isFile(parentConfig)) return;
+  let declared: unknown;
+  try {
+    const bundle = parseToml(readFileSync(parentConfig, "utf8"))["bundle"];
+    declared = isTable(bundle) ? bundle["root"] : undefined;
+  } catch {
+    return;
+  }
+  if (typeof declared !== "string" || resolve(parent, declared) !== here) return;
+  warn(
+    `no ${CONFIG_FILE} at ${here} — using defaults; ${parentConfig} declares this ` +
+      `directory as its bundle root: did you mean --root ${parent}?`,
+  );
+}
+
 /** Read <root>/brainpick.toml, deep-merge <root>/brainpick.local.toml over it
  * (spec/80 layering), then apply env overrides; absent files mean all defaults
  * (zero-config bundles). */
@@ -382,10 +414,13 @@ export function loadConfig(
 ): Config {
   const config = defaultConfig();
 
+  let found = false;
   for (const file of [CONFIG_FILE, LOCAL_CONFIG_FILE]) {
+    if (isFile(join(root, file))) found = true;
     const data = readToml(join(root, file), file, warn);
     if (data !== null) applyData(config, data, file, warn);
   }
+  if (!found) warnMisaimedRoot(root, warn);
 
   for (const sectionName of SECTIONS) {
     const section = config[sectionName] as unknown as Record<string, SectionValue>;

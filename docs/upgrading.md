@@ -16,7 +16,7 @@ is that walk for a format-1 brain meeting 0.6.0; the mechanism is general.
 1. **Upgrade the engine** where the [Update notice](update-notice.md) says
    to (`uv tool upgrade brainpick`, `pipx upgrade brainpick`, or
    `npm i -g brainpick`).
-2. **Compile.** `brainpick compile --root <bundle>` prints
+2. **Compile.** `brainpick compile --root .` from the repo root prints
    `note: what's new — …` naming both gaps: the releases since the last
    compile and the brain format behind.
 3. **Read the checklist.** `brainpick whats-new` prints the releases and

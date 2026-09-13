@@ -66,7 +66,26 @@ readers = []                    # for team: the assumed readers, by handle or ro
 ```
 
 Unknown keys are warnings, not errors (config written by a newer brainpick
-must not brick an older one). `[half_life.folders]` keys are bundle-relative
+must not brick an older one).
+
+`--root` names where the config lives, and the bundle it governs follows
+from `[bundle] root` — so `--root .` at a repo root whose `brainpick.toml`
+says `root = "_brain"` compiles `_brain/`. Aiming `--root` at the bundle
+directory itself finds no config, and an absent config means all defaults:
+`[bundle] exclude`, `[index]`, `[half_life]`, `[modules]` are silently lost,
+and the resulting freshness marker disagrees with the one the repo-root
+form writes. Engines MUST NOT walk upward (an intentional `--root` at a
+plain zero-config folder stays silent), but MUST warn when the miss is
+recognisable: `<root>/brainpick.toml` is absent, `<root>/../brainpick.toml`
+exists, and its `[bundle] root` resolves to `<root>`. The warning names the
+directory, says defaults are in use, and suggests the parent as `--root`:
+
+```
+no brainpick.toml at _brain — using defaults; ../brainpick.toml declares
+this directory as its bundle root: did you mean --root <parent>?
+```
+
+It is a warning on the engine's usual channel, never a behaviour change. `[half_life.folders]` keys are bundle-relative
 folder paths without a trailing slash (`journals`, `journals/archive`);
 values are days, a non-number is ignored. `BRAINPICK_HALF_LIFE_DEFAULT`
 overrides the scalar; `BRAINPICK_HALF_LIFE_FOLDERS` takes

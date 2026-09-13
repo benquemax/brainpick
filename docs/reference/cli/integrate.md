@@ -18,7 +18,7 @@ additively — it never edits your settings for you. `TARGET` is one of:
 - `dsh` — writes the skill under the `.claude/skills` convention dsh shares and prints the `cordis.patch.yml` insert.
 
 Every target also installs [the brain ritual](../../brain-ritual.md) — a static
-`brainpick:begin ritual (v1)` block directly below the report: pull and
+`brainpick:begin ritual (v2)` block directly below the report: pull and
 compile first, consult before grepping, record while working, commit and
 push last. `agents-md` creates the file for it; the harness targets install it
 only into an `AGENTS.md` that exists, and an older block is replaced in place.

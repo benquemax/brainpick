@@ -227,6 +227,18 @@ describe("the brain ritual block (spec/20)", () => {
     expect(block).toBe(readFileSync(golden, "utf8"));
   });
 
+  test("v2 compiles from the config root and replaces the v1 advice in place", () => {
+    // v1 said `--root <bundle>`; on a repo-root config with [bundle] root that
+    // compiled with defaults (spec/80). v2 says `--root .` from the repo root.
+    expect(RITUAL_VERSION).toBeGreaterThanOrEqual(2);
+    const block = renderRitualBlock();
+    expect(block).toContain("brainpick compile --root .");
+    expect(block).not.toContain("--root <bundle>");
+    expect(block).not.toContain("not always the repo root");
+    const v1 = `${RITUAL_BEGIN_PREFIX}1) -->\n1. run \`brainpick compile --root <bundle>\`\n${RITUAL_END_MARKER}\n`;
+    expect(installRitual("# A\n\n" + v1)).toBe("# A\n\n" + block);
+  });
+
   test("installs directly below the report block, above henxels", () => {
     const text = "# A\n\nIntro.\n\n" + REPORT_PLACEHOLDER + "\n\n<!-- henxels:begin -->\nc\n<!-- henxels:end -->\n";
     const out = installRitual(text);

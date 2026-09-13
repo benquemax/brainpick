@@ -50,7 +50,7 @@ _MINIMAL_AGENTS = "# AGENTS.md\n\nWorking notes for agents in this repository.\n
 
 # The brain ritual block (spec/20 *The brain ritual block*): static text, versioned
 # by the canonical itself, installed by every integrate target, never generated.
-RITUAL_VERSION = 1
+RITUAL_VERSION = 2
 RITUAL_BEGIN_PREFIX = "<!-- brainpick:begin ritual (v"
 RITUAL_END_MARKER = "<!-- brainpick:end ritual -->"
 _RITUAL_BLOCK = re.compile(

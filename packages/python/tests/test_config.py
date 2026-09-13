@@ -335,3 +335,45 @@ def test_brain_unknown_audience_warns_and_falls_back(tmp_path):
     with pytest.warns(UserWarning, match="audience"):
         cfg = load_config(tmp_path)
     assert cfg.brain.audience == "personal"
+
+
+# -- a misaimed --root (spec/80) -----------------------------------------------------
+
+
+def test_misaimed_root_at_the_bundle_of_a_parent_config_warns_and_keeps_defaults(tmp_path):
+    (tmp_path / "brainpick.toml").write_text('[bundle]\nroot = "_brain"\nexclude = ["raw/*"]\n')
+    bundle = tmp_path / "_brain"
+    bundle.mkdir()
+    with pytest.warns(UserWarning, match=r"no brainpick\.toml at .*_brain.*did you mean --root") as caught:
+        config = load_config(bundle)
+    assert config.bundle.exclude == []  # defaults, never a silent upward walk
+    message = str(caught[0].message)
+    assert "using defaults" in message and str(tmp_path) in message
+
+
+def test_zero_config_folder_stays_silent(tmp_path, recwarn):
+    (tmp_path / "plain").mkdir()
+    load_config(tmp_path / "plain")
+    assert not [w for w in recwarn if "brainpick.toml" in str(w.message)]
+
+
+def test_parent_config_pointing_elsewhere_stays_silent(tmp_path, recwarn):
+    (tmp_path / "brainpick.toml").write_text('[bundle]\nroot = "other"\n')
+    (tmp_path / "_brain").mkdir()
+    load_config(tmp_path / "_brain")
+    assert not [w for w in recwarn if "brainpick.toml" in str(w.message)]
+
+
+def test_parent_config_governing_itself_stays_silent(tmp_path, recwarn):
+    (tmp_path / "brainpick.toml").write_text("[index]\nmode = \"off\"\n")
+    (tmp_path / "sub").mkdir()
+    load_config(tmp_path / "sub")  # parent's [bundle] root is "." — the sub folder is not its bundle
+    assert not [w for w in recwarn if "brainpick.toml" in str(w.message)]
+
+
+def test_misaimed_root_with_a_local_layer_only_stays_silent(tmp_path, recwarn):
+    (tmp_path / "brainpick.toml").write_text('[bundle]\nroot = "_brain"\n')
+    (tmp_path / "_brain").mkdir()
+    (tmp_path / "_brain" / "brainpick.local.toml").write_text("[index]\nmode = \"off\"\n")
+    load_config(tmp_path / "_brain")  # a config layer IS present here — the user aimed on purpose
+    assert not [w for w in recwarn if "did you mean" in str(w.message)]

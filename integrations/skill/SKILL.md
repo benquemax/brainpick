@@ -24,8 +24,9 @@ yours. Four habits keep it true (the same four `brainpick integrate` installs in
 AGENTS.md as the *brain ritual* block):
 
 1. **Start:** `git pull --ff-only` in every brain repo, then `brainpick compile
-   --root <bundle>` — `.brainpick/` is gitignored, so a pull alone leaves the brain
-   stale. If compile says *What's new*, run `brainpick whats-new` and walk its
+   --root .` from the repo root — `--root` is where `brainpick.toml` lives, never
+   the bundle subdirectory it points at (that compiles with defaults). `.brainpick/`
+   is gitignored, so a pull alone leaves the brain stale. If compile says *What's new*, run `brainpick whats-new` and walk its
    *Do next* list before continuing.
 2. **Consult** the brain before grepping or answering from memory (this file).
 3. **Record while you work** — fix a wrong fact where you found it; today's journal
@@ -51,15 +52,16 @@ Every result carries a `hint` naming a sensible next call. Follow it.
 No MCP server? The same four reads are CLI verbs. Pick the invocation that runs here:
 
 - Published (Python): `uvx brainpick search "vuorovesi"` · `read kuu` · `neighbors kuu` · `overview`
-- Dev checkout (Python): `uv run brainpick search "vuorovesi" --root <bundle>`
+- Dev checkout (Python): `uv run brainpick search "vuorovesi" --root <repo>`
 - Node engine: `node /path/to/brainpick/dist/cli.js search "vuorovesi"` (or `npx brainpick search …` once published)
 
-Add `--json` for machine-readable output, `--root <dir>` to point at the bundle,
-`--mode`/`--limit` on search, `--depth` on neighbors. If the CLI says the brain
-is not compiled, run `brainpick compile --root <bundle>` first.
+Add `--json` for machine-readable output, `--root <dir>` to point at the directory
+holding `brainpick.toml` (the config names the bundle; aim at the config, not the
+bundle), `--mode`/`--limit` on search, `--depth` on neighbors. If the CLI says the
+brain is not compiled, run `brainpick compile --root <repo>` first.
 
 Wire the MCP server into your host with `brainpick mcp` — e.g.
-`claude mcp add brainpick -- uvx brainpick mcp --root <bundle>`.
+`claude mcp add brainpick -- uvx brainpick mcp --root <repo>`.
 
 ## Several brains at once (federation)
 
@@ -86,14 +88,14 @@ wall of text. It highlights nodes, flies the camera, and drops a caption into
 every **connected** brainpick UI. It never writes the brain.
 
 **It needs a running `brainpick serve`.** The other five tools work over a plain
-stdio MCP connection (`claude mcp add brainpick -- brainpick mcp --root <bundle>`,
+stdio MCP connection (`claude mcp add brainpick -- brainpick mcp --root <repo>`,
 the common setup) because they only read compiled artifacts. `brain_show`
 broadcasts to a live browser — and a stdio-connected MCP server has none attached;
 it builds its own private, unshared state. Call it over stdio today and you get
 back `{"ok": true, "shown": N}` while nothing appears anywhere — a false positive,
 not a "no UI open" signal.
 
-To actually see it: start `brainpick serve --root <bundle>` first (a browser tab
+To actually see it: start `brainpick serve --root <repo>` first (a browser tab
 open to it, or `POST /api/show` with the same body, both work), or connect your
 MCP client over HTTP to that server's `/mcp` endpoint instead of stdio. If you
 called `brain_show` and the human says they saw nothing, don't trust the `"ok"`

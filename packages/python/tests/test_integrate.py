@@ -239,6 +239,19 @@ def test_ritual_block_is_the_conformance_golden():
     assert render_ritual_block() == golden.read_text(encoding="utf-8")
 
 
+def test_ritual_v2_compiles_from_the_config_root_and_replaces_the_v1_advice():
+    """v1 said `--root <bundle>`; on a repo-root config with [bundle] root that
+    compiles with defaults (spec/80). v2 says `--root .` from the repo root and
+    an installed v1 block is upgraded in place."""
+    assert RITUAL_VERSION >= 2
+    block = render_ritual_block()
+    assert "brainpick compile --root ." in block
+    assert "--root <bundle>" not in block and "not always the repo root" not in block
+    v1 = (f"{RITUAL_BEGIN_PREFIX}1) -->\n1. run `brainpick compile --root <bundle>`\n"
+          f"{RITUAL_END_MARKER}\n")
+    assert install_ritual("# A\n\n" + v1) == "# A\n\n" + block
+
+
 def test_install_ritual_goes_directly_below_the_report_block():
     text = "# A\n\nIntro.\n\n" + _REPORT_PLACEHOLDER + "\n\n<!-- henxels:begin -->\nc\n<!-- henxels:end -->\n"
     out = install_ritual(text)

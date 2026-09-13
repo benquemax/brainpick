@@ -4,7 +4,7 @@ about: thing
 title: "bundle.root"
 description: "Where the OKF bundle lives relative to the config file — default \".\" — so the config can sit at a repo root pointing at a subdirectory bundle."
 tags: [config, spec]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-14T10:00:00Z
 ---
 
 # bundle.root
@@ -18,6 +18,18 @@ the indirection — [brainpick compile](../cli/compile.md) (including
 [brainpick serve](../cli/serve.md) and [brainpick doctor](../cli/doctor.md) — so
 `--root` always names where the config lives, and the compiled `.brainpick/`
 and generated index land in the bundle it points at.
+
+The misaim to avoid: `--root _brain` when the config is one level up. No
+config is found there, so the engine compiles with every default —
+[bundle.exclude](bundle-exclude.md), `[index]`, `[half_life]`, `[modules]`
+all lost — and its freshness marker disagrees with the one `--root .`
+writes, so a `compile --check-fresh` gate reports stale right after a
+compile. Engines never walk upward (an intentional `--root` at a plain
+zero-config folder stays silent), but they recognise this exact miss —
+the parent's `brainpick.toml` declares the aimed directory as its bundle —
+and warn: *no brainpick.toml at _brain — using defaults … did you mean
+`--root <parent>`?* The [brain ritual](../../brain-ritual.md) says
+`--root .` from the repo root for the same reason.
 
 It works with [bundle.include](bundle-include.md) and
 [bundle.exclude](bundle-exclude.md) to define exactly which files are scanned
