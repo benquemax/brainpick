@@ -16,7 +16,7 @@
 
 releases:
   - version: 0.7.0
-    date: unreleased
+    date: 2026-09-14
     brain_format: 3
     summary: >-
       Brain format 3: conventions are a memory type the engine recognises.
