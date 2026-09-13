@@ -114,7 +114,7 @@ test("whats-new defaults to the manifest generator and names the format", async 
   expect(text).toContain("## 0.5.0 (2026-09-11)");
   expect(text).toContain("## 0.4.5");
   expect(text).not.toContain("## 0.4.0");
-  expect(text).toContain("brain format 1 → 2: run `brainpick migrate --to 2`");
+  expect(text).toContain("brain format 1 → 3: run `brainpick migrate --to 3`");
 });
 
 test("whats-new --since, --all and --json", () => {
@@ -133,7 +133,7 @@ test("whats-new --since, --all and --json", () => {
     notice: { since: string; format: { current: number; latest: number } };
   };
   expect(payload.releases[payload.releases.length - 1]!.version).toBe("0.4.5");
-  expect(payload.notice.format).toEqual({ current: 1, latest: 2 });
+  expect(payload.notice.format).toEqual({ current: 1, latest: 3 });
   expect(payload.notice.since).toBe("0.4.4");
 });
 
@@ -154,9 +154,9 @@ test("compile result and report carry the notice for an old brain", async () => 
   writeFileSync(agents, "# A\n\n<!-- brainpick:begin report (hash:0) -->\n<!-- brainpick:end report -->\n", "utf8");
   const result = await runCompile(root);
   expect(result.whats_new).not.toBeNull();
-  expect(result.whats_new!.format).toEqual({ current: 1, latest: 2 });
+  expect(result.whats_new!.format).toEqual({ current: 1, latest: 3 });
   expect(result.whats_new!.releases).toBeUndefined(); // a first compile has nothing to have missed
-  expect(readFileSync(agents, "utf8")).toContain("- What's new: brain format 1 → 2: run `brainpick migrate --to 2`");
+  expect(readFileSync(agents, "utf8")).toContain("- What's new: brain format 1 → 3: run `brainpick migrate --to 3`");
 });
 
 test("the release part clears once the current version has compiled", async () => {
@@ -204,8 +204,8 @@ test("the overview carries whats_new and leads the hint", async () => {
   const state = new ServeState(root, loadConfig(root));
   await state.load();
   const result = overviewPayload(state);
-  expect(result["whats_new"]).toMatchObject({ format: { current: 1, latest: 2 } });
-  expect(String(result["hint"]).startsWith("What's new — brain format 1 → 2: run `brainpick migrate --to 2`. ")).toBe(true);
+  expect(result["whats_new"]).toMatchObject({ format: { current: 1, latest: 3 } });
+  expect(String(result["hint"]).startsWith("What's new — brain format 1 → 3: run `brainpick migrate --to 3`. ")).toBe(true);
 });
 
 test("the fixture ledger matches the canonical shape", () => {

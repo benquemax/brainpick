@@ -4,7 +4,7 @@ about: concept
 title: "Skills"
 description: "Procedural memory in a brain — a skill is a distilled, tested procedure an agent follows, with its repetitive parts demoted to tools it drives; recognised by type, linked by depends_on, listed first, boosted in search, never executed by brainpick — and why brainpick ships the framework but no skills of its own."
 tags: [brain-format, agents, skills]
-timestamp: 2026-09-13T11:30:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Skills
@@ -13,8 +13,10 @@ A skill is the most distilled thing a [brain](brain.md) holds: a procedure
 an agent has done before, written down so the next time costs a read
 instead of a rediscovery. The [Data flow architecture](data-flow-architecture.md)
 puts it at the end of the write path — episodes become knowledge become
-skills — and at the *start* of the read path: before improvising a
-workflow, an agent checks whether the brain already knows how. This page is
+skills — and at the *start* of the read path, right after the brain's
+standing rules ([Conventions](conventions.md), which constrain what every
+read is for): before improvising a workflow, an agent checks whether the
+brain already knows how. This page is
 what brainpick does to make that check cheap, and what it deliberately
 leaves to the agent.
 
@@ -61,7 +63,7 @@ and it is part of the freshness gate like `graph.json`.
 ## What the engine does with skills
 
 - **`skilltree.md`** — in a bundle that declares itself a brain
-  (`[brain] format = 1`, [brain.format](reference/config/brain-format.md))
+  (`[brain] format ≥ 1`, [brain.format](reference/config/brain-format.md))
   and holds at least one skill, compile generates the tree into the
   directory of the first skill: every skill, its `needs` lines, its tools.
   Written before the artifact scan like the index, so the manifest records
@@ -71,10 +73,11 @@ and it is part of the freshness gate like `graph.json`.
   renders each once.
 - **Listed first.** [brain_overview](reference/mcp/brain-overview.md) carries
   a `skills` section apart from the folder tree — path, title, description,
-  prerequisites, tools — trimmed only after the tree is empty. The
+  prerequisites, tools — trimmed only after the tree is empty; only the
+  `conventions` list precedes it. The
   brain report in `AGENTS.md` ([Agent integrations](agent-integrations.md)) gets a *Skills (read before
-  improvising)* section, present only when there is a skill: a wiki's
-  report is unchanged.
+  improvising)* section below any *Conventions* section, present only when
+  there is a skill: a wiki's report is unchanged.
 - **Read with structure.** [brain_read](reference/mcp/brain-read.md) on a
   skill adds `skill: {depends_on, dependents, tools}` with each tool's
   `exists`, and a hint that says *read the prerequisites first* and *run

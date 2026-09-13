@@ -114,6 +114,16 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
     if todo_totals["open"]:  # spec/85 To-do lists: open work is one read away
         busiest = _busiest_todo_list(todos)
         hint = (f"{todo_totals['open']} open todos — brain_read '{busiest}' lists them. " + hint)
+    # conventions lead (spec/85): a rule constrains every other read — only the
+    # engine's own notices (update, what's new) go before them
+    conventions = [
+        {"path": c["path"], "title": c["title"], "description": c["description"]}
+        for c in getattr(state, "conventions", [])
+    ]
+    if conventions:
+        n = len(conventions)
+        hint = (f"{n} convention{'s' if n != 1 else ''} appl{'y' if n != 1 else 'ies'} — "
+                f"read {'them' if n != 1 else 'it'} before acting. " + hint)
     news = getattr(state, "whats_new", None)
     if news is not None:  # spec/80 the release ledger: what changed, and what to do
         hint = f"What's new — {news['hint']}. " + hint
@@ -127,6 +137,7 @@ def _single_overview(state: ServeState, budget_tokens: int | None = None) -> dic
         "tiers": state.manifest.get("tiers", {}),
         **({"update": dict(update)} if update is not None else {}),
         **({"whats_new": dict(news)} if news is not None else {}),
+        "conventions": conventions,
         "skills": skills,
         "todos": todo_totals,
         "tree": tree,

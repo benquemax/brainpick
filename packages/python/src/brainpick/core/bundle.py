@@ -50,6 +50,7 @@ class Document:
     tools: list[str] = field(default_factory=list)        # declared tool paths, as written
     export: list[str] = field(default_factory=list)       # spec/85 export targets (agent-skill)
     todo: bool = False                                    # spec/20 To-do lists (type: todo)
+    convention: bool = False                              # spec/85 Conventions (type: convention)
     half_life: float | None = None                        # spec/20: frontmatter half_life in days
 
 
@@ -57,6 +58,13 @@ def is_todo(type_value) -> bool:
     """A doc is a to-do list by its `type` — `todo`, trimmed, case-insensitive —
     never by folder (spec/85 *To-do lists*)."""
     return str(type_value or "").strip().lower() == "todo"
+
+
+def is_convention(type_value) -> bool:
+    """A doc is a convention by its `type` — `convention`, trimmed, case-insensitive
+    — never by folder (spec/85 *Conventions*). A `decision` is the record of
+    choosing; a convention is the standing result."""
+    return str(type_value or "").strip().lower() == "convention"
 
 
 def is_skill(type_value) -> bool:
@@ -218,6 +226,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
         reserved = posixpath.basename(path) in RESERVED_NAMES
         skill = is_skill(meta.get("type")) and not reserved
         todo = is_todo(meta.get("type")) and not reserved
+        convention = is_convention(meta.get("type")) and not reserved
         depends_on: list[str] = []
         tools: list[str] = []
         export: list[str] = []
@@ -252,6 +261,7 @@ def scan(root: str | Path, include: tuple[str, ...] = ("**/*.md",),
             tools=tools,
             export=export,
             todo=todo,
+            convention=convention,
             half_life=_normalize_half_life(meta.get("half_life")),
         ))
     return docs

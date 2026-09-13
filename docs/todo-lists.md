@@ -4,7 +4,7 @@ about: concept
 title: "To-do lists"
 description: "Open work as part of the brain — a type: todo doc's checklist lines compile into todos.json, the overview counts them, a search hit says how many are open, and the day-per-file archive makes done an episode with a date; brainpick indexes the list and never edits it."
 tags: [brain-format, agents]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # To-do lists
@@ -22,7 +22,8 @@ the [journals](data-flow-architecture.md), so `open.md` stays small and
 [ground](grounding.md) on.
 
 The engine does not know the folder ([Structure agnosticism](structure-agnosticism.md)).
-It keys on `type: todo`, exactly as a [skill](skills.md) is a skill by its
+It keys on `type: todo`, exactly as a [skill](skills.md) is a skill and a
+[convention](conventions.md) a convention by its
 `type`: every checklist line in such a doc — `- [ ] text` open, `- [x]
 text` done, any bullet, any indentation, fenced code skipped — is one item.
 A trailing `(done: YYYY-MM-DD)` dates the item; otherwise a done item takes

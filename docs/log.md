@@ -2,6 +2,17 @@
 
 ## 2026-09-14
 
+- Added: brain format 3 — [Conventions](conventions.md) are the sixth
+  memory type. A `type: convention` doc is a standing rule the engine lists
+  before anything else: compiled into `t1/conventions.json`
+  ([Spec: T1 artifacts](reference/spec/t1-artifacts.md)), first in
+  [brain_overview](reference/mcp/brain-overview.md) and in the AGENTS.md
+  report, pinned by `conventions = 0` in the template's half-life table.
+  [brainpick migrate](reference/cli/migrate.md) `--to 3` retypes the
+  template's `conventions/` pages from `type: decision`, seeds the folder
+  index, stamps the format and completes `[half_life.folders]` — the
+  `kotiaivot-v2` golden pins it in both engines
+  ([Spec: brain format](reference/spec/brain-format.md)).
 - Fixed: compile no longer claims another bundle's AGENTS.md report. The
   block's `Bundle root:` line is its ownership claim (spec/20): a scratch
   bundle compiled under `_temp/` inside a repo whose `AGENTS.md` reports

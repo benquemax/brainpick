@@ -4,6 +4,27 @@
       "count": 1,
       "kind": "link",
       "label": "Kahvi",
+      "source": "conventions/aamukahvi-ensin.md",
+      "target": "knowledge/kahvi.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Aamukahvi ensin",
+      "source": "conventions/index.md",
+      "target": "conventions/aamukahvi-ensin.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Aamukahvi ensin",
+      "source": "index.md",
+      "target": "conventions/aamukahvi-ensin.md"
+    },
+    {
+      "count": 1,
+      "kind": "link",
+      "label": "Kahvi",
       "source": "index.md",
       "target": "knowledge/kahvi.md"
     },
@@ -146,11 +167,39 @@
   "nodes": [
     {
       "about": null,
+      "description": "Coffee is offered before anything else is said — to guests and to the household alike.",
+      "id": "conventions/aamukahvi-ensin.md",
+      "in": 2,
+      "orphan": true,
+      "out": 1,
+      "reserved": false,
+      "tags": [
+        "kahvi"
+      ],
+      "timestamp": "2026-07-01T06:30:00Z",
+      "title": "Aamukahvi ensin",
+      "type": "convention"
+    },
+    {
+      "about": null,
+      "description": null,
+      "id": "conventions/index.md",
+      "in": 0,
+      "orphan": false,
+      "out": 1,
+      "reserved": true,
+      "tags": [],
+      "timestamp": null,
+      "title": "Conventions",
+      "type": null
+    },
+    {
+      "about": null,
       "description": null,
       "id": "index.md",
       "in": 0,
       "orphan": false,
-      "out": 6,
+      "out": 7,
       "reserved": true,
       "tags": [],
       "timestamp": null,
@@ -161,7 +210,7 @@
       "about": null,
       "description": "What coffee is and why the morning starts with it.",
       "id": "knowledge/kahvi.md",
-      "in": 4,
+      "in": 5,
       "orphan": false,
       "out": 3,
       "reserved": false,
@@ -271,15 +320,16 @@
     }
   ],
   "stats": {
-    "docs": 9,
-    "edges": 20,
+    "docs": 11,
+    "edges": 23,
     "ghosts": 0,
     "islands": 0,
-    "orphans": 2,
+    "orphans": 3,
     "tags": 2
   },
   "tags": {
     "kahvi": [
+      "conventions/aamukahvi-ensin.md",
       "knowledge/kahvi.md",
       "knowledge/vieraat.md",
       "skills/kahvin-keitto.md"

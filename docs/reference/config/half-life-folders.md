@@ -4,7 +4,7 @@ about: thing
 title: "half_life.folders"
 description: "Folder → days table for the half-life ranking factor; the longest folder prefix of a doc's path wins."
 tags: [config, spec]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # half_life.folders
@@ -28,6 +28,7 @@ interprets no folder name on its own.
 journals = 30
 "journals/archive" = 7
 skills = 0
+conventions = 0    # the template pins this; migrate --to 3 adds it to a table that lacks it
 ```
 
 Env: `BRAINPICK_HALF_LIFE_FOLDERS="journals=30,skills=0"`

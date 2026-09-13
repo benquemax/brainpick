@@ -4,7 +4,7 @@ about: concept
 title: Half-life
 description: Memories fade, and that is a feature — a document's retrieval score is multiplied by 2^(-age/half_life) so a stale page still surfaces but ranks below a fresh one; resolved bundle → folder → frontmatter, off by default, nothing ever deleted.
 tags: [brain, tier, config]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Half-life
@@ -55,7 +55,7 @@ The effective half-life resolves per document, most specific wins:
 The folder table is the bundle author's, not the engine's: brainpick still
 interprets no folder name of its own ([Structure
 agnosticism](structure-agnosticism.md)). A brain in [format
-2](reference/spec/brain-format.md) would typically write
+3](reference/spec/brain-format.md) would typically write
 
 ```toml
 [half_life]
@@ -64,10 +64,14 @@ default = 0
 journals = 30      # episodic memory fades in weeks
 todo = 14          # an open list is a fresh list
 skills = 0         # procedural memory never fades
+conventions = 0    # rules never fade
 ```
 
 so the [data flow](data-flow-architecture.md) shows in ranking: episodes
-fade, distilled knowledge keeps, [skills](skills.md) stay sharp.
+fade, distilled knowledge keeps, [skills](skills.md) stay sharp and
+[conventions](conventions.md) never move — the template pins
+`conventions = 0`, and `brainpick migrate --to 3` adds the key to a
+`[half_life.folders]` table that lacks it.
 
 ## Why a ranking factor
 

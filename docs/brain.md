@@ -4,7 +4,7 @@ about: concept
 title: "The brain"
 description: "A brain is a wiki meant to be an agent's memory — an OKF bundle with memory-type folders, a declared data flow architecture, inline grounding, an audience and an identity other brains can address; what makes it more than a wiki, and what brainpick does with the difference."
 tags: [brain-format]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # The brain
@@ -24,8 +24,10 @@ can be small.
 
 Four things, and each one is a rule the template enforces:
 
-1. **Folders are memory types.** `_brain/` holds five memory types, each
-   with one job: `knowledge/` (semantic — evergreen concepts), `skills/`
+1. **Folders are memory types.** `_brain/` holds six memory types, each
+   with one job: `conventions/` (normative — standing rules for how work
+   is done, `type: convention`, see [Conventions](conventions.md)),
+   `knowledge/` (semantic — evergreen concepts), `skills/`
    (procedural — distilled, actionable procedures), `journals/` (episodic —
    one file per day, only today at the top, earlier days archived by
    year and month), `vision/` (direction — the
@@ -41,7 +43,9 @@ Four things, and each one is a rule the template enforces:
    frontmatter and reserved names only ([Structure agnosticism](structure-agnosticism.md)),
    so the layout can evolve without breaking a brain born earlier.
 2. **A declared data flow.** Episodes become knowledge become skills, and
-   retrieval runs the other way. This is the
+   retrieval runs the other way — `conventions/` first, because a rule
+   constrains what every other read is for, then `skills/`, `knowledge/`,
+   `journals/`. This is the
    [Data flow architecture](data-flow-architecture.md), and it is what turns
    a pile of pages into memory.
 3. **Grounding.** Every claim in `knowledge/` and `skills/` says where it
@@ -68,7 +72,7 @@ reading while the contract still referees every change.
 ## Why `_brain/` and not `_wiki/`
 
 Because the name carries the opinion. A folder called `_wiki/` promises
-information; a folder called `_brain/` promises the five memory types, the
+information; a folder called `_brain/` promises the six memory types, the
 data flow, grounding and an audience — and once other brains link into it
 (`brain://…/knowledge/foo.md`), the name is part of the address. It is
 fixed on purpose, and [The brain template](brain-template.md) explains what
@@ -77,14 +81,15 @@ migrates.
 
 ## Where brainpick meets the brain
 
-- A bundle declares itself a brain with `[brain] format = 1` in the shared
-  `brainpick.toml` ([brain.format](reference/config/brain-format.md)); both
+- A bundle declares itself a brain with `[brain] format = N` (3 today) in
+  the shared `brainpick.toml` ([brain.format](reference/config/brain-format.md)); both
   engines read the section today. Having `brainpick init` recognise `_brain/`
   and write it unasked is the next step on [Onboarding](onboarding.md).
-- `brain_overview` lists the brain's skills before the folder tree — the
-  read order of the data flow ([MCP tools](mcp-tools.md)) — keyed on
-  `type: skill` (a `playbook` is for humans), and `brain_read` on one returns its
-  prerequisites and tools ([Skills](skills.md)).
+- `brain_overview` lists the brain's conventions, then its skills, before
+  the folder tree — the read order of the data flow ([MCP tools](mcp-tools.md))
+  — keyed on `type: convention` and `type: skill` (a `playbook` is for
+  humans), and `brain_read` on a skill returns its prerequisites and tools
+  ([Skills](skills.md)).
 - Freshness is the reader's job today: the first skill says *pull before you
   read, push after you write*. Having the engine notice a stale checkout
   (a `brain_overview` line: "behind origin by N commits") is a candidate

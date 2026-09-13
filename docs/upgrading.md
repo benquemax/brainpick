@@ -4,14 +4,15 @@ about: process
 title: Upgrading a brain
 description: "Bring an existing brain to the current release in one sitting — upgrade the engine, migrate the format, install the ritual, retype skills, register — by walking brainpick whats-new's numbered Do next list top to bottom."
 tags: [agents, brain, brain-format]
-timestamp: 2026-09-13T14:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Upgrading a brain
 
 An agent that finds itself on a newer engine than the one that last
 compiled its brain has one command to run and one list to walk. This page
-is that walk for a format-1 brain meeting 0.6.0; the mechanism is general.
+is that walk for a format-1 brain meeting 0.6.0 and then 0.7.0; the
+mechanism is general.
 
 1. **Upgrade the engine** where the [Update notice](update-notice.md) says
    to (`uv tool upgrade brainpick`, `pipx upgrade brainpick`, or
@@ -22,12 +23,16 @@ is that walk for a format-1 brain meeting 0.6.0; the mechanism is general.
 3. **Read the checklist.** `brainpick whats-new` prints the releases and
    then **Do next**, numbered in the order to do them — the oldest missed
    release's actions first, the brain format last
-   ([What's new notice](whats-new.md)). For a format-1 brain on 0.6.0 it
+   ([What's new notice](whats-new.md)). For a format-1 brain on 0.7.0 it
    reads:
-   1. `brainpick migrate --to 2` (`--dry-run` first) — month journals into
-      day files, links onto them, `_todo.md` into `todo/open.md`, the
-      stamp, and the `[half_life]` defaults seeded into `brainpick.toml`
-      ([brainpick migrate](reference/cli/migrate.md)).
+   1. `brainpick migrate --to 3` (`--dry-run` first) — cumulative, one
+      step at a time: from 1, month journals into day files, links onto
+      them, `_todo.md` into `todo/open.md`, the `[half_life]` defaults
+      seeded into `brainpick.toml`; from 2, `conventions/*.md` retyped
+      `decision` → `convention`, `conventions/index.md` created,
+      `conventions = 0` added to `[half_life.folders]`; the stamp bumped
+      at each step ([brainpick migrate](reference/cli/migrate.md),
+      [Conventions](conventions.md)).
    2. `brainpick integrate agents-md` (or the harness target) — the
       [brain ritual](brain-ritual.md) block lands below the report.
    3. Retype agent-facing `type: playbook` docs to `type: skill`

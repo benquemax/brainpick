@@ -33,6 +33,12 @@ def present_overview(payload: dict) -> str:
     todos = payload.get("todos")
     if todos and (todos.get("open") or todos.get("done")):
         lines.append(f"todos: {todos.get('open', 0)} open · {todos.get('done', 0)} done")
+    if payload.get("conventions"):
+        lines.append("")
+        lines.append("conventions (these apply to you):")
+        for rule in payload["conventions"]:
+            desc = f" — {rule['description']}" if rule.get("description") else ""
+            lines.append(f"  {rule['title']} ({rule['path']}){desc}")
     if payload.get("skills"):
         lines.append("")
         lines.append("skills (read before improvising):")

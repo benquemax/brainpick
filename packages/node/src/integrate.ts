@@ -48,7 +48,7 @@ export const REPORT_PLACEHOLDER =
 
 // The brain ritual block (spec/20 *The brain ritual block*): static text, versioned
 // by the canonical itself, installed by every integrate target, never generated.
-export const RITUAL_VERSION = 2;
+export const RITUAL_VERSION = 3;
 export const RITUAL_BEGIN_PREFIX = "<!-- brainpick:begin ritual (v";
 export const RITUAL_END_MARKER = "<!-- brainpick:end ritual -->";
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

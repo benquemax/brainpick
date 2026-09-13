@@ -15,6 +15,7 @@ import { checkForUpdate, type UpdateNotice } from "../update";
 import { SPEC_VERSION, VERSION } from "../version";
 import { buildSkills, dependencyCycles, renderSkilltree, skilltreePath, type SkillsArtifact } from "./skills";
 import { runSimilarityGapsStage, similarityGapsGate } from "./similarity-gaps";
+import { buildConventions, type ConventionsArtifact } from "./conventions";
 import { buildTodos } from "./todos";
 import {
   applyIndexSection,
@@ -109,6 +110,7 @@ function refreshReport(
   skills: SkillsArtifact | null = null,
   update: UpdateNotice | null = null,
   whatsNew: WhatsNewNotice | null = null,
+  conventions: ConventionsArtifact | null = null,
 ): void {
   const bundleRoot = resolve(root);
   const candidates = [bundleRoot];
@@ -131,7 +133,7 @@ function refreshReport(
       );
       continue;
     }
-    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps, skills, update, whatsNew);
+    const block = renderReportBlock(graph, tiers, bundleDisplay, similarityGaps, skills, update, whatsNew, conventions);
     const updated = applyReportSection(existing, block);
     if (updated !== null && updated !== existing) atomicWrite(agents, updated);
   }
@@ -191,6 +193,8 @@ export async function runCompile(
   const skillsText = canonicalJson(skills as unknown as JsonValue);
   warnings.push(...cycleWarnings(skills));
   const todosText = canonicalJson(buildTodos(docs, root) as unknown as JsonValue);
+  const conventions = buildConventions(docs);
+  const conventionsText = canonicalJson(conventions as unknown as JsonValue);
 
   const oldManifestText = readTextOrNull(join(bp, "manifest.json"));
   const oldManifest = oldManifestText ? (JSON.parse(oldManifestText) as Record<string, unknown>) : null;
@@ -204,7 +208,8 @@ export async function runCompile(
     oldGraphText === graphText &&
     readTextOrNull(join(bp, "t1", "docs.jsonl")) === docsText &&
     readTextOrNull(join(bp, "t1", "skills.json")) === skillsText &&
-    readTextOrNull(join(bp, "t1", "todos.json")) === todosText
+    readTextOrNull(join(bp, "t1", "todos.json")) === todosText &&
+    readTextOrNull(join(bp, "t1", "conventions.json")) === conventionsText
   );
 
   // T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
@@ -267,7 +272,7 @@ export async function runCompile(
   const whatsNew = whatsNewFor(oldManifest, VERSION, isBrain(cfg) ? cfg.brain.format : null);
   // The opt-in AGENTS.md brain report rides along on every compile so it stays
   // true even when nothing else changed (e.g. the markers were just installed).
-  refreshReport(root, bp, graph, tiers, skills, update, whatsNew);
+  refreshReport(root, bp, graph, tiers, skills, update, whatsNew, conventions);
   const artifactsChanged = t1Changed || t2Changed || t3Changed;
   const unchanged = !artifactsChanged && oldManifest !== null && deepEqual(oldTiers, tiers);
   if (unchanged && !full) {
@@ -286,6 +291,7 @@ export async function runCompile(
   atomicWrite(join(bp, "t1", "docs.jsonl"), docsText);
   atomicWrite(join(bp, "t1", "skills.json"), skillsText);
   atomicWrite(join(bp, "t1", "todos.json"), todosText);
+  atomicWrite(join(bp, "t1", "conventions.json"), conventionsText);
   writeTimeline(root, cfg); // advisory (spec/90) — rides along, never blocks
 
   // tier-status-only transitions rewrite the manifest without spending a seq
@@ -457,11 +463,13 @@ export function checkFresh(root: string): Freshness {
   const docsText = canonicalJsonl(buildDocsRecords(docs) as unknown as JsonValue[]);
   const skillsText = canonicalJson(buildSkills(docs, root) as unknown as JsonValue);
   const todosText = canonicalJson(buildTodos(docs, root) as unknown as JsonValue);
+  const conventionsText = canonicalJson(buildConventions(docs) as unknown as JsonValue);
   if (
     readTextOrNull(join(bp, "t1", "graph.json")) !== graphText ||
     readTextOrNull(join(bp, "t1", "docs.jsonl")) !== docsText ||
     readTextOrNull(join(bp, "t1", "skills.json")) !== skillsText ||
-    readTextOrNull(join(bp, "t1", "todos.json")) !== todosText
+    readTextOrNull(join(bp, "t1", "todos.json")) !== todosText ||
+    readTextOrNull(join(bp, "t1", "conventions.json")) !== conventionsText
   ) {
     return { fresh: false, reason: "stale — run: brainpick compile" };
   }

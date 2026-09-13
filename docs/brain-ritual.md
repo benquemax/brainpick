@@ -4,7 +4,7 @@ about: concept
 title: The brain ritual
 description: "Four habits that make a brain shared memory rather than a read-only index — pull and compile first, consult before grepping, record while working, commit and push last — installed by brainpick integrate as a fenced block in AGENTS.md and repeated in the Agent Skill."
 tags: [agents, brain]
-timestamp: 2026-09-14T10:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # The brain ritual
@@ -17,7 +17,7 @@ memory. The **ritual** is the whole loop, and
 harness already looks:
 
 ```
-<!-- brainpick:begin ritual (v2) -->
+<!-- brainpick:begin ritual (v3) -->
 …
 <!-- brainpick:end ritual -->
 ```
@@ -32,8 +32,10 @@ harness already looks:
    whats-new` and its *Do next* list come before the task.
 2. **Consult before grepping or answering from memory.** `brain_overview`,
    then `brain_search` → `brain_read` → `brain_neighbors`; grep only after
-   the brain comes up short. [Skills](skills.md) listed in the overview are
-   procedures that have worked.
+   the brain comes up short. [Conventions](conventions.md) listed in the
+   overview are standing rules that apply to the agent — read before
+   acting; [Skills](skills.md) listed there are procedures that have
+   worked.
 3. **Record while you work.** A wrong fact is fixed where it was found; a
    decision, a contact, an insight goes to the folder the brain's
    conventions name — today's journal, `todo/open.md`
@@ -45,9 +47,9 @@ harness already looks:
 The text is one canonical file, `integrations/ritual/RITUAL.md`, shipped in
 both packages byte-identical and pinned as a conformance golden (class
 `ritual`), so every engine installs the same words. It is *static*: the
-`(v2)` is the text's own version, not a hash — compile never regenerates
+`(v3)` is the text's own version, not a hash — compile never regenerates
 the block, and integrate replaces it in place only when a newer canonical
-ships. v2 corrected v1's compile line, which said `--root <bundle>` and,
+ships. v3 added conventions to step 2; v2 corrected v1's compile line, which said `--root <bundle>` and,
 mechanised from `brainpick register`'s path, aimed at the bundle instead
 of the config — every repo integrate touches again self-heals. `agents-md` creates the file when there is none; the harness targets
 (`claude-code`, `opencode`, `dsh`) install the block only into an

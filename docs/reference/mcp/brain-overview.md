@@ -2,9 +2,9 @@
 type: reference
 about: thing
 title: "brain_overview"
-description: "The orientation tool — bundle name, counts, tier availability, the skills and the index tree — the progressive-disclosure root, with no required arguments."
+description: "The orientation tool — bundle name, counts, tier availability, the conventions, the skills and the index tree — the progressive-disclosure root, with no required arguments."
 tags: [mcp, agents]
-timestamp: 2026-09-13T12:30:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # brain_overview
@@ -12,7 +12,13 @@ timestamp: 2026-09-13T12:30:00Z
 `brain_overview()` takes no required arguments. It returns orientation: the
 bundle name, `counts` (docs, edges, tags, orphans, ghosts), `tiers`, and a
 `tree` of the index grouped with one-sentence descriptions, plus a `hint`.
-Before the tree comes `skills` — every `type: skill` doc as
+First of all comes `conventions` — every `type: convention` doc as
+`{path, title, description}`, always present, an empty list in a wiki,
+never budget-trimmed (the tree empties first); when there are any the hint
+opens with *N conventions apply — read them before acting* (*1 convention
+applies — read it before acting*), ahead of the skills and to-do parts
+([Conventions](../../conventions.md)).
+Then, before the tree, comes `skills` — every `type: skill` doc as
 `{path, title, description, depends_on, tools}`, an empty list in a wiki —
 trimmed only after the tree is empty, so the procedures the brain already
 holds are the first thing an agent sees ([Skills](../../skills.md)).

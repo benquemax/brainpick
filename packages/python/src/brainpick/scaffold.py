@@ -377,7 +377,7 @@ def run_init(
         voice.line("✓", f"bundle: {bundle.typed} typed concept docs at {root} (density scan)")
     if config.brain.is_brain:
         voice.line("✓", f"brain: format {config.brain.format} · audience {config.brain.audience}"
-                        " — read skills/ first, then knowledge/, then journal/ (spec/85)")
+                        " — read conventions/ first, then skills/, then knowledge/, then journals/ (spec/85)")
 
     # 2 — link style (informational in 0.1)
     style = detect_link_style(root)

@@ -3,6 +3,7 @@ import type { WhatsNewNotice } from "../releases";
 import type { UpdateNotice } from "../update";
 import { cmpStr, sha256Hex } from "../core/canonical";
 import { posixDirname, type Document } from "../core/bundle";
+import type { ConventionsArtifact } from "./conventions";
 import type { SkillsArtifact } from "./skills";
 
 export const BEGIN_PREFIX = "<!-- brainpick:begin index (hash:";
@@ -317,6 +318,7 @@ export function renderReportBlock(
   skills: SkillsArtifact | null = null,
   update: UpdateNotice | null = null,
   whatsNew: WhatsNewNotice | null = null,
+  conventions: ConventionsArtifact | null = null,
 ): string {
   const stats = (graph.stats ?? {}) as Partial<GraphStats>;
   const nodes = graph.nodes ?? [];
@@ -366,6 +368,18 @@ export function renderReportBlock(
       for (const p of ranked) lines.push(`  - ${p.a} ↔ ${p.b} — ${p.score}`);
     } else {
       lines.push("  - (none)");
+    }
+  }
+
+  // the conventions section (spec/85): a rule constrains every act — listed
+  // before the procedures, and only when the bundle holds one
+  const rules = conventions?.conventions ?? [];
+  if (rules.length) {
+    lines.push("- Conventions (these apply to you):");
+    for (const rule of rules) {
+      let entry = `  - ${rule.title} (${rule.path})`;
+      if (rule.description) entry += ` — ${rule.description}`;
+      lines.push(entry);
     }
   }
 

@@ -28,6 +28,7 @@ from brainpick.compile.skills import (
     render_skilltree,
     skilltree_path,
 )
+from brainpick.compile.conventions import build_conventions
 from brainpick.compile.todos import build_todos
 from brainpick.compile.t2 import build_chunks, run_t2_stage, t2_gate
 from brainpick.compile.t3 import run_t3_stage, t3_gate
@@ -100,7 +101,8 @@ def _similarity_gaps_for_report(bp: Path) -> list[dict] | None:
 
 
 def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict | None = None,
-                    update: dict | None = None, whats_new: dict | None = None) -> None:
+                    update: dict | None = None, whats_new: dict | None = None,
+                    conventions: dict | None = None) -> None:
     """Refresh the opt-in AGENTS.md brain report (spec/20) wherever its markers
     already live — the bundle root, and the repo root above it when the bundle is
     a subdir. Never creates the file; writes only when the block actually changed,
@@ -131,7 +133,7 @@ def _refresh_report(root: Path, bp: Path, graph: dict, tiers: dict, skills: dict
                            "this compile is %s", agents, owner, bundle_display)
             continue
         block = render_report_block(graph, tiers, bundle_display, similarity_gaps, skills=skills,
-                                    update=update, whats_new=whats_new)
+                                    update=update, whats_new=whats_new, conventions=conventions)
         updated = apply_report_section(existing, block)
         if updated is not None and updated != existing:
             _atomic_write(agents, updated.encode("utf-8"))
@@ -214,6 +216,8 @@ def run_compile(
     skills_text = canonical_json(skills)
     warnings.extend(_cycle_warnings(skills))
     todos_text = canonical_json(build_todos(docs, root))
+    conventions = build_conventions(docs)
+    conventions_text = canonical_json(conventions)
 
     old_manifest_text = _read_or_none(bp / "manifest.json")
     old_manifest = json.loads(old_manifest_text) if old_manifest_text else None
@@ -228,6 +232,7 @@ def run_compile(
         and _read_or_none(bp / "t1" / "docs.jsonl") == docs_text
         and _read_or_none(bp / "t1" / "skills.json") == skills_text
         and _read_or_none(bp / "t1" / "todos.json") == todos_text
+        and _read_or_none(bp / "t1" / "conventions.json") == conventions_text
     )
 
     # T2 (spec/30): gated by [modules] vectors; failures degrade the tier, never the compile.
@@ -293,7 +298,7 @@ def run_compile(
     news = whats_new_for(old_manifest, config)
     # The opt-in AGENTS.md brain report rides along on every compile so it stays
     # true even when nothing else changed (e.g. the markers were just installed).
-    _refresh_report(root, bp, graph, tiers, skills, update, news)
+    _refresh_report(root, bp, graph, tiers, skills, update, news, conventions)
     artifacts_changed = t1_changed or t2_changed or t3_changed
     unchanged = not artifacts_changed and old_manifest is not None and old_tiers == tiers
     if unchanged and not full:
@@ -304,6 +309,7 @@ def run_compile(
     _atomic_write(bp / "t1" / "docs.jsonl", docs_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "skills.json", skills_text.encode("utf-8"))
     _atomic_write(bp / "t1" / "todos.json", todos_text.encode("utf-8"))
+    _atomic_write(bp / "t1" / "conventions.json", conventions_text.encode("utf-8"))
     _write_timeline(root, config)  # advisory (spec/90) — rides along, never blocks
 
     if old_manifest is None:
@@ -464,11 +470,13 @@ def check_fresh(root: str | Path, config: Config | None = None) -> Freshness:
     docs_text = canonical_jsonl(build_docs_records(docs))
     skills_text = canonical_json(build_skills(docs, root))
     todos_text = canonical_json(build_todos(docs, root))
+    conventions_text = canonical_json(build_conventions(docs))
     if (
         _read_or_none(bp / "t1" / "graph.json") != graph_text
         or _read_or_none(bp / "t1" / "docs.jsonl") != docs_text
         or _read_or_none(bp / "t1" / "skills.json") != skills_text
         or _read_or_none(bp / "t1" / "todos.json") != todos_text
+        or _read_or_none(bp / "t1" / "conventions.json") != conventions_text
     ):
         return Freshness(False, "stale — run: brainpick compile")
     return Freshness(True, "fresh")

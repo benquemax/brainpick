@@ -13,7 +13,7 @@ import { dirname, join, posix, relative, resolve, sep } from "node:path";
 
 import { loadConfig, type Config } from "./config";
 
-export const LATEST_FORMAT = 2;
+export const LATEST_FORMAT = 3;
 export const ENV_TODAY = "BRAINPICK_TODAY";
 
 const MONTH_FILE = /^(\d{4})-(\d{2})\.md$/;
@@ -37,6 +37,21 @@ what was closed, one file per day.
 
 - [Open](open.md)
 `;
+
+export const CONVENTIONS_INDEX = `# Conventions
+
+Standing rules for how work is done here — naming, process, contracts the
+brain's keepers hold themselves to. One kebab-case page per rule,
+\`type: convention\`, listed here. Not a specific piece of work (that is
+\`plans/\`), not a step-by-step procedure (that is \`skills/\`), not the record
+of choosing (that is a \`decision\`) — the standing answer, applied broadly.
+
+## Conventions
+
+* (none yet)
+`;
+
+const CONVENTIONS_HALF_LIFE_LINE = "conventions = 0         # rules never fade";
 
 const TODO_OPEN_HEAD = (today: string): string => `---
 type: todo
@@ -422,7 +437,74 @@ function migrate1to2(tree: Tree, today: string): void {
   stepHalfLife(tree);
 }
 
-const MIGRATIONS: Record<number, (tree: Tree, today: string) => void> = { 2: migrate1to2 }; // target → step from target-1
+// -- 2 → 3: conventions are a type the engine recognises (spec/85) --------------------
+
+const TYPE_LINE = /^([ \t]*type[ \t]*:[ \t]*)decision([ \t]*(?:#.*)?)$/;
+const FOLDERS_SECTION = /^\[half_life\.folders\][ \t]*(?:#.*)?$/;
+const KEY_LINE = /^[ \t]*([A-Za-z0-9_."'-]+)[ \t]*=/;
+
+/** The template stamped `type: decision` under conventions/ before format 3;
+ * that stamp — and only that stamp — becomes `type: convention`. The line is
+ * rewritten in place; an author's other type, or no frontmatter, is left alone. */
+function stepRetypeConventions(tree: Tree): void {
+  const folder = tree.b("conventions");
+  for (const rel of tree.listMd()) {
+    if (posix.dirname(rel) !== folder || ["index.md", "log.md"].includes(posix.basename(rel))) continue;
+    const text = tree.read(rel);
+    if (text === null || !text.startsWith("---\n")) continue;
+    const end = text.indexOf("\n---", 4);
+    if (end === -1) continue;
+    const head = text.slice(0, end);
+    const tail = text.slice(end);
+    const lines = head.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const m = TYPE_LINE.exec(lines[i]!);
+      if (!m) continue;
+      lines[i] = `${m[1]}convention${m[2]}`;
+      tree.write(rel, lines.join("\n") + tail);
+      const shown = tree.bundleRel ? rel.slice(tree.bundleRel.length + 1) : rel;
+      tree.actions.push(`retype ${shown}: decision → convention`);
+      break;
+    }
+  }
+}
+
+function stepConventionsIndex(tree: Tree): void {
+  const indexRel = tree.b("conventions/index.md");
+  if (tree.exists(indexRel)) return;
+  tree.write(indexRel, CONVENTIONS_INDEX);
+  tree.actions.push("create conventions/index.md");
+}
+
+/** Complete a `[half_life.folders]` table the template wrote with the line
+ * format 3 adds; never invent the table, never touch an existing key. */
+function stepConventionsHalfLife(tree: Tree): void {
+  const text = tree.read("brainpick.toml");
+  if (text === null) return;
+  const lines = text.split("\n");
+  const start = lines.findIndex((ln) => FOLDERS_SECTION.test(ln));
+  if (start === -1) return;
+  let lastKey = start;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (ANY_SECTION.test(lines[i]!)) break;
+    const m = KEY_LINE.exec(lines[i]!);
+    if (!m) continue;
+    if (m[1] === "conventions") return;
+    lastKey = i;
+  }
+  lines.splice(lastKey + 1, 0, CONVENTIONS_HALF_LIFE_LINE);
+  tree.write("brainpick.toml", lines.join("\n"));
+  tree.actions.push("add conventions = 0 to [half_life.folders]");
+}
+
+function migrate2to3(tree: Tree, _today: string): void {
+  stepRetypeConventions(tree);
+  stepConventionsIndex(tree);
+  stepStamp(tree, 2, 3);
+  stepConventionsHalfLife(tree);
+}
+
+const MIGRATIONS: Record<number, (tree: Tree, today: string) => void> = { 2: migrate1to2, 3: migrate2to3 }; // target → step from target-1
 
 // -- the command -----------------------------------------------------------------------
 

@@ -2,9 +2,17 @@
   "bundle_root": ".",
   "compiled_at": "1970-01-01T00:00:00Z",
   "files": {
+    "conventions/aamukahvi-ensin.md": {
+      "bytes": 356,
+      "sha256": "01a97699ad62e2e8ee5dce9df33c8cc81adfef2e7bbd96eec95a3a6093398d1f"
+    },
+    "conventions/index.md": {
+      "bytes": 128,
+      "sha256": "46b5e21997547a7dfb91061a07c133c2104296788af09b7f46eeea4ea6d99eb1"
+    },
     "index.md": {
-      "bytes": 1140,
-      "sha256": "0b0b92c770aae7079e8651840256b8bbbe055d7868979891521c6f6482a2371b"
+      "bytes": 1368,
+      "sha256": "e6c039afcaca57785dd48ad1b5d2509cebe3b050a799b2beed85a57afde33bf4"
     },
     "knowledge/kahvi.md": {
       "bytes": 421,
@@ -40,7 +48,7 @@
     }
   },
   "index_md": {
-    "content_hash": "0b0b92c770aae7079e8651840256b8bbbe055d7868979891521c6f6482a2371b",
+    "content_hash": "e6c039afcaca57785dd48ad1b5d2509cebe3b050a799b2beed85a57afde33bf4",
     "managed": "section"
   },
   "seq": 1,

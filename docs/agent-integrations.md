@@ -4,7 +4,7 @@ about: concept
 title: Agent integrations
 description: How brainpick meets agents where they live — a shipped Agent Skill, one-command integrations for each harness, four CLI query mirrors, and an AGENTS.md brain report that teaches graph-before-grep.
 tags: [agents]
-timestamp: 2026-09-14T12:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Agent integrations
@@ -86,7 +86,12 @@ When an `AGENTS.md` carries the markers
 refreshes the block between them — same hash-stamped fence mechanics as the generated
 index. The report is deterministic and byte-identical across engines: a
 graph-before-grep directive, the counts, the tier status, the top hub documents by
-total degree, the orphans, and the bundle root. Compile only *refreshes* an existing
+total degree, the orphans, and the bundle root. In a brain two sections join
+them, each present only when the bundle holds at least one entry: `Conventions
+(these apply to you):` — every `type: convention` doc as `Title (path) —
+description`, sorted by path ([Conventions](conventions.md)) — and, below it,
+`Skills (read before improvising):` ([Skills](skills.md)); the rules sit on
+the page a harness loads before it calls any tool. Compile only *refreshes* an existing
 block; it never creates the file, and unmarked `AGENTS.md` files are never touched.
 The `Bundle root:` line doubles as the block's ownership claim: compile looks in
 the bundle's own `AGENTS.md` and in the one at the git root above it, but writes

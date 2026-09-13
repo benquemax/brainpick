@@ -2,9 +2,9 @@
 type: reference
 about: concept
 title: "Spec: T1 artifacts"
-description: "The deterministic heart — document scanning, link extraction, graph.json (nodes, edges, ghosts, islands, orphans, tags), docs.jsonl, skills.json, todos.json, and the generated index and skill tree."
+description: "The deterministic heart — document scanning, link extraction, graph.json (nodes, edges, ghosts, islands, orphans, tags), docs.jsonl, skills.json, todos.json, conventions.json, and the generated index and skill tree."
 tags: [spec]
-timestamp: 2026-09-13T14:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Spec: T1 artifacts
@@ -19,15 +19,19 @@ the normative artifacts:
 - `t1/docs.jsonl` — one line per document, the substrate for keyword search and reading; carries the frontmatter `half_life` (days, or `null`) that the [half-life](../../half-life.md) factor resolves at query time.
 - `t1/skills.json` — every skill sorted by path with resolved `depends_on`, `tools` and its declared `export` targets ([Skills](../../skills.md)); part of the freshness gate. In a brain with a skill, compile also generates `skilltree.md` beside the first skill, written before the artifact scan like the index.
 - `t1/todos.json` — every checklist item of every `type: todo` doc as `{path, line, status, text, done}`, sorted by path then line ([To-do lists](../../todo-lists.md)); `{"todos": []}` when there are none; part of the freshness gate.
+- `t1/conventions.json` — every `type: convention` doc as `{description, path, title}` (`description` null when absent), sorted by path ([Conventions](../../conventions.md)); `{"conventions": []}` when there are none; part of the freshness gate.
 - the generated `index.md` block — grouped by directory, entries sorted by title, hash-stamped.
 
 An **orphan** is a non-reserved node with zero inbound edges from non-reserved
 nodes; **islands** are the non-mainland connected components. This is the
 concrete form of the [artifact spec](../../artifact-spec.md) and the T1 rung of
 [the tiers](../../the-tiers.md); the opt-in AGENTS.md brain report shares the
-same fence mechanics as [agent integrations](../../agent-integrations.md).
+same fence mechanics as [agent integrations](../../agent-integrations.md) —
+in a brain it carries a *Conventions (these apply to you)* section above
+*Skills (read before improvising)*, each present only when the bundle holds
+at least one.
 Beside the report, `brainpick integrate` installs the static
-[brain ritual](../../brain-ritual.md) block (`brainpick:begin ritual (v2)`),
+[brain ritual](../../brain-ritual.md) block (`brainpick:begin ritual (v3)`),
 a conformance golden (class `ritual`) compile never touches.
 
 Back to [Spec reference](../../reference-spec.md).

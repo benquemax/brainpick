@@ -4,7 +4,7 @@ about: concept
 title: Structure agnosticism
 description: "Principle 14 — brainpick is a thin view, not a format owner: it reads the bundle root, frontmatter and OKF's reserved names, never folder layout, so a wiki, a brain or anything in between compiles the same way and a brain born on any template version keeps working with every later brainpick."
 tags: [brain, spec, design]
-timestamp: 2026-09-13T12:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Structure agnosticism
@@ -29,7 +29,7 @@ Everything brainpick reads from a bundle fits in four lines:
   ([Wiki conventions](wiki-conventions.md)).
 - **Links** — relative markdown links between files.
 
-Folder names are never in that list. `_brain/` with five memory types,
+Folder names are never in that list. `_brain/` with six memory types,
 `docs/` with a `reference/` tree, or a flat pile of markdown with `type:`
 all compile to the same artifacts ([The tiers](the-tiers.md)). The
 [Compile pipeline](compile-pipeline.md) does not have a code path that
@@ -76,8 +76,9 @@ cases that were considered and rejected:
   agent's act (the first skill teaches it) and the contract's check
   (`max_files: 1` on the folder) — see
   [Data flow architecture](data-flow-architecture.md).
-- **`brain_overview` listing `skills/` first.** Reframed as listing
-  `type: playbook` docs first — the same intent, keyed on frontmatter.
+- **`brain_overview` listing `conventions/` and `skills/` first.** Reframed
+  as listing `type: convention` and `type: skill` docs first — the same
+  intent, keyed on frontmatter ([Conventions](conventions.md)).
 - **Excluding `raw/` by name.** It is excluded because the template's
   `brainpick.toml` says `exclude = ["raw/*"]`, a config the user owns, not
   because the engine recognises the folder.

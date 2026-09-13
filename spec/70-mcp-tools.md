@@ -28,6 +28,13 @@ there are none), never subject to budget trimming (bounded size already).
 similarity-gap pairs — always present, `0` when T2 or the module is off,
 never budget-trimmed. Default budget 800.
 
+`conventions` (spec/20 *t1/conventions.json*) is always present: every
+convention in the brain as `{"path", "title", "description"}`, sorted by
+path, `[]` when there are none. Conventions are the read path's first stop
+of all (spec/85) — a rule constrains every other read — so they come before
+`skills` in the object and in `hint` ("N conventions apply — read them
+before acting"). Never budget-trimmed: like `skills`, `tree` empties first.
+
 `skills` (spec/20 *Skills and frontmatter edges*) is always present: every
 skill in the brain as `{"path", "title", "description", "depends_on":
 [paths], "tools": [paths]}`, sorted by path, `[]` when there are none.

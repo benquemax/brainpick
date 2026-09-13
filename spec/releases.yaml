@@ -15,14 +15,64 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
-  - version: 0.6.2
+  - version: 0.7.0
     date: unreleased
-    brain_format: 2
+    brain_format: 3
     summary: >-
-      Compile no longer claims another bundle's AGENTS.md report: the block's
-      `Bundle root:` line is its ownership claim, and a block naming a
-      different bundle is left alone with a warning.
+      Brain format 3: conventions are a memory type the engine recognises.
+      A `type: convention` doc is a standing rule, compiled into
+      `t1/conventions.json` and listed before skills in `brain_overview`
+      and the AGENTS.md report; `brainpick migrate --to 3` retypes the
+      template's `conventions/` pages and pins them against fading.
     changes:
+      - kind: added
+        area: brain
+        text: >-
+          Conventions (spec/85): the sixth memory type — a `type: convention`
+          doc is a standing rule for how work is done, the standing result of
+          a decision rather than its record. The template keeps them in
+          `conventions/`, one per page, listed in `conventions/index.md`;
+          the engine keys on the type alone, wherever the doc lives, and
+          pins them with `[half_life.folders] conventions = 0`.
+        agent_action: >-
+          Run `brainpick migrate --to 3` (`--dry-run` first) in every brain
+          repo: it retypes `conventions/*.md` from the template's
+          `type: decision` to `type: convention`, creates
+          `conventions/index.md` when absent, stamps `format = 3` and adds
+          `conventions = 0` to `[half_life.folders]`. Then compile, commit
+          and push. From now on, read the overview's `conventions` before
+          acting, and file a new standing rule as `type: convention`.
+      - kind: added
+        area: compile
+        text: >-
+          `t1/conventions.json` (spec/20) — every convention as
+          `{path, title, description}`, sorted by path, part of the
+          freshness gate; the AGENTS.md report block gains a
+          `Conventions (these apply to you):` section above `Skills`.
+      - kind: added
+        area: mcp
+        text: >-
+          `brain_overview` carries `conventions` before `skills`, never
+          budget-trimmed, and its hint opens with how many apply and to
+          read them before acting; `brainpick overview` prints the same
+          list first. `brainpick init` names the read order: conventions,
+          then skills, knowledge, journals.
+      - kind: changed
+        area: cli
+        text: >-
+          `brainpick migrate --to 3` — the 2 → 3 rewrite, deterministic and
+          cumulative from format 1, pinned by the `migrate-kotiaivot-v2-to-3`
+          conformance golden in both engines.
+      - kind: changed
+        area: cli
+        text: >-
+          Ritual block v3 — step 2 says conventions listed in the overview
+          are standing rules that apply to you, read before acting. Integrate
+          replaces an installed v2 block in place.
+        agent_action: >-
+          Re-run `brainpick integrate agents-md` (or `claude-code` /
+          `opencode` / `dsh`) in every repo carrying the ritual block, and
+          update any fleet instruction that embeds the block verbatim.
       - kind: fixed
         area: compile
         text: >-

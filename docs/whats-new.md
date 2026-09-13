@@ -4,7 +4,7 @@ about: concept
 title: What's new notice
 description: "A release ledger every package ships, diffed against the version that last compiled a brain and the brain's stamped format — what changed and what to do about it, surfaced where agents already look, offline and deterministic."
 tags: [agents, engine, brain-format]
-timestamp: 2026-09-13T14:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # What's new notice
@@ -23,7 +23,7 @@ dev checkout), the `brain_format` that release writes, a one-paragraph
 `summary` and a list of `changes` — `kind` (`added` | `changed` | `fixed` |
 `removed`), `area` (`brain`, `cli`, `mcp`, `search`, `config`, `compile`,
 `webui`, `docs`), `text`, and where a release asks something of an agent an
-`agent_action` ("Run `brainpick migrate --to 2`."). Every package ships it
+`agent_action` ("Run `brainpick migrate --to 3`."). Every package ships it
 byte-identical (`scripts/sync-releases.mjs`, a parity test in each engine),
 so [brainpick whats-new](reference/cli/whats-new.md) and the notice below
 work offline and say the same thing in both engines. The ledger is
@@ -54,8 +54,8 @@ independent parts and is absent when neither applies:
   nothing to have missed. An `unreleased` head is never a missed release.
 - **Format behind:** the brain's stamp is below the newest `brain_format`
   the ledger declares for the running version (an `unreleased` head counts:
-  the format a dev checkout declares is the one it writes) — `brain format 1
-  → 2: run brainpick migrate --to 2`. It stays until
+  the format a dev checkout declares is the one it writes; 3 since 0.7.0) —
+  `brain format 2 → 3: run brainpick migrate --to 3`. It stays until
   [brainpick migrate](reference/cli/migrate.md) runs. A wiki that is not a
   brain (format 0) hears nothing.
 

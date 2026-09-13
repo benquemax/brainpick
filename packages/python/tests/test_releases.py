@@ -108,7 +108,7 @@ def test_cli_whats_new_defaults_to_the_manifest_generator_and_names_the_format(b
     assert main(["whats-new", "--root", str(brain_v1)]) == 0
     out = capsys.readouterr().out
     assert "## 0.5.0 (2026-09-11)" in out and "## 0.4.5" in out and "## 0.4.0" not in out
-    assert "brain format 1 → 2: run `brainpick migrate --to 2`" in out
+    assert "brain format 1 → 3: run `brainpick migrate --to 3`" in out
 
 
 def test_cli_whats_new_since_all_and_json(brain_v1, capsys):
@@ -121,7 +121,7 @@ def test_cli_whats_new_since_all_and_json(brain_v1, capsys):
     assert main(["whats-new", "--root", str(brain_v1), "--since", "0.4.4", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert [r["version"] for r in payload["releases"]][-1] == "0.4.5"
-    assert payload["notice"]["format"] == {"current": 1, "latest": 2}
+    assert payload["notice"]["format"] == {"current": 1, "latest": 3}
     assert payload["notice"]["since"] == "0.4.4"
 
 
@@ -141,13 +141,13 @@ def test_compile_result_and_report_carry_the_notice_for_an_old_brain(brain_v1, c
                       encoding="utf-8")
     result = run_compile(brain_v1)
     assert result.whats_new is not None
-    assert result.whats_new["format"] == {"current": 1, "latest": 2}
+    assert result.whats_new["format"] == {"current": 1, "latest": 3}
     assert "releases" not in result.whats_new  # a first compile has no `since`
     text = agents.read_text(encoding="utf-8")
-    assert "- What's new: brain format 1 → 2: run `brainpick migrate --to 2`" in text
+    assert "- What's new: brain format 1 → 3: run `brainpick migrate --to 3`" in text
     assert text.index("- Bundle root:") < text.index("- What's new:")
     main(["compile", "--root", str(brain_v1)])
-    assert "note: what's new — brain format 1 → 2" in capsys.readouterr().out
+    assert "note: what's new — brain format 1 → 3" in capsys.readouterr().out
 
 
 def test_release_part_clears_once_the_current_version_has_compiled(brain_v1):
@@ -197,8 +197,8 @@ def test_overview_carries_whats_new_and_leads_the_hint(brain_v1):
     state = ServeState(brain_v1, load_config(brain_v1))
     state.load()
     result = overview_payload(state)
-    assert result["whats_new"]["format"] == {"current": 1, "latest": 2}
-    assert result["hint"].startswith("What's new — brain format 1 → 2: run `brainpick migrate --to 2`. ")
+    assert result["whats_new"]["format"] == {"current": 1, "latest": 3}
+    assert result["hint"].startswith("What's new — brain format 1 → 3: run `brainpick migrate --to 3`. ")
 
 
 def test_fixture_ledger_matches_the_canonical_shape():

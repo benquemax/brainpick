@@ -10,6 +10,7 @@ import type { UpdateNotice } from "../update";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import type { ConventionRecord } from "../compile/conventions";
 import type { SkillRecord } from "../compile/skills";
 import type { TodoRecord } from "../compile/todos";
 import type { DocRecord, Graph, GraphEdge } from "../compile/t1";
@@ -301,6 +302,14 @@ function loadTodos(bp: string): TodoRecord[] {
   return (JSON.parse(readFileSync(path, "utf8")) as { todos?: TodoRecord[] }).todos ?? [];
 }
 
+/** t1/conventions.json (spec/20) — absent (compiled before it existed) reads as
+ * "no conventions"; the next compile writes it. */
+function loadConventions(bp: string): ConventionRecord[] {
+  const path = join(bp, "t1", "conventions.json");
+  if (!isFile(path)) return [];
+  return (JSON.parse(readFileSync(path, "utf8")) as { conventions?: ConventionRecord[] }).conventions ?? [];
+}
+
 /** t1/skills.json (spec/20) — an artifact compiled before it existed reads as
  * "no skills" rather than crashing the server; the next compile writes it. */
 function loadSkills(bp: string): SkillRecord[] {
@@ -315,6 +324,7 @@ export class ServeState {
   graph: Graph = { edges: [], ghosts: [], islands: [], nodes: [], stats: {} as Graph["stats"], tags: {} };
   skills: SkillRecord[] = [];
   todos: TodoRecord[] = [];
+  conventions: ConventionRecord[] = [];
   manifest: Record<string, unknown> = {};
   records: DocRecord[] = [];
   kg: KnowledgeGraph | null = null; // the T3 export, when one is staged (spec/40)
@@ -358,6 +368,7 @@ export class ServeState {
     this.kg = loadKg(bp); // null when no T3 export is present — query degrades
     this.skills = loadSkills(bp);
     this.todos = loadTodos(bp);
+    this.conventions = loadConventions(bp);
     this.seq = this.manifest["seq"] as number;
   }
 

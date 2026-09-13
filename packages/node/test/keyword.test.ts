@@ -62,6 +62,7 @@ test("an inflected query reaches its stem", () => {
       "knowledge/vieraat.md",
       "skills/kahvin-keitto.md",
       "skills/veden-keitto.md",
+      "conventions/aamukahvi-ensin.md",
       "todo/archive/2026-07-01.md",
     ]),
   );

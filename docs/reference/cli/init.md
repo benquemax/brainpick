@@ -4,7 +4,7 @@ about: thing
 title: "brainpick init"
 description: "Detect the bundle and backends, write config, and compile T1 — the one command from zero to a living brain."
 tags: [cli, spec]
-timestamp: 2026-09-07T14:00:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # brainpick init
@@ -29,7 +29,8 @@ so a [brain](../../brain.md) scaffolded by
 `_brain/` — is detected in place, compiled into `_brain/.brainpick/`, and
 announced with its [brain.format](../config/brain-format.md) and
 [brain.audience](../config/brain-audience.md) plus the read order
-(`skills/` first). The config itself is never rewritten; a missing
+("read conventions/ first, then skills/, then knowledge/, then journals/" —
+[Conventions](../../conventions.md)). The config itself is never rewritten; a missing
 [bundle.id](../config/bundle-id.md) is suggested, not written. When no bundle
 is found at all, init hands off to henxels and names both templates — a wiki
 and a brain (see [Brain template](../../brain-template.md)). This is the [onboarding](../../onboarding.md) concept made concrete;

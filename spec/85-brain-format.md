@@ -44,14 +44,15 @@ instead of a grep. A format-1 brain kept `_todo.md` beside the brain.
 | `knowledge/` | semantic | evergreen concept docs, one concept per page | — |
 | `skills/` | procedural | distilled, actionable procedures (`type: skill`) and, beside them, the `tools/` they drive | `skilltree.md` (generated) |
 | `journals/` | episodic | one file per **day**, `YYYY-MM-DD.md`, entries newest first under any heading (`## HH:MM` or a title); only today at the top level, every earlier day in `journals/archive/YYYY/MM/` | `index.md` |
+| `conventions/` | normative | standing rules for how work is done — naming, process, contracts a team holds itself to — one rule per page (`type: convention`); listed in `brain_overview` and the report before skills, and never fade | `index.md` |
 | `todo/` | open work | `open.md` — the current to-do list as checklist lines (`- [ ]` open, `- [x]` done) under `type: todo`; the moment an item is done it moves to `todo/archive/YYYY-MM-DD.md`, the day it was closed, so `open.md` stays small and "done" is an episode with a date | `index.md` |
 | `vision/` | direction | the northstar as a book; `index.md` is its table of contents | `index.md` |
 | `plans/` | decided work | one plan per page; undecided ideas do not belong here | `index.md` |
 | `raw/` | *(not a memory type)* | undistilled source material — transcripts, exports, clippings — that knowledge grounds on; no frontmatter, kebab-case, listed in its index, **excluded from the compiled brain** via `[bundle] exclude = ["raw/*"]` | `index.md` |
 
-Every folder MAY hold sub-folders. The five memory types are
+Every folder MAY hold sub-folders. The six memory types are
 **sufficient**: a memory type that does not fit is a `type` value or a
-sub-folder, never a seventh sibling (`todo/` is not a memory type — it is
+sub-folder, never a new sibling (`todo/` is not a memory type — it is
 the brain's own work queue, kept in the brain so it is searchable). Engines MUST tolerate brains that omit
 any folder (an empty memory type is simply empty) and MUST NOT depend on
 any being present.
@@ -96,6 +97,7 @@ not frontmatter — see *Grounding* below.
 | `tools` | skills | list of file paths (bundle-relative) | the deterministic scripts this skill drives; indexed and pointed at, never executed by an engine |
 | `export` | skills | `agent-skill` (string or list) | the doc is also exported as a harness-loaded Agent Skill (`SKILL.md`) by `brainpick integrate` — see *Exported skills* |
 | `type: todo` | to-do lists | OKF `type` value | the doc's checklist lines are to-do items the engine indexes — see *To-do lists* |
+| `type: convention` | conventions | OKF `type` value | the doc is a standing rule the engine lists before anything else — see *Conventions* |
 
 ### Skills
 
@@ -190,6 +192,30 @@ which the engine records as its `done` date. The engine never edits a
 list: ticking a box and moving a line to the archive is `brain_write` or
 the agent's editor.
 
+### Conventions
+
+A doc whose `type`, trimmed and lowercased, is `convention` is a
+**convention**: a standing answer to "how do we do this here" — a naming
+rule, a process, a contract the brain's keepers hold themselves to. It is
+normative memory: not a fact about the world (`knowledge/`), not a
+procedure to execute (a skill), not the record of the moment something was
+chosen (`type: decision`, which never changes) but the standing result,
+edited as practice evolves and ideally linking back to the decision that set
+it. The template keeps them in `conventions/`, one rule per page, listed in
+`conventions/index.md`; the engine keys on the `type` alone, wherever the
+doc lives, exactly as it does for skills and to-do lists.
+
+The engine compiles them into `t1/conventions.json` (spec/20) and surfaces
+them **before skills** everywhere an agent looks first: `brain_overview`
+lists them in their own `conventions` section (spec/70), the AGENTS.md
+report carries a `Conventions (these apply to you):` section (spec/20), and
+the keyword index searches them like any doc. A convention constrains every
+act in the brain, so it is the first thing to read and the last thing to
+fade: the template's `[half_life.folders]` pins `conventions = 0`, and
+`migrate --to 3` adds that line. The engine never edits a convention;
+changing one is `brain_write` or the agent's editor, and a change is a
+decision worth a journal entry.
+
 **Additive-only policy.** A brain-format key, once published, is never
 renamed or removed; a newer format adds keys, and every key is optional for
 at least one format version after it appears. An engine MUST ignore keys it
@@ -229,7 +255,8 @@ A brain is shared memory held in Git. The read path therefore begins with
 path ends with a push; the first skill states both. Engines MAY report a
 checkout that is behind its remote, and MUST NOT pull on the agent's behalf.
 
-The **read path** is the mirror: `skills/` first, then `knowledge/`, then
+The **read path** is the mirror, with `conventions/` before all of it (a
+rule constrains what any other read is for): `skills/` first, then `knowledge/`, then
 `journals/`, and `raw/` only by grep, to ground or to distil. Engines
 MUST reflect this in `brain_overview` by listing skills — the *type*, not
 the folder — in their own `skills` section (spec/70) and in the keyword
@@ -296,9 +323,11 @@ brain may not reach the other) or becomes a `brain://` pointer.
 
 ## Versioning and migration
 
-`[brain] format` is the stamp. Format `2` is this document; format `1`
-differs in the journal rhythm (a month per file, a flat archive) and in
-keeping `_todo.md` beside the brain — both described above. A later format:
+`[brain] format` is the stamp. Format `3` is this document; format `2`
+lacks the `conventions/` memory type (`type: convention`, listed first,
+never fading) and format `1` further differs in the journal rhythm (a month
+per file, a flat archive) and in keeping `_todo.md` beside the brain — all
+described above. A later format:
 
 - changes bytes in committed brains only through `brainpick migrate --to N`,
   a deterministic rewrite with a dry-run diff that bumps the stamp — never
@@ -408,6 +437,46 @@ todo/index.md`, `stamp brainpick.toml: format 1 → 2`, `add [half_life] to
 brainpick.toml`. The tally the
 conformance case fixes is the resulting bundle's bytes, not the wording.
 
+**2 → 3**, in this order:
+
+1. **Conventions are a type.** For every `R/conventions/*.md` (top level of
+   the folder, `index.md` and `log.md` excepted) whose frontmatter `type` is
+   `decision` — the value the brain template stamped before format 3 — the
+   `type` line is rewritten to `type: convention` in place (the line only,
+   nothing else in the file). Any other `type`, or no frontmatter, is left
+   alone: only the template's own stamp is corrected, never the author's.
+2. **The folder.** `R/conventions/index.md` is created when absent with the
+   fixed body below. Nothing else is created: an existing `conventions/`
+   is the author's; an absent one is an empty memory type (the engine
+   tolerates it) that the index makes visible.
+3. **The stamp.** `format = 2` → `format = 3`, as in 1 → 2 step 4.
+4. **The format's config defaults.** When `P/brainpick.toml` has a
+   `[half_life.folders]` table without a `conventions` key, the line
+   `conventions = 0         # rules never fade` is appended to that table
+   (after its last key line); when it has the key, or no
+   `[half_life.folders]` table at all, nothing is added — this step only
+   completes a table the template wrote, never invents one.
+
+The fixed `conventions/index.md`:
+
+```markdown
+# Conventions
+
+Standing rules for how work is done here — naming, process, contracts the
+brain's keepers hold themselves to. One kebab-case page per rule,
+`type: convention`, listed here. Not a specific piece of work (that is
+`plans/`), not a step-by-step procedure (that is `skills/`), not the record
+of choosing (that is a `decision`) — the standing answer, applied broadly.
+
+## Conventions
+
+* (none yet)
+```
+
+The action lines: `retype conventions/commit-messages.md: decision →
+convention`, `create conventions/index.md`, `stamp brainpick.toml: format 2
+→ 3`, `add conventions = 0 to [half_life.folders]`.
+
 Migrations are cumulative: `--to 3` from format 1 runs 1 → 2 then 2 → 3.
 
 A brain whose stamp is below the format its engine writes is told so at
@@ -427,13 +496,16 @@ Class `brain`:
   layout — two `type: skill` docs where one depends on the other and
   drives a tool under `tools/`, a `type: playbook` how-to that is not
   a skill, a `todo/open.md` list with open and done items and a
-  `todo/archive/` day file — compiles to
+  `todo/archive/` day file, and a `conventions/` page under
+  `type: convention` — compiles to
   golden T1 artifacts carrying the `depends_on` edge (spec/20), a
-  `t1/todos.json` with every checklist item, a
+  `t1/todos.json` with every checklist item, a `t1/conventions.json`
+  with the convention, a
   `skills/skilltree.md` byte-identical across engines, and an AGENTS.md
-  report block with a `Skills` section; nothing under `raw/` appears in the
+  report block with a `Conventions` section above its `Skills` section; nothing under `raw/` appears in the
   manifest.
-- `brain_overview` reports `todos: {"open": n, "done": m}` for the fixture;
+- `brain_overview` lists the convention under `conventions` (before
+  `skills` in the object) and reports `todos: {"open": n, "done": m}` for the fixture;
   a keyword search that only a to-do item's text matches finds the list
   (`todo/open.md`) and the hit carries `todo: {"open", "done"}`.
 
@@ -452,6 +524,13 @@ Class `migrate`:
   `brainpick.toml` carries the stamp and the appended `[half_life]` block);
   `--dry-run` leaves the fixture byte-identical to itself. Both engines
   natively.
+- A format-2 fixture (`spec/fixtures/bundles/kotiaivot-v2/`: the template's
+  layout with a `conventions/` page stamped `type: decision`, a second one
+  the author typed `article`, no `conventions/index.md`, and a
+  `[half_life.folders]` table without `conventions`) migrated with `--to 3`
+  yields the golden tree under `spec/fixtures/expected/kotiaivot-v2/migrated/`:
+  the first page retyped, the second untouched, the index created, the
+  stamp and the `conventions = 0` line added.
 - `brain_overview` lists both skills under `skills` with their prerequisites
   and tools; `brain_read` on the dependent skill returns its `skill` block
   (spec/70); a keyword search whose terms match a skill's trigger

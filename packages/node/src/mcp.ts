@@ -146,6 +146,13 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
     // spec/85 To-do lists: open work is one read away
     hint = `${todoTotals.open} open todos — brain_read '${busiestTodoList(state.todos)}' lists them. ` + hint;
   }
+  // conventions lead (spec/85): a rule constrains every other read — only the
+  // engine's own notices (update, what's new) go before them
+  const conventions = state.conventions.map((c) => ({ path: c.path, title: c.title, description: c.description }));
+  if (conventions.length) {
+    const n = conventions.length;
+    hint = `${n} convention${n === 1 ? "" : "s"} appl${n === 1 ? "ies" : "y"} — read ${n === 1 ? "it" : "them"} before acting. ` + hint;
+  }
   const whatsNew = state.whatsNew;
   if (whatsNew) {
     // spec/80 the release ledger: what changed, and what to do
@@ -162,6 +169,7 @@ function singleOverview(state: ServeState, budgetTokens?: number | null): Record
     tiers: state.tiers(),
     ...(update ? { update: { ...update } } : {}),
     ...(whatsNew ? { whats_new: { ...whatsNew } } : {}),
+    conventions,
     skills,
     todos: todoTotals,
     tree,

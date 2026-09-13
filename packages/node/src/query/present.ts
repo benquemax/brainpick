@@ -43,6 +43,15 @@ export function presentOverview(p: Record<string, unknown>): string {
   ];
   const todos = p["todos"] as { open?: number; done?: number } | undefined;
   if (todos && (todos.open || todos.done)) lines.push(`todos: ${todos.open ?? 0} open · ${todos.done ?? 0} done`);
+  const conventions = (p["conventions"] ?? []) as OverviewDoc[];
+  if (conventions.length) {
+    lines.push("");
+    lines.push("conventions (these apply to you):");
+    for (const rule of conventions) {
+      const desc = rule.description ? ` — ${rule.description}` : "";
+      lines.push(`  ${rule.title} (${rule.path})${desc}`);
+    }
+  }
   const skills = (p["skills"] ?? []) as OverviewDoc[];
   if (skills.length) {
     lines.push("");

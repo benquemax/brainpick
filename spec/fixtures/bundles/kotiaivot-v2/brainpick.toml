@@ -1,0 +1,18 @@
+spec = "0.1"
+
+[bundle]
+root = "."
+
+[brain]
+format = 2              # the brainpick brain format (spec/85)
+audience = "personal"
+
+[half_life]
+default = 365           # days; 0 = never fades
+[half_life.folders]     # folder → days, the most nested folder wins
+journals = 180          # episodic memory fades first
+todo = 90               # an open list should be a fresh list
+skills = 0              # procedural memory never fades
+
+[index]
+mode = "section"

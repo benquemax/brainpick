@@ -209,6 +209,7 @@ def render_report_block(
     skills: dict | None = None,
     update: dict | None = None,
     whats_new: dict | None = None,
+    conventions: dict | None = None,
 ) -> str:
     """The AGENTS.md brain report body (spec/20): a graph-before-grep directive,
     counts, tier status, the top-5 hub docs by total degree, orphans (<= 5),
@@ -264,6 +265,14 @@ def render_report_block(
         else:
             lines.append("  - (none)")
 
+    rules = conventions["conventions"] if conventions else []
+    if rules:  # spec/85: a rule constrains every act — listed before the procedures
+        lines.append("- Conventions (these apply to you):")
+        for rule in rules:
+            entry = f"  - {rule['title']} ({rule['path']})"
+            if rule["description"]:
+                entry += f" — {rule['description']}"
+            lines.append(entry)
     listed = skills["skills"] if skills else []
     if listed:
         lines.append("- Skills (read before improvising):")

@@ -22,7 +22,7 @@ from typing import Callable
 
 from brainpick.config import Config, resolve_bundle
 
-LATEST_FORMAT = 2
+LATEST_FORMAT = 3
 ENV_TODAY = "BRAINPICK_TODAY"
 
 _MONTH_FILE = re.compile(r"^(\d{4})-(\d{2})\.md$")
@@ -46,6 +46,21 @@ what was closed, one file per day.
 
 - [Open](open.md)
 """
+
+CONVENTIONS_INDEX = """# Conventions
+
+Standing rules for how work is done here — naming, process, contracts the
+brain's keepers hold themselves to. One kebab-case page per rule,
+`type: convention`, listed here. Not a specific piece of work (that is
+`plans/`), not a step-by-step procedure (that is `skills/`), not the record
+of choosing (that is a `decision`) — the standing answer, applied broadly.
+
+## Conventions
+
+* (none yet)
+"""
+
+CONVENTIONS_HALF_LIFE_LINE = "conventions = 0         # rules never fade"
 
 TODO_OPEN_HEAD = """---
 type: todo
@@ -409,6 +424,77 @@ def _step_half_life(tree: _Tree) -> None:
     tree.actions.append("add [half_life] to brainpick.toml")
 
 
+# -- 2 → 3: conventions are a type the engine recognises (spec/85) --------------------
+
+_TYPE_LINE = re.compile(r"^([ \t]*type[ \t]*:[ \t]*)decision([ \t]*(?:#.*)?)$")
+_FOLDERS_SECTION = re.compile(r"^\[half_life\.folders\][ \t]*(?:#.*)?$")
+_KEY_LINE = re.compile(r"^[ \t]*([A-Za-z0-9_.\"'-]+)[ \t]*=")
+
+
+def _step_retype_conventions(tree: _Tree) -> None:
+    """The template stamped `type: decision` under conventions/ before format 3;
+    that stamp — and only that stamp — becomes `type: convention`. The line is
+    rewritten in place; an author's other type, or no frontmatter, is left alone."""
+    folder = tree.b("conventions")
+    for rel in tree.list_md("conventions"):
+        if posixpath.dirname(rel) != folder or posixpath.basename(rel) in ("index.md", "log.md"):
+            continue
+        text = tree.read(rel)
+        if text is None or not text.startswith("---\n"):
+            continue
+        end = text.find("\n---", 4)
+        if end == -1:
+            continue
+        head, tail = text[:end], text[end:]
+        lines = head.split("\n")
+        for i, line in enumerate(lines):
+            m = _TYPE_LINE.match(line)
+            if m:
+                lines[i] = f"{m.group(1)}convention{m.group(2)}"
+                tree.write(rel, "\n".join(lines) + tail)
+                shown = rel[len(tree.bundle_rel) + 1:] if tree.bundle_rel else rel
+                tree.actions.append(f"retype {shown}: decision → convention")
+                break
+
+
+def _step_conventions_index(tree: _Tree) -> None:
+    index_rel = tree.b("conventions/index.md")
+    if not tree.exists(index_rel):
+        tree.write(index_rel, CONVENTIONS_INDEX)
+        tree.actions.append("create conventions/index.md")
+
+
+def _step_conventions_half_life(tree: _Tree) -> None:
+    """Complete a `[half_life.folders]` table the template wrote with the line
+    format 3 adds; never invent the table, never touch an existing key."""
+    text = tree.read("brainpick.toml")
+    if text is None:
+        return
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if _FOLDERS_SECTION.match(ln)), None)
+    if start is None:
+        return
+    last_key = start
+    for i in range(start + 1, len(lines)):
+        if _ANY_SECTION.match(lines[i]):
+            break
+        m = _KEY_LINE.match(lines[i])
+        if m:
+            if m.group(1) == "conventions":
+                return
+            last_key = i
+    lines.insert(last_key + 1, CONVENTIONS_HALF_LIFE_LINE)
+    tree.write("brainpick.toml", "\n".join(lines))
+    tree.actions.append("add conventions = 0 to [half_life.folders]")
+
+
+def _migrate_2_to_3(tree: _Tree, today: str) -> None:
+    _step_retype_conventions(tree)
+    _step_conventions_index(tree)
+    _step_stamp(tree, 2, 3)
+    _step_conventions_half_life(tree)
+
+
 def _migrate_1_to_2(tree: _Tree, today: str) -> None:
     mapping = _step_journals(tree, today)
     _step_links(tree, mapping)
@@ -417,7 +503,7 @@ def _migrate_1_to_2(tree: _Tree, today: str) -> None:
     _step_half_life(tree)
 
 
-MIGRATIONS: dict[int, Callable[[_Tree, str], None]] = {2: _migrate_1_to_2}  # target → step from target-1
+MIGRATIONS: dict[int, Callable[[_Tree, str], None]] = {2: _migrate_1_to_2, 3: _migrate_2_to_3}  # target → step from target-1
 
 
 # -- the command -----------------------------------------------------------------------

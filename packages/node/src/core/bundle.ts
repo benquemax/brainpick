@@ -46,6 +46,7 @@ export interface Document {
   tools: string[]; // declared tool paths, as written
   export: string[]; // spec/85 export targets (agent-skill)
   todo: boolean; // spec/20 To-do lists (type: todo)
+  convention: boolean; // spec/85 Conventions (type: convention)
   half_life: number | null; // spec/20: frontmatter half_life in days
 }
 
@@ -54,6 +55,14 @@ export interface Document {
 export function isTodo(typeValue: unknown): boolean {
   if (typeValue === null || typeValue === undefined) return false;
   return pyStr(typeValue).trim().toLowerCase() === "todo";
+}
+
+/** A doc is a convention by its `type` — `convention`, trimmed, case-insensitive
+ * — never by folder (spec/85 *Conventions*). A `decision` is the record of
+ * choosing; a convention is the standing result. */
+export function isConvention(typeValue: unknown): boolean {
+  if (typeValue === null || typeValue === undefined) return false;
+  return pyStr(typeValue).trim().toLowerCase() === "convention";
 }
 
 /** A doc is a skill by its `type` — `skill`, trimmed, case-insensitive — never
@@ -320,6 +329,7 @@ export function scan(
     const reserved = RESERVED_NAMES.has(posixBasename(path));
     const skill = isSkill(meta["type"]) && !reserved;
     const todo = isTodo(meta["type"]) && !reserved;
+    const convention = isConvention(meta["type"]) && !reserved;
     const dependsOn: string[] = [];
     let tools: string[] = [];
     let exportTargets: string[] = [];
@@ -354,6 +364,7 @@ export function scan(
       tools,
       export: exportTargets,
       todo,
+      convention,
       half_life: normalizeHalfLife(meta["half_life"]),
     });
   }

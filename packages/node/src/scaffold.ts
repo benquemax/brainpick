@@ -394,7 +394,7 @@ export async function runInit(root: string, options: InitOptions = {}): Promise<
     voice.line(
       "✓",
       `brain: format ${config.brain.format} · audience ${config.brain.audience}` +
-        " — read skills/ first, then knowledge/, then journal/ (spec/85)",
+        " — read conventions/ first, then skills/, then knowledge/, then journals/ (spec/85)",
     );
   }
 

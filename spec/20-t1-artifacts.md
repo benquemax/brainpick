@@ -176,6 +176,24 @@ file (frontmatter included). Written on every full compile,
 `{"todos": []}` when there are none; part of the freshness comparison like
 `skills.json`.
 
+## t1/conventions.json (normative)
+
+The conventions of the bundle (spec/85 *Conventions*), the substrate
+`brain_overview` and the report block draw on:
+
+```json
+{
+  "conventions": [
+    {"description": "Every claim links to where it came from.", "path": "conventions/grounding.md",
+     "title": "Grounding"}
+  ]
+}
+```
+
+Sorted by `path`; `description` is the doc's, `null` when absent. Written on
+every full compile, `{"conventions": []}` when there are none; part of the
+freshness comparison like `skills.json`.
+
 ## Generated index.md
 
 Mode `section` (default): brainpick owns only the fenced block, appended at
@@ -223,8 +241,13 @@ first, target path tie-break; counts distinct source docs referencing that
 target — see `top_ghosts` below), the top 5 similarity-gap pairs by score
 (`- a ↔ b — score`, highest first, pair tie-break by (`a`, `b`); spec/45) —
 present only when `t1/similarity-gaps.json` exists, omitted entirely (not an
-empty section) when T2 or the module is off — the skills section, and the
-bundle root. The skills section (`- Skills (read before improvising):`)
+empty section) when T2 or the module is off — the conventions section, the
+skills section, and the
+bundle root. The conventions section (`- Conventions (these apply to you):`)
+lists every convention as `- title (path) — description` sorted by path,
+description omitted when `null`; present only when the bundle holds at
+least one convention, omitted otherwise, and placed before the skills
+section — a rule constrains what a procedure is for. The skills section (`- Skills (read before improvising):`)
 lists every skill as `- title (path) — description` sorted by path,
 description omitted when `null`, with `  · tools: a, b` appended when the
 skill declares tools; it is present only when the bundle holds at least one
@@ -250,7 +273,7 @@ Beside the report, `brainpick integrate` (every target) installs a second
 fenced block in the same `AGENTS.md`:
 
 ```
-<!-- brainpick:begin ritual (v2) -->
+<!-- brainpick:begin ritual (v3) -->
 …
 <!-- brainpick:end ritual -->
 ```
@@ -265,8 +288,8 @@ before grepping or answering from memory**, **record while working**, and
 config lives (spec/80), never the bundle directory a config points at; v1
 said `--root <bundle>`, which on a repo-root config with `[bundle] root`
 compiled with defaults. Compile never touches this block (it is not
-generated — the `(v2)` is the text's own version, bumped when the canonical
-changes) and never creates it. Integrate installs it directly
+generated — the `(v3)` is the text's own version, bumped when the canonical
+changes; v3 added conventions to step 2) and never creates it. Integrate installs it directly
 below the report block when absent; when a block is present with an older
 `(vN)` it is replaced in place; at the current version it is left alone.
 The rendered text is a conformance golden (class `ritual`), so both engines

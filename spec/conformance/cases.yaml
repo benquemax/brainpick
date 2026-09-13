@@ -24,12 +24,13 @@ cases:
     class: compile-idempotent
     bundle: kotiaurinko
 
-  # kotiaivot (spec/85): a brain — [brain] format = 2, skills/ with a
+  # kotiaivot (spec/85): a brain — [brain] format = 3, skills/ with a
   # `type: skill` doc that depends_on another and drives a tool, a
   # `type: playbook` how-to for humans that must NOT be a skill, todo/
   # with `type: todo` lists (open.md: two open, one done with a `(done:)`
-  # date; archive/2026-07-01.md: one done, dated by its timestamp), raw/
-  # excluded. Proves the depends_on edge, skills.json and todos.json
+  # date; archive/2026-07-01.md: one done, dated by its timestamp), one
+  # `type: convention` rule under conventions/, raw/ excluded. Proves the
+  # depends_on edge, skills.json, todos.json and conventions.json
   # (spec/20), the generated skilltree.md, and that raw/ never reaches the
   # manifest.
   - id: compile-kotiaivot-t1
@@ -41,6 +42,7 @@ cases:
       - .brainpick/t1/docs.jsonl
       - .brainpick/t1/skills.json
       - .brainpick/t1/todos.json
+      - .brainpick/t1/conventions.json
       - index.md
       - skills/skilltree.md
 
@@ -80,8 +82,12 @@ cases:
     # skills. veden-keitto.md matches "coffee" only via its own description.
     # An engine without the boost returns kahvi.md first and fails. The to-do
     # list todo/open.md (format 2) says "morning coffee" in its description
-    # and trails the skill; it is prose too, and unboosted.
-    expect_paths: [skills/kahvin-keitto.md, knowledge/kahvi.md, todo/open.md, skills/veden-keitto.md]
+    # and trails the skill; it is prose too, and unboosted — as is the
+    # convention conventions/aamukahvi-ensin.md (format 3), reached through
+    # "coffee" in its description: listed first in the overview, ranked like
+    # any prose page in search.
+    expect_paths: [skills/kahvin-keitto.md, knowledge/kahvi.md, todo/open.md,
+                   conventions/aamukahvi-ensin.md, skills/veden-keitto.md]
     expect_order: true
 
   # Tags are searchable (spec/50): `vesi` appears in veden-keitto.md ONLY as
@@ -121,14 +127,15 @@ cases:
     limit: 8
     half_life: {default: 0, folders: {skills: 1}}
     now: "2026-08-01T00:00:00Z"
-    expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, todo/archive/2026-07-01.md,
-                   skills/kahvin-keitto.md, skills/veden-keitto.md]
+    expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, conventions/aamukahvi-ensin.md,
+                   todo/archive/2026-07-01.md, skills/kahvin-keitto.md, skills/veden-keitto.md]
     expect_order: true
 
   # Stem terms (spec/50): `kahvia` (partitive) occurs nowhere; its 4-char
   # prefix `kahv` is shared with `kahvi`/`kahvin`, so every page that says
   # or tags coffee is reached — the archived to-do that names the skill
-  # included. An exact-token-only engine returns nothing.
+  # included, and the convention that tags coffee. An exact-token-only
+  # engine returns nothing.
   - id: search-keyword-stem
     class: query
     bundle: kotiaivot
@@ -136,7 +143,8 @@ cases:
     mode: keyword
     limit: 8
     expect_paths: [knowledge/kahvi.md, knowledge/vieraat.md, skills/kahvin-keitto.md,
-                   skills/veden-keitto.md, todo/archive/2026-07-01.md]
+                   skills/veden-keitto.md, conventions/aamukahvi-ensin.md,
+                   todo/archive/2026-07-01.md]
 
   - id: search-keyword-aurinko
     class: query
@@ -252,8 +260,9 @@ cases:
     bundle: kotiaurinko
     artifact: agents-report.md
 
-  # kotiaivot's report carries the Skills section (spec/20) — present only
-  # when the bundle holds a skill, so kotiaurinko's golden proves the omission.
+  # kotiaivot's report carries the Conventions and Skills sections (spec/20)
+  # — each present only when the bundle holds one, so kotiaurinko's golden
+  # proves the omission; Conventions comes first.
   - id: report-kotiaivot
     class: report
     bundle: kotiaivot
@@ -346,6 +355,17 @@ cases:
     class: migrate
     bundle: kotiaivot-v1
     to: 2
+    today: "2026-07-02"
+    expected_tree: migrated
+
+  # 2 → 3 (spec/85): conventions become a type the engine recognises. The
+  # template's `type: decision` stamp under conventions/ is retyped; a page
+  # the author typed otherwise is not; the folder index is created; the
+  # stamp bumps; `[half_life.folders]` gains `conventions = 0`.
+  - id: migrate-kotiaivot-v2-to-3
+    class: migrate
+    bundle: kotiaivot-v2
+    to: 3
     today: "2026-07-02"
     expected_tree: migrated
 

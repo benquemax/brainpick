@@ -4,7 +4,7 @@ about: concept
 title: "Data flow architecture"
 description: "How information moves through a brain — episodes in the journal distil into evergreen knowledge and then into actionable skills, retrieval runs the mirror path from most distilled to least, and each layer points upward instead of repeating — the principle that makes a brain memory rather than a pile of pages."
 tags: [brain-format]
-timestamp: 2026-09-12T18:10:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # Data flow architecture
@@ -62,11 +62,14 @@ that brainpick's [Knowledge graph tier](knowledge-graph-tier.md) can read.
 ## The read path: most distilled first
 
 ```
-skills/  ──►  knowledge/  ──►  journals/  ──►  (grep raw/)
+conventions/  ──►  skills/  ──►  knowledge/  ──►  journals/  ──►  (grep raw/)
 ```
 
 An agent looking for an answer reads in the **reverse** order of the write
-path: skills first, because a skill is the most actionable, tested and pure
+path, with the brain's standing rules ahead of it: conventions first
+([Conventions](conventions.md)), because a rule constrains what every
+other read is for — it is normative memory, edited over time, outside the
+distillation flow; then skills, because a skill is the most actionable, tested and pure
 form the brain has; then knowledge, for the concept behind the skill or a
 fact no skill covers yet; then the journals, for episodes when nothing
 distilled exists; and `raw/` only by grep, to check a source or to distil
@@ -79,7 +82,8 @@ and people commit to it between sessions — so the read path starts with
 An answer built on a stale checkout is built on knowledge the brain has
 already corrected; the first skill makes this its first instruction.
 
-brainpick reflects the read path in `brain_overview` by listing skills
+brainpick reflects the read path in `brain_overview` by listing conventions
+(`type: convention`) and then skills
 first — `type: skill`, the *type*, never the folder (and never `playbook`,
 the human-facing twin), because
 brainpick does not read folder names

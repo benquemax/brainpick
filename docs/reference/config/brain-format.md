@@ -2,17 +2,20 @@
 type: reference
 about: thing
 title: "brain.format"
-description: "The brain-format version a bundle follows — 0 (absent) means a plain wiki, 1 means the brain format of spec/85; the stamp a future `brainpick migrate` bumps."
+description: "The brain-format version a bundle follows — 0 (absent) means a plain wiki, 1–3 the brain format of spec/85 at that revision, 3 current; the stamp `brainpick migrate` bumps."
 tags: [config, spec, brain-format]
-timestamp: 2026-09-07T11:30:00Z
+timestamp: 2026-09-14T15:00:00Z
 ---
 
 # brain.format
 
 `format` under `[brain]` is the version stamp of [The brain](../../brain.md) this
 bundle follows. `0` — the default when the key or the whole `[brain]` section is
-absent — means the bundle is a wiki, not a brain; `1` means it follows
-[Spec: brain format](../spec/brain-format.md) as written today.
+absent — means the bundle is a wiki, not a brain; `3` means it follows
+[Spec: brain format](../spec/brain-format.md) as written today, with the
+`type: convention` memory type ([Conventions](../../conventions.md)); `2`
+lacks that type; `1` further keeps month-per-file journals and `_todo.md`
+beside the brain.
 
 Engines serve every format they know and print a migration hint for older
 ones; a later format changes committed content only through a deterministic

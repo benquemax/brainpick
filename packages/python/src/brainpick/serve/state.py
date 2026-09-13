@@ -227,6 +227,7 @@ class ServeState:
         self.kg = load_kg(bp)  # None when no T3 export is present — query degrades
         self.skills = self._load_skills(bp)
         self.todos = self._load_todos(bp)
+        self.conventions = self._load_conventions(bp)
         self.seq = self.manifest["seq"]
 
     @staticmethod
@@ -237,6 +238,15 @@ class ServeState:
         if not path.is_file():
             return []
         return json.loads(path.read_text(encoding="utf-8")).get("todos", [])
+
+    @staticmethod
+    def _load_conventions(bp: Path) -> list[dict]:
+        """t1/conventions.json (spec/20) — absent (compiled before it existed) reads
+        as "no conventions"; the next compile writes it."""
+        path = bp / "t1" / "conventions.json"
+        if not path.is_file():
+            return []
+        return json.loads(path.read_text(encoding="utf-8")).get("conventions", [])
 
     @staticmethod
     def _load_skills(bp: Path) -> list[dict]:
