@@ -2,16 +2,16 @@
 type: reference
 about: concept
 title: MCP tools
-description: The six MCP tools brainpick exposes — overview, search, read, neighbors, write, show — designed so a 27B model guesses right on the first try.
+description: The MCP tools brainpick exposes — overview, search, read, neighbors, write, show, contract, and the gated sync verbs — designed so a 27B model guesses right on the first try.
 tags: [agents, mcp]
-timestamp: 2026-09-18T21:45:00Z
+timestamp: 2026-09-19T00:20:00Z
 ---
 
 # MCP tools
 
 Brainpick serves agents over MCP in three transports: stdio (`brainpick
 mcp`, what the init snippets configure), streamable HTTP at `/mcp`, and
-legacy SSE at `/sse`. Both engines define the same six tools verbatim; the
+legacy SSE at `/sse`. Both engines define the same tools verbatim; the
 contract lives in the spec, not in either implementation.
 
 The ergonomics are small-model-first: at most one required argument, obvious
@@ -40,6 +40,66 @@ what to call next.
    [presentations](presentations.md): spotlight a subgraph, fly the camera to
    it, and caption it live in every open UI. Every argument is optional, and it
    is ephemeral and advisory — it never writes the brain.
+
+7. **`brain_contract({brain?})`** — what this bundle must satisfy for
+   brainpick to work, as data: every requirement with its `id`, whether it is
+   met, what it means and why it matters, plus a `fix` for each unmet one.
+   Always exposed, read-only.
+
+## What brainpick requires of a bundle
+
+An implant is deliberately free to choose its own folder layout, file naming
+and memory types — that freedom is the point, and engines never report a
+project's layout as a defect. What brainpick actually needs is short, and
+`brain_contract` announces it rather than making you read the source:
+
+| `id` | Required | What |
+|------|----------|------|
+| `bundle-root` | yes | a directory holding `brainpick.toml`, or named by `--root` |
+| `manifest` | yes | `.brainpick/manifest.json`, valid JSON, from `brainpick compile` |
+| `artifacts` | yes | the `t1/` artifacts the manifest names, readable |
+| `fresh` | no | artifacts newer than the sources they were compiled from |
+| `frontmatter` | no | docs carry OKF frontmatter; `type` is the one MUST |
+| `brain-format` | no | `[brain] format` — absent means a wiki, which is legitimate |
+
+It is `brainpick doctor` for agents rather than humans: doctor prints ✓/✗
+lines to a terminal, and an agent operating a brain over MCP cannot read
+them. Call it when a brain reports unreadable, or before wiring a new
+implant.
+
+## Sync: pulling and pushing shared memory
+
+A brain is shared memory held in Git, so the checkout drifts — another agent
+commits between two of your calls, another machine edits the same journal on
+the same day. Three verbs close that gap without exposing git itself:
+
+- **`brain_status({brain?})`** — ahead, behind, dirty, conflicted. Read-only.
+- **`brain_sync({brain?})`** — fetch, merge, resolve what collides **doc-wise**
+  through the same proposal ladder [guarded writes](guarded-writes.md) uses,
+  recompile. Commits nothing: merged docs are proposals to review, unresolved
+  ones come back with both versions.
+- **`brain_push({message, brain?})`** — compile, run the henxels contract,
+  stage the bundle, commit, push.
+
+Two guarantees are worth stating plainly. **No conflict markers ever reach a
+doc** — `<<<<<<<` inside frontmatter is invalid YAML, which fails the contract
+and the compile for every later reader, so an unresolvable doc is reported
+with both versions instead of mangled. And **a clean merge is not a reviewed
+merge**: two agents can each append a true fact and produce a page that says
+two contradictory things, so sync resolves structure and leaves truth to a
+reader.
+
+`brain_push` runs the contract *itself* rather than trusting the git hook.
+The henxels-managed hook warns and exits 0 when it cannot resolve the
+`henxels` executable — reasonable for a human at a terminal, dangerous for an
+MCP server, which is the process most likely to have a stripped PATH. A push
+whose contract was skipped is not a verified push, so "could not run" is a
+refusal, not a pass.
+
+These three are gated by `[serve] git = off | status | sync | push`,
+**default `off`**: upgrading adds no git capability, and a tool outside the
+configured level is absent from `tools/list` rather than refusing when
+called.
 
 ## Every call sees the current brain
 

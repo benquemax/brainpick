@@ -15,6 +15,63 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.0
+    date: 2026-09-19
+    brain_format: 3
+    summary: >-
+      A brain can now be operated entirely over MCP: `brain_status`,
+      `brain_sync` and `brain_push` share a checkout without shelling out to
+      git, `brain_contract` announces what a bundle must satisfy, and a
+      federated set finally reports version/format skew and brains it cannot
+      read. Sync is gated by the new `[serve] git`, default off.
+    changes:
+      - kind: added
+        area: mcp
+        text: >-
+          `brain_status` / `brain_sync` / `brain_push` (spec/100). Sync resolves
+          conflicts DOC-WISE through the same proposal ladder `brain_write`
+          already uses — git's merge index stages 1/2/3 are exactly its
+          base/ours/theirs — so conflict markers never reach a doc, where they
+          would be invalid YAML that fails the contract and the compile for
+          every later reader. Sync commits nothing: a clean merge is precisely
+          the case where nobody read the text. Push runs the henxels contract
+          itself rather than trusting the hook, which warns and exits 0 when it
+          cannot find the executable; "could not run" is a refusal, not a pass.
+        agent_action: >-
+          Set `[serve] git = "push"` in brainpick.toml to enable them (default
+          `off`; `status` and `sync` are the read-only and resolve-only rungs).
+          Then prefer brain_sync/brain_push over shelling out to git, which
+          lets the session stay sandboxed.
+      - kind: added
+        area: mcp
+        text: >-
+          `brain_contract` announces the requirements a bundle must satisfy as
+          data — id, whether it is met, what it means, why it matters, and a fix
+          for each unmet one. Folder layout, naming and memory types stay the
+          project's choice; this is the small floor underneath them, so a broken
+          implant can be fixed without reading brainpick's source. Always
+          exposed, read-only.
+        agent_action: >-
+          Call `brain_contract` when a brain reports unreadable, or before
+          wiring a new implant into a federated set.
+      - kind: fixed
+        area: mcp
+        text: >-
+          A federated set under-reported in two ways. Nothing compared brains,
+          so an implant stamped at format 2 under a format-3 cortex looked
+          identical to a current one — an agent could read format-3 conventions
+          and file knowledge into an implant that does not follow them, with no
+          error and no compile failure. `brain_overview` now carries `version`
+          and `format` per brain plus a `skew` block whose hint leads. And a
+          brain that could not be read either threw (a corrupt manifest or a
+          permissions error took the whole set down, cortex included) or was
+          silently invented as a phantom one-doc brain. It is now named with a
+          reason in `unreadable`, reported as null rather than 0, and every
+          other brain still answers.
+        agent_action: >-
+          If `brain_overview` reports `skew`, verify where a doc belongs before
+          writing to a brain that is behind; if it reports `unreadable`, run
+          `brainpick compile --root <root>` on the named brain.
   - version: 0.7.1
     date: 2026-09-18
     brain_format: 3
