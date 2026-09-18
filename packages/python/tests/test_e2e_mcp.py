@@ -60,9 +60,11 @@ async def _scenario(root):
             await session.initialize()
 
             tools = {t.name for t in (await session.list_tools()).tools}
+            # brain_contract is always exposed (spec/100); the sync verbs are not,
+            # because [serve] git defaults to off.
             assert tools == {
                 "brain_overview", "brain_search", "brain_read", "brain_neighbors",
-                "brain_write", "brain_show",
+                "brain_write", "brain_show", "brain_contract",
             }
 
             overview = await _call(session, "brain_overview", {})

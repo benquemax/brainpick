@@ -677,10 +677,33 @@ def test_brain_show_registered_as_sixth_tool_even_when_writes_refused(kotiaurink
     # write_refusal is set, yet brain_show is present — a presentation is not a write
     server = create_mcp_server(state, write_refusal="writes off")
     tools = asyncio.run(server.list_tools())
+    # brain_contract is read-only and always exposed (spec/100): a bundle that cannot
+    # be read is exactly when an agent needs to ask what was expected. The sync verbs
+    # are absent because [serve] git defaults to off.
     assert {t.name for t in tools} == {
         "brain_overview", "brain_search", "brain_read",
-        "brain_neighbors", "brain_write", "brain_show",
+        "brain_neighbors", "brain_write", "brain_show", "brain_contract",
     }
+
+
+def test_sync_tools_appear_only_at_their_serve_git_level(kotiaurinko):
+    """spec/100: the ladder off|status|sync|push. A tool outside the level is ABSENT
+    from tools/list — an unavailable capability is invisible, not a runtime refusal."""
+    import asyncio
+
+    from brainpick.mcp_server import create_mcp_server
+
+    def names(level):
+        state = make_state(kotiaurinko)
+        state.config.serve.git = level
+        return {t.name for t in asyncio.run(create_mcp_server(state).list_tools())}
+
+    assert not {"brain_status", "brain_sync", "brain_push"} & names("off")
+    assert "brain_status" in names("status")
+    assert not {"brain_sync", "brain_push"} & names("status")
+    assert {"brain_status", "brain_sync"} <= names("sync")
+    assert "brain_push" not in names("sync")
+    assert {"brain_status", "brain_sync", "brain_push"} <= names("push")
 
 
 def test_overview_update_notice_is_absent_without_one_and_leads_the_hint_with_one(kotiaurinko):

@@ -5,13 +5,15 @@ a transport; create_mcp_server() wraps them in a FastMCP for stdio and /mcp alik
 """
 from __future__ import annotations
 
+import json
 import os
 import posixpath
 import re
 import subprocess
 from datetime import datetime, timezone
+from pathlib import Path
 
-from brainpick.compile.pipeline import _atomic_write
+from brainpick.compile.pipeline import _atomic_write, check_fresh, run_compile
 from brainpick.compile.t1 import BEGIN_PREFIX, END_MARKER, top_ghosts
 from brainpick.compile.todos import todo_counts
 from brainpick.core.bundle import ALWAYS_EXCLUDED_DIRS
@@ -34,6 +36,7 @@ from brainpick.merge import find_base, resolve
 from brainpick.query.keyword import tokenize
 from brainpick.query.router import KNOWN_MODES, run_search
 from brainpick.serve.state import ServeState, bfs_neighborhood, jsonable, resolve_doc
+from brainpick.sync import git_status, push_brain, sync_brain
 from brainpick.serve.watcher import recompile_and_broadcast
 WRITES_OFF_REFUSAL = (
     'writes are disabled here — set [serve] writes = "guarded" in brainpick.toml to enable brain_write'
@@ -1032,6 +1035,139 @@ def write_payload(target, doc: str, content: str, mode: str = "create",
     return result
 
 
+def _requirement(rid: str, required: bool, satisfied: bool, what: str, why: str,
+                 detail: str | None = None, fix: str | None = None) -> dict:
+    out = {"id": rid, "required": required, "satisfied": satisfied, "what": what, "why": why}
+    if not satisfied:
+        if detail:
+            out["detail"] = detail
+        if fix:
+            out["fix"] = fix
+    return out
+
+
+def contract_payload(target, compile_first: bool = True) -> dict:
+    """spec/100 brain_contract: the requirements a bundle must satisfy, as data.
+
+    Reporting that a brain is unreadable says what is wrong, never what right
+    looks like. An implant is deliberately free to choose its own folder layout,
+    naming and memory types — so the small, stable floor brainpick actually needs
+    has to be announceable, or every fix starts by reading brainpick's source.
+    This is `brainpick doctor` for agents rather than humans.
+    """
+    # NOT via _fresh(): adopting a compile reads the manifest, and a corrupt
+    # manifest is precisely a condition this tool exists to diagnose. It must
+    # survive every bundle state, including the broken ones.
+    try:
+        state = _fresh(target)
+    except Exception:  # noqa: BLE001
+        state = target
+    brain_set = _as_set(state)
+    if brain_set is not None:
+        brain = brain_set.focus
+        state, reason = brain_set.readable_state_for(brain)
+        root, alias = brain.root, brain.alias
+        if state is None:
+            return {"brain": alias, "satisfied": False, "requirements": [
+                _requirement("bundle-root", True, False,
+                             "a directory holding brainpick.toml, or passed as --root",
+                             "the engine reads config only in exactly that directory — "
+                             "no upward walk", reason, f"brainpick compile --root {root}")],
+                "hint": f"{alias} could not be read: {reason}."}
+    else:
+        root, alias = Path(state.root), Path(state.root).name
+
+    if compile_first:
+        try:
+            run_compile(root, config=state.config)
+            state.load()
+        except Exception:  # noqa: BLE001 — a failed compile shows up as an unmet requirement
+            pass
+
+    reqs: list[dict] = []
+    reqs.append(_requirement(
+        "bundle-root", True, root.is_dir(),
+        "a directory holding brainpick.toml, or passed as --root",
+        "the engine reads config only in exactly that directory — no upward walk",
+        None if root.is_dir() else "the bundle root does not exist",
+        f"brainpick compile --root {root}"))
+
+    manifest_path = root / ".brainpick" / "manifest.json"
+    manifest, manifest_detail = None, None
+    if not manifest_path.is_file():
+        manifest_detail = "no .brainpick/manifest.json — this bundle was never compiled"
+    else:
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except ValueError:
+            manifest_detail = "manifest.json is not valid JSON"
+        except OSError as error:
+            manifest_detail = f"manifest.json could not be read ({error.strerror or error})"
+    reqs.append(_requirement(
+        "manifest", True, manifest is not None,
+        ".brainpick/manifest.json, valid JSON, written by `brainpick compile`",
+        "the manifest is the handoff between the compiler and every reader",
+        manifest_detail, f"brainpick compile --root {root}"))
+
+    missing = []
+    if manifest is not None:
+        for rel in ("t1/graph.json", "t1/docs.jsonl"):
+            if not (root / ".brainpick" / rel).is_file():
+                missing.append(rel)
+    reqs.append(_requirement(
+        "artifacts", True, manifest is not None and not missing,
+        "the t1/ artifacts the manifest names, readable",
+        "every read — search, overview, neighbors — is served from them, not from the "
+        "markdown",
+        f"missing: {', '.join(missing)}" if missing else
+        (None if manifest is not None else "no manifest, so no artifacts to check"),
+        f"brainpick compile --root {root}"))
+
+    try:
+        verdict = check_fresh(root, state.config)
+        fresh_ok, fresh_detail = verdict.fresh, (None if verdict.fresh else verdict.reason)
+    except Exception as error:  # noqa: BLE001
+        fresh_ok, fresh_detail = False, str(error)
+    reqs.append(_requirement(
+        "fresh", False, fresh_ok,
+        "artifacts newer than the sources they were compiled from",
+        "a stale read is indistinguishable from a correct one at the call site",
+        fresh_detail, f"brainpick compile --root {root}"))
+
+    typed = sum(1 for rec in getattr(state, "records", []) if (rec.get("type") or "").strip())
+    total = len(getattr(state, "records", []) or [])
+    reqs.append(_requirement(
+        "frontmatter", False, total == 0 or typed == total,
+        "docs carry OKF frontmatter; `type` is the one MUST",
+        "a doc without it still compiles, but ranks and groups as an unknown — "
+        "layout is yours, this is what it costs",
+        None if total == 0 or typed == total else f"{total - typed} of {total} docs have no `type`",
+        "add `type:` to the frontmatter of the docs listed by `brainpick doctor`"))
+
+    fmt = getattr(getattr(state.config, "brain", None), "format", 0)
+    reqs.append(_requirement(
+        "brain-format", False, bool(fmt),
+        "[brain] format — absent means a wiki, which is legitimate",
+        "the format decides where knowledge goes: journal paths, and whether "
+        "conventions exist at all",
+        None if fmt else "no [brain] section — this bundle is a wiki, not a brain",
+        "add [brain] format = 3 to brainpick.toml (brainpick migrate --to 3)"))
+
+    unmet = [r for r in reqs if r["required"] and not r["satisfied"]]
+    advisory = [r for r in reqs if not r["required"] and not r["satisfied"]]
+    if unmet:
+        hint = (f"{len(unmet)} of {len([r for r in reqs if r['required']])} required "
+                f"requirements unmet: {', '.join(r['id'] for r in unmet)} — "
+                f"{unmet[0].get('fix', 'see `what` and `why`')}.")
+    elif advisory:
+        hint = (f"every required requirement is met; {len(advisory)} optional one(s) "
+                f"open ({', '.join(r['id'] for r in advisory)}) — layout is yours, "
+                f"these are the only things brainpick needs.")
+    else:
+        hint = "every requirement is met."
+    return {"brain": alias, "satisfied": not unmet, "requirements": reqs, "hint": hint}
+
+
 def show_payload(target, nodes: list[str] | None = None, focus: str | None = None,
                  mode: str | None = None, annotation: str | None = None,
                  clear: bool = False) -> dict:
@@ -1163,6 +1299,57 @@ def create_mcp_server(state, write_refusal: str | None = None):
     def _focus_state() -> ServeState:
         brain_set = _as_set(state)
         return state if brain_set is None else brain_set.state_for(brain_set.focus)
+
+    def _brain_state(brain: str | None) -> ServeState:
+        """The one brain a sync verb acts on — never a set: each brain is a separate
+        repository with a separate remote and a separate right to refuse (spec/100)."""
+        brain_set = _as_set(state)
+        if brain_set is None:
+            return state
+        target = (brain_set.by_alias(brain) if brain else None) or brain_set.focus
+        return brain_set.state_for(target)
+
+    @server.tool()
+    def brain_contract(brain: str | None = None) -> dict:
+        """What this bundle must satisfy for brainpick to work, as data: every
+        requirement with its id, whether it is met, what it means and why it matters
+        — plus a fix for each unmet one. Folder layout, file naming and memory types
+        are yours to choose; this is the small floor underneath them. Call it when a
+        brain reports unreadable, or before wiring a new implant."""
+        return contract_payload(_brain_state(brain))
+
+    # spec/100: the sync verbs are exposed by the [serve] git ladder
+    # (off | status | sync | push), default off — an upgrade adds no git capability.
+    # A tool outside the level is ABSENT from tools/list, never a runtime refusal.
+    git_level = getattr(_focus_state().config.serve, "git", "off")
+    levels = {"off": 0, "status": 1, "sync": 2, "push": 3}
+    allowed = levels.get(git_level, 0)
+
+    if allowed >= 1:
+        @server.tool()
+        def brain_status(brain: str | None = None) -> dict:
+            """Where this brain's checkout stands against its remote: ahead, behind,
+            dirty, conflicted. Read-only — fetches, never merges or commits. Run it
+            before answering from a brain another machine may have moved on."""
+            return git_status(_brain_state(brain).root)
+
+    if allowed >= 2:
+        @server.tool()
+        def brain_sync(brain: str | None = None, budget_tokens: int | None = None) -> dict:
+            """Pull the remote's work into this brain and resolve what collides,
+            doc-wise rather than line-wise, so no conflict markers ever reach a doc.
+            Commits NOTHING: merged docs are proposals to review, and unresolved ones
+            come back with both versions for you to reconcile with brain_write."""
+            return sync_brain(_brain_state(brain), budget_tokens)
+
+    if allowed >= 3:
+        @server.tool()
+        def brain_push(message: str, brain: str | None = None) -> dict:
+            """Publish this brain: compile, run its henxels contract, stage the
+            bundle, commit with your message, push. Refuses when behind (run
+            brain_sync first), when conflicts remain, or when the contract cannot be
+            run — an unverified push is not a push. Hooks always run."""
+            return push_brain(_brain_state(brain), message)
 
     @server.resource("brain://index")
     def brain_index() -> str:

@@ -10,6 +10,7 @@ import pytest
 
 from brainpick.config import load_config
 from brainpick.serve.state import ServeState
+from brainpick.mcp_server import contract_payload
 from brainpick.sync import (
     GitUnavailable,
     conflicted_paths,
@@ -66,6 +67,12 @@ def branch_of(root):
 
 def state_for(root):
     return ServeState(root, load_config(root))
+
+
+def run_compile_for(root):
+    from brainpick.compile.pipeline import run_compile
+
+    return run_compile(root, config=load_config(root))
 
 
 # -- run_git ---------------------------------------------------------------------------
@@ -459,3 +466,63 @@ def test_sync_leaves_no_markers_where_git_would_write_them(tmp_path):
     # both versions come back in the payload, so nothing is lost — the agent
     # reconciles from the report rather than from a mangled file.
     assert "line 8 THEIRS" in result["unresolved"][0]["theirs"]
+
+
+# -- brain_contract (spec/100) ---------------------------------------------------------
+
+
+def test_contract_announces_every_requirement(tmp_path):
+    """spec/100: the floor is announced as DATA, so a broken implant can be fixed
+    without reading brainpick's source."""
+    root = make_repo(tmp_path)
+    run_compile_for(root)
+    payload = contract_payload(state_for(root))
+
+    ids = [r["id"] for r in payload["requirements"]]
+    assert ids == ["bundle-root", "manifest", "artifacts", "fresh",
+                   "frontmatter", "brain-format"]
+    for req in payload["requirements"]:
+        assert set(req) >= {"id", "required", "satisfied", "what", "why"}
+    assert payload["satisfied"] is True
+
+
+def test_contract_reports_a_missing_manifest_with_its_fix(tmp_path):
+    root = make_repo(tmp_path)
+    payload = contract_payload(state_for(root), compile_first=False)
+    manifest = next(r for r in payload["requirements"] if r["id"] == "manifest")
+    assert manifest["required"] is True and manifest["satisfied"] is False
+    assert "brainpick compile" in manifest["fix"]
+    assert payload["satisfied"] is False
+
+
+def test_contract_reports_a_corrupt_manifest(tmp_path):
+    root = make_repo(tmp_path)
+    run_compile_for(root)
+    (root / ".brainpick" / "manifest.json").write_text("{not json", encoding="utf-8")
+    payload = contract_payload(state_for(root), compile_first=False)
+    manifest = next(r for r in payload["requirements"] if r["id"] == "manifest")
+    assert manifest["satisfied"] is False
+    assert "JSON" in manifest["detail"]
+
+
+def test_contract_never_reports_a_projects_layout_as_a_defect(tmp_path):
+    """Folder layout, file naming and memory types are the project's choice — an
+    implant is deliberately free to pick its own shape."""
+    root = make_repo(tmp_path)
+    (root / "WeirdFolder").mkdir()
+    (root / "WeirdFolder" / "Weird_Name.md").write_text(
+        "---\ntype: Concept\ntitle: W\ndescription: d\n---\n\n# W\n", encoding="utf-8")
+    run_compile_for(root)
+    payload = contract_payload(state_for(root), compile_first=False)
+    assert payload["satisfied"] is True
+    assert all("WeirdFolder" not in str(r.get("detail", "")) for r in payload["requirements"])
+
+
+def test_contract_optional_requirements_never_fail_the_whole(tmp_path):
+    """A wiki has no [brain] format; that is legitimate, not unmet-required."""
+    root = make_repo(tmp_path)
+    run_compile_for(root)
+    payload = contract_payload(state_for(root), compile_first=False)
+    fmt = next(r for r in payload["requirements"] if r["id"] == "brain-format")
+    assert fmt["required"] is False
+    assert payload["satisfied"] is True  # satisfied tracks the REQUIRED floor
