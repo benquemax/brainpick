@@ -15,6 +15,41 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.7.1
+    date: 2026-09-18
+    brain_format: 3
+    summary: >-
+      Every MCP tool call observes the artifacts on disk. A `brainpick mcp`
+      server used to load its state once at spawn and never look again, so
+      after a `git pull` + `brainpick compile` the `brain_*` tools answered
+      from a pre-pull snapshot for the rest of the session — silently, because
+      a stale read looks exactly like a correct one.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          Tool calls adopt an out-of-process compile (spec/70 *Freshness*).
+          `brainpick serve` runs a filesystem watcher; the stdio path ran
+          nothing, and `brain_write` refreshed only for its own writes — so a
+          `git pull`, a CLI compile, another agent or another machine all went
+          unseen. Every read now compares `.brainpick/manifest.json` against
+          the manifest behind the held artifacts and, when they differ, adopts
+          the compile and emits the delta. An unchanged manifest costs one
+          stat; adoption never compiles, because the manifest is the handoff.
+          Federated sets adopt each loaded brain on the calls that touch it.
+        agent_action: >-
+          Upgrade every host running `brainpick mcp` (a long-lived agent-host
+          server is exactly the case this fixes). Until a host is upgraded,
+          restart its MCP server after pulling a brain, or read through the
+          CLI — `brainpick overview` and `brainpick search` were never stale.
+      - kind: fixed
+        area: cli
+        text: >-
+          The `/api/health` e2e test in both engines asserted a hardcoded
+          version string, so releasing turned the suite red rather than a
+          regression doing it. Both now read the version from the package
+          under test — the same source the endpoint answers from.
+
   - version: 0.7.0
     date: 2026-09-14
     brain_format: 3
