@@ -46,6 +46,7 @@ is the reference implementation) and the diffs are reviewed like code.
 | `85-brain-format.md` | the brain format — `_brain/` layout, memory-type folders, `[brain]` config, `brain://` links, format versioning |
 | `90-timeline.md` | `timeline.json` (the Time Machine history dimension) |
 | `95-presentations.md` | `brain_show` — agent-driven UI presentations (live spotlight/focus/annotate) |
+| `100-sync.md` | `brain_status` / `brain_sync` / `brain_push` — pulling and pushing shared memory from the tools · **PROPOSED, not implemented** |
 | `releases.yaml` | the release ledger — what each version changed and what an agent does about it (spec/80 *The release ledger*) |
 | `schemas/` | JSON Schemas for normative artifacts and messages |
 | `fixtures/` | bundles + golden expected artifacts + delta scenarios |
