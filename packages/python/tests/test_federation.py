@@ -1,6 +1,7 @@
 """Federation (spec/75): many brains behind one MCP server — the registry, the
 brain set, aliases, qualified paths, scope, merged search, routed reads."""
 import json
+import os
 import shutil
 import subprocess
 
@@ -15,6 +16,7 @@ from brainpick.federation import (
     parse_scope,
     qualify,
     register_brain,
+    relative_root,
     resolve_brain_set,
     split_qualified,
     unregister_brain,
@@ -29,6 +31,14 @@ from brainpick.mcp_server import (
 )
 
 from conftest import FIXTURE_BUNDLES
+
+
+def run_compile_quiet(root):
+    """Compile a fixture whose CompileResult the test does not inspect."""
+    from brainpick.compile.pipeline import run_compile
+
+    return run_compile(root)
+
 
 NEW_DOC = (
     "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
@@ -562,3 +572,200 @@ def test_federated_reads_adopt_out_of_process_compiles_per_brain(tmp_path):
     assert overview_payload(brain_set)["counts"]["docs"] == before + 1
     hits = search_payload(brain_set, "Uusi kivi")["hits"]
     assert any(h["path"] == "aurinko:uusi.md" for h in hits)
+
+
+# -- version and format skew (spec/100) ------------------------------------------------
+
+
+def _stamp(root, *, version=None, fmt=None):
+    """Set a brain's compiled-by version and/or its declared [brain] format."""
+    if version is not None:
+        manifest_path = root / ".brainpick" / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["generator"]["version"] = version
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    if fmt is not None:
+        toml = root / "brainpick.toml"
+        text = toml.read_text(encoding="utf-8") if toml.exists() else ""
+        toml.write_text(f"{text}\n[brain]\nformat = {fmt}\n", encoding="utf-8")
+
+
+def test_brains_listing_carries_version_and_format(tmp_path):
+    """spec/75: every entry reports who compiled it and what format it is, always
+    present — null when unknown, so a silent gap is impossible to mistake."""
+    brain_set = make_set(tmp_path)
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    _stamp(brain_set.by_alias("aurinko").root, version="0.7.1", fmt=3)
+    _stamp(brain_set.by_alias("kirja").root, version="0.7.1", fmt=3)
+
+    listing = {b["alias"]: b for b in overview_payload(brain_set)["brains"]}
+    assert listing["aurinko"]["version"] == "0.7.1"
+    assert listing["aurinko"]["format"] == 3
+    assert set(listing["kirja"]) >= {"alias", "role", "here", "root", "docs",
+                                     "tiers", "version", "format"}
+
+
+def test_uniform_set_reports_no_skew(tmp_path):
+    """A healthy set costs nothing: `skew` is omitted entirely."""
+    brain_set = make_set(tmp_path)
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+        _stamp(brain.root, version="0.7.1", fmt=3)
+
+    assert "skew" not in overview_payload(brain_set)
+
+
+def test_format_skew_is_reported_and_leads_the_hint(tmp_path):
+    """spec/100: a format-2 implant under a format-3 cortex is named, and the
+    warning leads the hint — a rule read from the wrong format is worse than an
+    unread rule."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    _stamp(brain_set.by_alias("kirja").root, version="0.7.1", fmt=3)
+    _stamp(brain_set.by_alias("aurinko").root, version="0.7.1", fmt=2)
+
+    payload = overview_payload(brain_set)
+    skew = payload["skew"]
+    assert skew["format"] == {"latest": 3, "behind": [{"alias": "aurinko", "format": 2}]}
+    assert "version" not in skew  # engines agree; only the format differs
+    assert payload["hint"].startswith(skew["hint"])
+    assert "aurinko" in skew["hint"] and "migrate --to 3" in skew["hint"]
+
+
+def test_version_skew_is_reported(tmp_path):
+    """An implant last compiled by an older engine is named, worst first."""
+    brain_set = make_set(tmp_path)
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+        _stamp(brain.root, fmt=3)
+    _stamp(brain_set.by_alias("kirja").root, version="0.7.1")
+    _stamp(brain_set.by_alias("aurinko").root, version="0.6.2")
+
+    skew = overview_payload(brain_set)["skew"]
+    assert skew["version"] == {"latest": "0.7.1",
+                               "behind": [{"alias": "aurinko", "version": "0.6.2"}]}
+    assert "format" not in skew
+
+
+def test_a_wiki_in_the_set_is_never_reported_as_skewed(tmp_path):
+    """A bundle that is not a brain has no format to be behind (format null);
+    mounting a wiki beside a brain is legitimate, not a defect."""
+    brain_set = make_set(tmp_path)
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+        _stamp(brain.root, version="0.7.1")
+    _stamp(brain_set.by_alias("kirja").root, fmt=3)  # aurinko stays a wiki
+
+    payload = overview_payload(brain_set)
+    listing = {b["alias"]: b for b in payload["brains"]}
+    assert listing["aurinko"]["format"] is None
+    assert "skew" not in payload
+
+
+def test_single_brain_never_reports_skew(tmp_path):
+    """Skew is a property of a SET; one brain is never behind itself."""
+    root = copy_bundle(tmp_path, "kotiaurinko")
+    run_compile_quiet(root)
+    _stamp(root, version="0.6.2", fmt=2)
+    assert "skew" not in overview_payload(BrainSet([Brain(alias="solo", root=root)]))
+
+
+# -- an implant that cannot be read (spec/100) -----------------------------------------
+
+
+def test_unreadable_implant_is_named_and_never_fails_the_set(tmp_path):
+    """spec/100: loud AND isolated. A corrupt manifest used to raise out of
+    overview_payload, taking the cortex down with it — the agent then cannot
+    reach the brain it needs in order to fix the broken one."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    broken = brain_set.by_alias("aurinko")
+    (broken.root / ".brainpick" / "manifest.json").write_text("{not json", encoding="utf-8")
+
+    payload = overview_payload(brain_set)
+    assert payload["counts"]["docs"] > 0  # the healthy cortex still answers
+    assert payload["unreadable"] == [
+        {"alias": "aurinko", "root": relative_root(broken.root),
+         "reason": "manifest.json is not valid JSON"}]
+    assert payload["hint"].startswith("1 brain could not be read")
+    assert "aurinko" in payload["hint"] and "brainpick compile" in payload["hint"]
+
+
+def test_unreadable_implant_is_not_reported_as_an_empty_brain(tmp_path):
+    """An engine must not substitute docs: 0 for a brain it could not read — that
+    is indistinguishable from a genuinely empty brain."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    broken = brain_set.by_alias("aurinko")
+    (broken.root / ".brainpick" / "manifest.json").write_text("{not json", encoding="utf-8")
+
+    listing = {b["alias"]: b for b in overview_payload(brain_set)["brains"]}
+    assert listing["aurinko"]["docs"] is None       # unknown, not zero
+    assert listing["aurinko"]["unreadable"] is True
+    assert listing["kirja"]["unreadable"] is False
+
+
+def test_vanished_implant_root_is_reported_not_invented(tmp_path):
+    """A brain whose root no longer exists used to compile itself into a phantom
+    one-doc bundle. Absent is unreadable, not empty."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    shutil.rmtree(brain_set.by_alias("aurinko").root)
+
+    payload = overview_payload(brain_set)
+    assert [u["alias"] for u in payload["unreadable"]] == ["aurinko"]
+    assert "does not exist" in payload["unreadable"][0]["reason"]
+    assert payload["counts"]["docs"] > 0
+
+
+def test_search_answers_from_the_healthy_brains(tmp_path):
+    """spec/100: fan-out degrades per brain, never per set."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    (brain_set.by_alias("aurinko").root / ".brainpick" / "manifest.json").write_text(
+        "{not json", encoding="utf-8")
+
+    result = search_payload(brain_set, "kirja")
+    assert [u["alias"] for u in result["unreadable"]] == ["aurinko"]
+    assert all(h["path"].startswith("kirja:") for h in result["hits"])
+
+
+def test_a_healed_brain_clears_itself(tmp_path):
+    """No sticky error state: spec/70 Freshness re-observes on the next call."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    broken = brain_set.by_alias("aurinko")
+    manifest = broken.root / ".brainpick" / "manifest.json"
+    good = manifest.read_text(encoding="utf-8")
+    manifest.write_text("{not json", encoding="utf-8")
+    assert overview_payload(brain_set)["unreadable"]
+
+    manifest.write_text(good, encoding="utf-8")
+    assert "unreadable" not in overview_payload(brain_set)
+
+
+@pytest.mark.skipif(getattr(os, "geteuid", lambda: 1)() == 0,
+                    reason="root bypasses filesystem permissions")
+def test_permission_denied_implant_degrades_instead_of_raising(tmp_path):
+    """Path.exists() reports False on EACCES, so a permission-denied bundle used to
+    slip past the guard and raise PermissionError out of the whole set."""
+    brain_set = make_set(tmp_path, here="kirja")
+    for brain in brain_set.brains:
+        run_compile_quiet(brain.root)
+    broken = brain_set.by_alias("aurinko")
+    broken.root.chmod(0o000)
+    try:
+        payload = overview_payload(brain_set)
+        assert payload["counts"]["docs"] > 0
+        assert payload["unreadable"] == [
+            {"alias": "aurinko", "root": relative_root(broken.root),
+             "reason": "permission denied reading the bundle"}]
+    finally:
+        broken.root.chmod(0o755)

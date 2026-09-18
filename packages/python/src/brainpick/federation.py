@@ -356,8 +356,54 @@ class BrainSet:
             brain.state = state
         return brain.state
 
+    def readable_state_for(self, brain: Brain):
+        """`state_for`, but a brain that cannot be read degrades instead of raising
+        (spec/100 *An implant that cannot be read*): → (state, None) or
+        (None, reason). One unreadable implant must never take the set down with
+        it — the cortex it hides is the knowledge needed to fix it."""
+        reason = self.unreadable_reason(brain)
+        if reason is not None:
+            return None, reason
+        try:
+            return self.state_for(brain), None
+        except Exception as error:  # noqa: BLE001 — degrade per brain, never per set
+            return None, describe_unreadable(error)
+
+    def unreadable_reason(self, brain: Brain) -> str | None:
+        """Why this brain cannot be read, in words an agent can act on — or None
+        when it is fine. Checked before any compile, because compiling an absent
+        or unreadable root is what used to invent a phantom brain."""
+        import json
+
+        if brain.state is not None:
+            return None
+        try:
+            if not brain.root.exists():
+                return "the bundle root does not exist"
+            if not brain.root.is_dir():
+                return "the bundle root is not a directory"
+            if not os.access(brain.root, os.R_OK | os.X_OK):
+                return "permission denied reading the bundle"
+        except OSError as error:  # Path.exists() masks EACCES as False; stat may still raise
+            return describe_unreadable(error)
+        path = brain.root / ".brainpick" / "manifest.json"
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None  # never compiled here — state_for compiles it, legitimately
+        except OSError as error:
+            return describe_unreadable(error)
+        try:
+            json.loads(raw)
+        except ValueError:
+            return "manifest.json is not valid JSON"
+        return None
+
     def manifest_of(self, brain: Brain) -> dict:
-        """Manifest only — what brain_overview's `brains` needs without loading."""
+        """Manifest only — what brain_overview's `brains` needs without loading.
+        Callers MUST consult `unreadable_reason` first: an empty dict here means
+        "no manifest yet", never "unreadable" (spec/100 forbids reporting a brain
+        that could not be read as an empty one)."""
         import json
 
         if brain.state is not None:
@@ -480,6 +526,85 @@ def qualify_paths(alias: str, obj, keys=("path", "source", "target", "center", "
                 out[key] = value
         return out
     return obj
+
+
+def describe_unreadable(error: Exception) -> str:
+    """An exception, as a phrase about the BUNDLE rather than about the engine
+    (spec/100): the agent reading it has to fix a repository, not debug a
+    traceback."""
+    if isinstance(error, PermissionError):
+        return "permission denied reading the bundle"
+    if isinstance(error, FileNotFoundError):
+        return "the bundle root does not exist"
+    if isinstance(error, ValueError):  # JSONDecodeError and friends
+        return "manifest.json is not valid JSON"
+    if isinstance(error, OSError):
+        return f"the bundle could not be read ({error.strerror or 'I/O error'})"
+    return "the bundle could not be read"
+
+
+def skew_of(entries: list[dict]) -> dict | None:
+    """spec/100: the version/format disagreement across a SET, or None when it is
+    uniform. `entries` are the `brains` listing rows. A null value is unknown, not
+    behind — a wiki has no format, an uncompiled brain no version — and an
+    unreadable brain is excluded entirely (it is a louder problem, reported
+    separately)."""
+    from brainpick.releases import _core
+
+    result: dict = {}
+    rows = [e for e in entries if not e.get("unreadable")]
+
+    formats = [(e["alias"], e["format"]) for e in rows if isinstance(e.get("format"), int)]
+    if formats:
+        latest = max(f for _, f in formats)
+        behind = sorted(((a, f) for a, f in formats if f < latest), key=lambda p: (p[1], p[0]))
+        if behind:
+            result["format"] = {"latest": latest,
+                                "behind": [{"alias": a, "format": f} for a, f in behind]}
+
+    # A version that does not parse is unknown, not behind — never guess an order.
+    versions = [(e["alias"], e["version"], _core(e["version"])) for e in rows
+                if isinstance(e.get("version"), str)]
+    versions = [(a, v, c) for a, v, c in versions if c is not None]
+    if versions:
+        top = max(c for _, _, c in versions)
+        latest_v = next(v for _, v, c in versions if c == top)
+        behind_v = sorted(((a, v, c) for a, v, c in versions if c < top),
+                          key=lambda row: (row[2], row[0]))
+        if behind_v:
+            result["version"] = {"latest": latest_v,
+                                 "behind": [{"alias": a, "version": v} for a, v, _ in behind_v]}
+
+    if not result:
+        return None
+    parts = []
+    if "format" in result:
+        names = ", ".join(b["alias"] for b in result["format"]["behind"])
+        latest = result["format"]["latest"]
+        one = len(result["format"]["behind"]) == 1
+        at = (f"is at {result['format']['behind'][0]['format']}" if one else "are behind")
+        parts.append(
+            f"brain format skew: {names} {at}, this set is at {latest} — conventions and "
+            f"journal paths differ between them; verify where a doc belongs before writing "
+            f"to {names} (brainpick migrate --to {latest})")
+    if "version" in result:
+        names = ", ".join(b["alias"] for b in result["version"]["behind"])
+        parts.append(
+            f"engine skew: {names} last compiled by an older brainpick than "
+            f"{result['version']['latest']} — recompile with the current engine "
+            f"(brainpick compile)")
+    result["hint"] = "; ".join(parts) + "."
+    return result
+
+
+def unreadable_hint(unreadable: list[dict]) -> str:
+    """spec/100: the loud half. Names every brain that could not be read and the
+    one command that fixes it."""
+    n = len(unreadable)
+    names = ", ".join(f"{u['alias']} ({u['reason']})" for u in unreadable)
+    roots = " ".join(f"--root {u['root']}" for u in unreadable[:1])
+    return (f"{n} brain{'s' if n != 1 else ''} could not be read: {names}. "
+            f"Other brains still answer; fix with `brainpick compile {roots}`.")
 
 
 def relative_root(root: Path, cwd: str | Path | None = None) -> str:

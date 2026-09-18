@@ -25,7 +25,9 @@ from brainpick.federation import (
     qualify,
     qualify_paths,
     relative_root,
+    skew_of,
     split_qualified,
+    unreadable_hint,
 )
 from brainpick.llm import make_chat
 from brainpick.merge import find_base, resolve
@@ -770,19 +772,47 @@ def _strip_alias(brain_set: BrainSet, doc: str) -> str:
     return rel if alias is not None and brain_set.by_alias(alias) is not None else doc
 
 
-def _brains_listing(brain_set: BrainSet) -> list[dict]:
-    listing = []
+def _brain_format(brain) -> int | None:
+    """The brain's stamped [brain] format (spec/85), or None when the bundle is not
+    a brain — a wiki mounted in a set has no format and is never 'behind'."""
+    from brainpick.config import load_config
+
+    try:
+        config = brain.state.config if brain.state is not None else load_config(brain.root)
+    except Exception:  # noqa: BLE001 — an unreadable config is reported as unreadable
+        return None
+    fmt = getattr(getattr(config, "brain", None), "format", 0)
+    return fmt if isinstance(fmt, int) and fmt > 0 else None
+
+
+def _brains_listing(brain_set: BrainSet) -> tuple[list[dict], list[dict]]:
+    """(listing, unreadable) — spec/75 plus spec/100. A brain that cannot be read
+    reports docs/tiers/version/format as unknown (never 0, never {}), so a genuinely
+    empty brain and a broken one can never be confused."""
+    listing, unreadable = [], []
     for brain in brain_set.brains:
-        manifest = brain_set.manifest_of(brain)
-        listing.append({
+        reason = brain_set.unreadable_reason(brain)
+        entry = {
             "alias": brain.alias,
             "role": brain.role,
             "here": brain.here,
             "root": relative_root(brain.root),
-            "docs": len(manifest.get("files", {})),  # the same count as counts.docs
-            "tiers": manifest.get("tiers", {}),
-        })
-    return listing
+        }
+        if reason is not None:
+            unreadable.append({"alias": brain.alias, "root": entry["root"], "reason": reason})
+            entry.update({"docs": None, "tiers": None, "version": None, "format": None,
+                          "unreadable": True})
+        else:
+            manifest = brain_set.manifest_of(brain)
+            entry.update({
+                "docs": len(manifest.get("files", {})),  # the same count as counts.docs
+                "tiers": manifest.get("tiers", {}),
+                "version": (manifest.get("generator") or {}).get("version") or None,
+                "format": _brain_format(brain),
+                "unreadable": False,
+            })
+        listing.append(entry)
+    return listing, unreadable
 
 
 def overview_payload(target, budget_tokens: int | None = None, scope: str | None = None) -> dict:
@@ -794,11 +824,27 @@ def overview_payload(target, budget_tokens: int | None = None, scope: str | None
 
     chosen, dropped = parse_scope(brain_set, scope)
     focus = chosen[0] if scope and chosen and len(chosen) < len(brain_set.brains) else brain_set.focus
-    result = _single_overview(brain_set.state_for(focus), budget_tokens)
+    # The focus itself may be the broken one — fall back to a readable brain so the
+    # set still answers (spec/100: degradation is per brain, never per set).
+    if brain_set.unreadable_reason(focus) is not None:
+        healthy = next((b for b in brain_set.brains
+                        if brain_set.unreadable_reason(b) is None), None)
+        if healthy is not None:
+            focus = healthy
+    focus_state, focus_reason = brain_set.readable_state_for(focus)
+    # Load the focus BEFORE listing: state_for compiles a brain that was never
+    # compiled, and the listing reads each brain's manifest (docs, tiers, version).
+    listing, unreadable = _brains_listing(brain_set)
+    if focus_state is None:  # every brain in the set is unreadable
+        broken = unreadable or [{"alias": focus.alias, "root": relative_root(focus.root),
+                                 "reason": focus_reason}]
+        return {"brains": listing, "unreadable": broken, "bundle": focus.alias,
+                "counts": {}, "tiers": {}, "hint": unreadable_hint(broken)}
+    result = _single_overview(focus_state, budget_tokens)
     result = qualify_paths(focus.alias, result)
     result["bundle"] = focus.alias
     result["top_ghosts"] = [dict(g, target=qualify(focus.alias, g["target"])) for g in result["top_ghosts"]]
-    result["brains"] = _brains_listing(brain_set)
+    result["brains"] = listing
     note = f"unknown scope '{', '.join(dropped)}' ignored. " if dropped else ""
     aliases = ", ".join(b.alias for b in brain_set.brains)
     result["hint"] = (note + f"{len(brain_set.brains)} brains ({aliases}) — tree shows '{focus.alias}'; "
@@ -806,6 +852,15 @@ def overview_payload(target, budget_tokens: int | None = None, scope: str | None
                       "paths are alias:path.")
     if result["truncated"]:
         result["hint"] += " Tree trimmed to fit budget_tokens."
+    # spec/100: skew leads the hint, and unreadable leads skew — a brain that cannot
+    # be read is a worse condition than one that is merely behind.
+    skew = skew_of(listing)
+    if skew is not None:
+        result["skew"] = skew
+        result["hint"] = f"{skew['hint']} " + result["hint"]
+    if unreadable:
+        result["unreadable"] = unreadable
+        result["hint"] = f"{unreadable_hint(unreadable)} " + result["hint"]
     ordered = {k: result[k] for k in ("brains",)}
     ordered.update({k: v for k, v in result.items() if k != "brains"})
     return ordered
@@ -833,8 +888,16 @@ def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
     degraded = None
     mode_note = None
     contributing: list[str] = []
+    unreadable: list[dict] = []
     for order, brain in enumerate(chosen):
-        body = _single_search(brain_set.state_for(brain), query, mode, limit, budget_tokens=10**9, now=now)
+        # spec/100: a brain that cannot be read is reported, not raised — the rest
+        # of the set still answers.
+        brain_state, reason = brain_set.readable_state_for(brain)
+        if brain_state is None:
+            unreadable.append({"alias": brain.alias, "root": relative_root(brain.root),
+                               "reason": reason})
+            continue
+        body = _single_search(brain_state, query, mode, limit, budget_tokens=10**9, now=now)
         if body["hint"].startswith("unknown mode"):
             mode_note = body["hint"].split(". ", 1)[0] + ". "
         for m in body["used_modes"]:
@@ -870,6 +933,9 @@ def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
         hint = f"brain_read '{hits[0]['path']}' opens the best hit (paths are alias:path)."
     else:
         hint = f"no hits in {', '.join(b.alias for b in chosen)} — brain_overview lists every brain."
+    if unreadable:  # spec/100: loud on every call that touches the set
+        result["unreadable"] = unreadable
+        notes = unreadable_hint(unreadable) + " " + notes
     result["hint"] = notes + hint
     return result
 

@@ -177,6 +177,133 @@ Exposure rules, which are normative:
   each brain is a separate repository with a separate remote and a separate
   right to refuse.
 
+## Version and format skew across a set
+
+Sync makes divergence between *machines* visible. The same reasoning applies
+to divergence between *brains*: a set (spec/75) mounts a cortex and any
+number of implants, each its own repository, each compiled by whatever
+engine happened to run on whatever host last touched it. Nothing today
+compares them.
+
+Per brain the information already exists. Every `manifest.json` stamps
+`generator.version` (the engine that last compiled this bundle) and
+`spec_version`, and a brain stamps `[brain] format` in its config;
+`whats_new` (spec/80) already compares the running engine and the brain's
+format against the release ledger. The gap is that it is computed for ONE
+brain — the focus — and `brain_overview`'s `brains` listing carries
+`alias, role, here, root, docs, tiers` and no version at all. An implant
+last compiled by an older engine, or stamped at an older brain format,
+is reported identically to a current one.
+
+That silence is the dangerous part, and brain format is the sharper edge of
+it. The format decides where knowledge goes — which journal path, and
+whether `type: convention` docs exist at all. `brain_overview` presents
+conventions as standing rules that apply to the agent, but they are read
+from the focus brain; an agent that reads format-3 conventions and then
+writes to a format-2 implant files knowledge by rules that implant does not
+follow, into folders it does not use. Nothing errors, the compile succeeds,
+and the loss surfaces much later as knowledge nobody can find. A wrong
+answer indistinguishable from a right one at the call site is the same
+failure class spec/70 *Freshness* exists to prevent.
+
+### What engines MUST report
+
+`brain_overview`'s per-brain listing (spec/70, spec/75) gains two keys,
+both always present:
+
+- `version` — the manifest's `generator.version`, or `null` when the brain
+  has no manifest.
+- `format` — the brain's stamped `[brain] format`, or `null` when the
+  bundle is not a brain (a wiki mounted in a set is legitimate and is
+  never reported as skewed).
+
+When a set holds more than one brain and the non-null values of either key
+differ, the payload gains `skew`:
+
+```json
+{"skew": {"format": {"latest": 3, "behind": [{"alias": "proj", "format": 2}]},
+          "version": {"latest": "0.7.1",
+                      "behind": [{"alias": "proj", "version": "0.6.2"}]},
+          "hint": "…"}}
+```
+
+Each part is present only when that kind of skew exists; `skew` is omitted
+entirely when the set is uniform, so a healthy set costs nothing. `latest`
+is the highest value across the set (semantic comparison for `version`,
+spec/80 `[update] check`), `behind` lists every brain below it, worst
+first then by alias.
+
+`skew.hint` MUST lead `brain_overview`'s `hint` when present, ahead of the
+conventions line and behind only the engine's own update and what's-new
+notices — a rule read from the wrong format is worse than an unread rule.
+The format part is named first and states the risk in words, because the
+count alone does not carry it:
+
+> `brain format skew: proj is at 2, this set is at 3 — conventions and
+> journal paths differ between them; verify where a doc belongs before
+> writing to proj (brainpick migrate --to 3).`
+
+### What engines MUST NOT do
+
+- **Never refuse.** Skew is reported, never enforced. An agent that hits a
+  hard refusal mid-task cannot migrate a repository it may not own, and a
+  set that mixes formats is a legitimate, common, transitional state.
+  This mirrors spec/85's "engines MAY report a checkout that is behind its
+  remote" — reporting is the contract, acting is the agent's.
+- **Never migrate automatically**, for the reason `brain_sync` never
+  commits: a migration rewrites where knowledge lives, and no engine
+  should do that to a repository on an agent's behalf as a side effect of
+  a read.
+- **Never suppress a brain from results** because it is behind. A stale
+  implant's knowledge is still knowledge; the agent is told, and decides.
+
+## An implant that cannot be read
+
+Skew is a brain that is readable but behind. The harder case is a brain in
+the set that cannot be read at all: its root is gone, its permissions deny
+it, its `manifest.json` is truncated or corrupt. This is rare by design —
+OKF frontmatter is deliberately unpicky and folder layout is not part of
+the contract, so ordinary editing does not break a bundle — but rare
+failures that are silent are exactly the ones that rot, because nobody is
+watching for them.
+
+The requirement has two halves, and both matter:
+
+**Loud.** A brain in the set that fails to load MUST be reported, by alias,
+with the reason, on every tool call that touches the set. An engine MUST
+NOT substitute an empty or partial brain for one it could not read: a set
+that reports a broken implant as `docs: 0` is indistinguishable from a set
+holding a genuinely empty brain, and a set that omits it is
+indistinguishable from one where it was never mounted. Both hide the
+condition the agent must act on.
+
+**Isolated.** A broken brain MUST NOT fail the call. One unreadable implant
+that raises takes the whole set down — including the cortex, and including
+the very knowledge the agent needs to fix it. Every other brain in the set
+MUST still answer. Degradation is per brain, never per set; this is
+spec/00's disposability applied across a federation.
+
+`brain_overview` therefore carries `unreadable`, present only when
+non-empty:
+
+```json
+{"unreadable": [{"alias": "proj", "root": "~/Git/proj/docs",
+                 "reason": "manifest.json is not valid JSON"}]}
+```
+
+Its hint leads ahead of `skew` — a brain that cannot be read is a worse
+condition than one that is behind — and names the fix
+(`brainpick compile --root <root>`). Every other tool that fans out across
+the set (`brain_search`, spec/75) answers from the brains that loaded and
+reports the rest the same way, rather than failing. A brain that becomes
+readable again clears itself on the next call, since spec/70 *Freshness*
+already re-observes the manifest.
+
+`reason` is a short human-readable phrase, not a stack trace or an
+exception class. It exists to be read by the agent that must fix it, and
+it names what is wrong with the bundle — not what went wrong inside the
+engine.
+
 ## What this does not fix
 
 Two docs in the brain format are structural collision points: `log.md`

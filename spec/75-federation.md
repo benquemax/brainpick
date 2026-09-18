@@ -194,7 +194,8 @@ brain in the set, never budget-trimmed:
 
 ```json
 {"brains": [{"alias": "acme", "role": null, "here": true, "root": "docs",
-             "docs": 128, "tiers": {"t1": "fresh", "t2": "fresh", "t3": "fresh"}}],
+             "docs": 128, "tiers": {"t1": "fresh", "t2": "fresh", "t3": "fresh"},
+             "version": "0.7.1", "format": 3}],
  "bundle": "acme", "counts": {...}, "tiers": {...}, "tree": [...], ...}
 ```
 
@@ -203,6 +204,15 @@ brain in the set, never budget-trimmed:
 names exactly one brain, else `here`, else the first brain — with the tree's
 paths qualified. A scope naming several brains lists them in `brains` and
 focuses the first.
+
+`version` (the manifest's `generator.version`) and `format` (the stamped
+`[brain] format`) are always present, `null` when unknown or when the
+bundle is not a brain. Because the focus supplies every other field,
+`whats_new` (spec/80) describes the focus brain ALONE: an implant compiled
+by an older engine, or stamped at an older brain format, is otherwise
+reported identically to a current one. A set whose brains disagree
+therefore also carries `skew`, and its hint leads — see spec/100 *Version
+and format skew across a set*.
 
 ## The rest of the tools
 
