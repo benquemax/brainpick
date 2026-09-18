@@ -377,3 +377,17 @@ def test_misaimed_root_with_a_local_layer_only_stays_silent(tmp_path, recwarn):
     (tmp_path / "_brain" / "brainpick.local.toml").write_text("[index]\nmode = \"off\"\n")
     load_config(tmp_path / "_brain")  # a config layer IS present here — the user aimed on purpose
     assert not [w for w in recwarn if "did you mean" in str(w.message)]
+
+
+# -- [serve] git — the sync-tool gate (spec/100) ----------------------------------------
+
+
+def test_serve_git_defaults_to_off(tmp_path):
+    """spec/100: upgrading an existing deployment adds no git capability."""
+    assert load_config(tmp_path).serve.git == "off"
+
+
+def test_serve_git_reads_the_ladder(tmp_path):
+    (tmp_path / "brainpick.toml").write_text(
+        'spec = "0.1"\n[serve]\ngit = "sync"\n', encoding="utf-8")
+    assert load_config(tmp_path).serve.git == "sync"

@@ -42,6 +42,7 @@ export interface ServeConfig {
   transports: string[];
   watch: boolean;
   writes: string;
+  git: string; // off | status | sync | push — the sync tools (spec/100)
   token: string;
   max_asset_bytes: number; // 8 MiB default — the POST /api/assets upload cap (spec/50)
 }
@@ -151,6 +152,7 @@ export function defaultConfig(): Config {
       transports: ["streamable-http"],
       watch: true,
       writes: "guarded",
+      git: "off",
       token: "",
       max_asset_bytes: 8388608,
     },

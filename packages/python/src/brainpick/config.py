@@ -54,6 +54,7 @@ class ServeConfig:
     transports: list[str] = field(default_factory=lambda: ["streamable-http"])
     watch: bool = True
     writes: str = "guarded"
+    git: str = "off"    # off | status | sync | push — the sync tools (spec/100)
     token: str = ""
     max_asset_bytes: int = 8388608  # 8 MiB — the POST /api/assets upload cap (spec/50)
 
