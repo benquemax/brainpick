@@ -2,7 +2,7 @@
  * brain set, aliases, qualified paths, scope, merged search, routed reads.
  * The twin of packages/python/tests/test_federation.py. */
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -19,12 +19,14 @@ import {
   parseScope,
   qualify,
   registerBrain,
+  relativeRoot,
   resolveBrainSet,
   splitQualified,
   unregisterBrain,
   runRegister,
   scanHosts,
 } from "../src/federation";
+import { runCompile } from "../src/compile/pipeline";
 import {
   createMcpServer,
   neighborsPayload,
@@ -609,5 +611,169 @@ describe("migrating per-project host entries (spec/75 --from-hosts)", () => {
     lines.length = 0;
     expect(runRegister(null, { fromHosts: true, registryPath: registry, print, env: { HOME: join(dir, "empty") } })).toBe(0);
     expect(lines.join("\n")).toContain("no per-project");
+  });
+});
+
+// -- version/format skew and unreadable brains (spec/100) ---------------------
+
+/** Set a brain's compiled-by version and/or its declared [brain] format. */
+function stamp(root: string, opts: { version?: string; format?: number }): void {
+  if (opts.version !== undefined) {
+    const p = join(root, ".brainpick", "manifest.json");
+    const manifest = JSON.parse(readFileSync(p, "utf8")) as Record<string, any>;
+    manifest.generator.version = opts.version;
+    writeFileSync(p, JSON.stringify(manifest));
+  }
+  if (opts.format !== undefined) {
+    const toml = join(root, "brainpick.toml");
+    const text = existsSync(toml) ? readFileSync(toml, "utf8") : "";
+    writeFileSync(toml, `${text}\n[brain]\nformat = ${opts.format}\n`);
+  }
+}
+
+describe("skew across a set (spec/100)", () => {
+  test("the brains listing carries version and format", async () => {
+    const set = makeSet();
+    for (const b of set.brains) await runCompile(b.root);
+    for (const b of set.brains) stamp(b.root, { version: "0.7.1", format: 3 });
+
+    const listing = Object.fromEntries(
+      ((await overviewPayload(set)).brains as any[]).map((b) => [b.alias, b]),
+    );
+    expect(listing.aurinko.version).toBe("0.7.1");
+    expect(listing.aurinko.format).toBe(3);
+    expect(listing.kirja).toHaveProperty("unreadable", false);
+  });
+
+  test("a uniform set reports no skew", async () => {
+    const set = makeSet();
+    for (const b of set.brains) {
+      await runCompile(b.root);
+      stamp(b.root, { version: "0.7.1", format: 3 });
+    }
+    expect(await overviewPayload(set)).not.toHaveProperty("skew");
+  });
+
+  test("format skew is reported and leads the hint", async () => {
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    stamp(set.byAlias("kirja")!.root, { version: "0.7.1", format: 3 });
+    stamp(set.byAlias("aurinko")!.root, { version: "0.7.1", format: 2 });
+
+    const payload = await overviewPayload(set);
+    const skew = payload.skew as any;
+    expect(skew.format).toEqual({ latest: 3, behind: [{ alias: "aurinko", format: 2 }] });
+    expect(skew).not.toHaveProperty("version");
+    expect(payload.hint as string).toMatch(/^brain format skew: aurinko is at 2/);
+    expect(skew.hint).toContain("migrate --to 3");
+  });
+
+  test("version skew is reported", async () => {
+    const set = makeSet();
+    for (const b of set.brains) {
+      await runCompile(b.root);
+      stamp(b.root, { format: 3 });
+    }
+    stamp(set.byAlias("kirja")!.root, { version: "0.7.1" });
+    stamp(set.byAlias("aurinko")!.root, { version: "0.6.2" });
+
+    const skew = (await overviewPayload(set)).skew as any;
+    expect(skew.version).toEqual({ latest: "0.7.1", behind: [{ alias: "aurinko", version: "0.6.2" }] });
+    expect(skew).not.toHaveProperty("format");
+  });
+
+  test("a wiki in the set is never reported as skewed", async () => {
+    const set = makeSet();
+    for (const b of set.brains) {
+      await runCompile(b.root);
+      stamp(b.root, { version: "0.7.1" });
+    }
+    stamp(set.byAlias("kirja")!.root, { format: 3 });
+
+    const payload = await overviewPayload(set);
+    const listing = Object.fromEntries((payload.brains as any[]).map((b) => [b.alias, b]));
+    expect(listing.aurinko.format).toBeNull();
+    expect(payload).not.toHaveProperty("skew");
+  });
+});
+
+describe("an implant that cannot be read (spec/100)", () => {
+  test("is named, and never fails the set", async () => {
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    const broken = set.byAlias("aurinko")!;
+    writeFileSync(join(broken.root, ".brainpick", "manifest.json"), "{not json");
+
+    const payload = await overviewPayload(set);
+    expect((payload.counts as any).docs).toBeGreaterThan(0); // the cortex still answers
+    expect(payload.unreadable).toEqual([
+      { alias: "aurinko", root: relativeRoot(broken.root), reason: "manifest.json is not valid JSON" },
+    ]);
+    expect(payload.hint as string).toMatch(/^1 brain could not be read/);
+    expect(payload.hint as string).toContain("brainpick compile");
+  });
+
+  test("is not reported as an empty brain", async () => {
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    writeFileSync(join(set.byAlias("aurinko")!.root, ".brainpick", "manifest.json"), "{not json");
+
+    const listing = Object.fromEntries(
+      ((await overviewPayload(set)).brains as any[]).map((b) => [b.alias, b]),
+    );
+    expect(listing.aurinko.docs).toBeNull(); // unknown, not zero
+    expect(listing.aurinko.unreadable).toBe(true);
+    expect(listing.kirja.unreadable).toBe(false);
+  });
+
+  test("a vanished root is reported, not invented", async () => {
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    rmSync(set.byAlias("aurinko")!.root, { recursive: true, force: true });
+
+    const payload = await overviewPayload(set);
+    expect((payload.unreadable as any[]).map((u) => u.alias)).toEqual(["aurinko"]);
+    expect((payload.unreadable as any[])[0].reason).toContain("does not exist");
+    expect((payload.counts as any).docs).toBeGreaterThan(0);
+  });
+
+  test("search answers from the healthy brains", async () => {
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    writeFileSync(join(set.byAlias("aurinko")!.root, ".brainpick", "manifest.json"), "{not json");
+
+    const result = await searchPayload(set, "kirja");
+    expect((result.unreadable as any[]).map((u) => u.alias)).toEqual(["aurinko"]);
+    expect((result.hits as any[]).every((h) => h.path.startsWith("kirja:"))).toBe(true);
+  });
+
+  test.skipIf(process.getuid?.() === 0)("permission denied degrades instead of throwing", async () => {
+    // statSync/accessSync throw EACCES rather than reporting absence, so a
+    // permission-denied bundle must be caught explicitly or it escapes the set.
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    const broken = set.byAlias("aurinko")!;
+    chmodSync(broken.root, 0o000);
+    try {
+      const payload = await overviewPayload(set);
+      expect((payload.counts as any).docs).toBeGreaterThan(0);
+      expect(payload.unreadable).toEqual([
+        { alias: "aurinko", root: relativeRoot(broken.root), reason: "permission denied reading the bundle" },
+      ]);
+    } finally {
+      chmodSync(broken.root, 0o755);
+    }
+  });
+
+  test("a healed brain clears itself", async () => {
+    const set = makeSet("kirja");
+    for (const b of set.brains) await runCompile(b.root);
+    const p = join(set.byAlias("aurinko")!.root, ".brainpick", "manifest.json");
+    const good = readFileSync(p, "utf8");
+    writeFileSync(p, "{not json");
+    expect((await overviewPayload(set)).unreadable).toBeTruthy();
+
+    writeFileSync(p, good);
+    expect(await overviewPayload(set)).not.toHaveProperty("unreadable");
   });
 });

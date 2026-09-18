@@ -19,8 +19,19 @@ import type { DocRecord, GraphStats } from "./compile/t1";
 import { ALWAYS_EXCLUDED_DIRS, posixDirname, posixNormpath } from "./core/bundle";
 import { cmpStr, sha256Hex } from "./core/canonical";
 import { splitFrontmatter } from "./core/frontmatter";
-import { BrainSet, isCortex, parseScope, qualify, qualifyPaths, relativeRoot, splitQualified } from "./federation";
+import {
+  BrainSet,
+  isCortex,
+  parseScope,
+  qualify,
+  qualifyPaths,
+  relativeRoot,
+  skewOf,
+  splitQualified,
+  unreadableHint,
+} from "./federation";
 import type { Brain } from "./federation";
+import { loadConfig } from "./config";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
 import { detectHenxels, findHenxels, needsShellForScript } from "./detect";
@@ -919,18 +930,58 @@ function stripAlias(set: BrainSet, doc: string): string {
   return alias !== null && set.byAlias(alias) !== null ? rel : doc;
 }
 
-function brainsListing(set: BrainSet): Payload[] {
-  return set.brains.map((brain) => {
+/** The brain's stamped [brain] format (spec/85), or null when the bundle is not a
+ * brain — a wiki mounted in a set has no format and is never "behind". */
+function brainFormat(brain: Brain): number | null {
+  let config;
+  try {
+    config = brain.state !== null ? brain.state.config : loadConfig(brain.root);
+  } catch {
+    return null; // an unreadable config is reported as unreadable, separately
+  }
+  const format = config?.brain?.format;
+  return typeof format === "number" && format > 0 ? format : null;
+}
+
+type Unreadable = { alias: string; root: string; reason: string };
+
+/** [listing, unreadable] — spec/75 plus spec/100. A brain that cannot be read
+ * reports docs/tiers/version/format as unknown (never 0, never {}), so a genuinely
+ * empty brain and a broken one can never be confused. */
+function brainsListing(set: BrainSet): [Payload[], Unreadable[]] {
+  const unreadable: Unreadable[] = [];
+  const listing = set.brains.map((brain) => {
+    const root = relativeRoot(brain.root);
+    const reason = set.unreadableReason(brain);
+    if (reason !== null) {
+      unreadable.push({ alias: brain.alias, root, reason });
+      return {
+        alias: brain.alias,
+        role: brain.role,
+        here: brain.here,
+        root,
+        docs: null,
+        tiers: null,
+        version: null,
+        format: null,
+        unreadable: true,
+      };
+    }
     const manifest = set.manifestOf(brain);
+    const generator = (manifest["generator"] ?? {}) as Record<string, unknown>;
     return {
       alias: brain.alias,
       role: brain.role,
       here: brain.here,
-      root: relativeRoot(brain.root),
+      root,
       docs: Object.keys((manifest["files"] ?? {}) as Record<string, unknown>).length, // = counts.docs
       tiers: manifest["tiers"] ?? {},
+      version: (generator["version"] as string) || null,
+      format: brainFormat(brain),
+      unreadable: false,
     };
   });
+  return [listing, unreadable];
 }
 
 function aliasList(set: BrainSet): string {
@@ -968,8 +1019,32 @@ export function overviewPayload(
 async function federatedOverview(set: BrainSet, budgetTokens?: number | null, scope?: string | null): Promise<Payload> {
   if (!set.federated) return singleOverview(await set.stateFor(set.brains[0]!), budgetTokens);
   const [chosen, dropped] = parseScope(set, scope);
-  const focus = scope && chosen.length > 0 && chosen.length < set.brains.length ? chosen[0]! : set.focus;
-  const single = qualifyPaths(focus.alias, singleOverview(await set.stateFor(focus), budgetTokens));
+  let focus = scope && chosen.length > 0 && chosen.length < set.brains.length ? chosen[0]! : set.focus;
+  // The focus itself may be the broken one — fall back to a readable brain so the
+  // set still answers (spec/100: degradation is per brain, never per set).
+  if (set.unreadableReason(focus) !== null) {
+    focus = set.brains.find((b) => set.unreadableReason(b) === null) ?? focus;
+  }
+  const [focusState, focusReason] = await set.readableStateFor(focus);
+  // Load the focus BEFORE listing: stateFor compiles a brain that was never
+  // compiled, and the listing reads each brain's manifest (docs, tiers, version).
+  const [listing, unreadable] = brainsListing(set);
+  if (focusState === null) {
+    // every brain in the set is unreadable
+    const broken =
+      unreadable.length > 0
+        ? unreadable
+        : [{ alias: focus.alias, root: relativeRoot(focus.root), reason: focusReason ?? "" }];
+    return {
+      brains: listing,
+      unreadable: broken,
+      bundle: focus.alias,
+      counts: {},
+      tiers: {},
+      hint: unreadableHint(broken),
+    };
+  }
+  const single = qualifyPaths(focus.alias, singleOverview(focusState, budgetTokens));
   const note = dropped.length > 0 ? `unknown scope '${dropped.join(", ")}' ignored. ` : "";
   let hint =
     note +
@@ -980,7 +1055,20 @@ async function federatedOverview(set: BrainSet, budgetTokens?: number | null, sc
     ...g,
     target: qualify(focus.alias, String(g["target"])),
   }));
-  return { brains: brainsListing(set), ...single, bundle: focus.alias, top_ghosts: ghosts, hint };
+  // spec/100: skew leads the hint, and unreadable leads skew — a brain that cannot
+  // be read is a worse condition than one that is merely behind.
+  const skew = skewOf(listing as Record<string, unknown>[]);
+  if (skew !== null) hint = `${String(skew["hint"])} ${hint}`;
+  if (unreadable.length > 0) hint = `${unreadableHint(unreadable)} ${hint}`;
+  return {
+    brains: listing,
+    ...single,
+    bundle: focus.alias,
+    top_ghosts: ghosts,
+    ...(skew !== null ? { skew } : {}),
+    ...(unreadable.length > 0 ? { unreadable } : {}),
+    hint,
+  };
 }
 
 export function searchPayload(
@@ -1030,9 +1118,17 @@ export async function searchPayload(
   let degraded: unknown = null;
   let modeNote = "";
   const contributing: string[] = [];
+  const unreadable: Unreadable[] = [];
   for (let order = 0; order < chosen.length; order++) {
     const brain = chosen[order]!;
-    const body = await singleSearch(await target.stateFor(brain), query, mode, bounded, 1e9, now);
+    // spec/100: a brain that cannot be read is reported, not thrown — the rest of
+    // the set still answers.
+    const [brainState, reason] = await target.readableStateFor(brain);
+    if (brainState === null) {
+      unreadable.push({ alias: brain.alias, root: relativeRoot(brain.root), reason: reason ?? "" });
+      continue;
+    }
+    const body = await singleSearch(brainState, query, mode, bounded, 1e9, now);
     const hint = String(body["hint"]);
     if (hint.startsWith("unknown mode")) modeNote = hint.split(". ", 1)[0] + ". ";
     for (const m of body["used_modes"] as string[]) if (!used.includes(m)) used.push(m);
@@ -1069,11 +1165,16 @@ export async function searchPayload(
     hits.pop();
     result["truncated"] = true;
   }
-  const notes = modeNote + (dropped.length > 0 ? `unknown scope '${dropped.join(", ")}' ignored. ` : "");
+  let notes = modeNote + (dropped.length > 0 ? `unknown scope '${dropped.join(", ")}' ignored. ` : "");
   let hint: string;
   if (result["truncated"]) hint = `${all.length - hits.length} hits trimmed — raise budget_tokens or sharpen the query.`;
   else if (hits.length > 0) hint = `brain_read '${hits[0]!["path"]}' opens the best hit (paths are alias:path).`;
   else hint = `no hits in ${chosen.map((b) => b.alias).join(", ")} — brain_overview lists every brain.`;
+  if (unreadable.length > 0) {
+    // spec/100: loud on every call that touches the set
+    result["unreadable"] = unreadable;
+    notes = `${unreadableHint(unreadable)} ${notes}`;
+  }
   result["hint"] = notes + hint;
   return result;
 }

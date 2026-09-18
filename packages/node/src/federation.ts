@@ -7,7 +7,7 @@
  * ServeState and fan out, merge and qualify (alias:path) when the set holds
  * more than one brain. Ports federation.py.
  */
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -405,7 +405,54 @@ export class BrainSet {
     return brain.state;
   }
 
-  /** Manifest only — what brain_overview's `brains` needs without loading. */
+  /** `stateFor`, but a brain that cannot be read degrades instead of throwing
+   * (spec/100 *An implant that cannot be read*): → [state, null] or [null, reason].
+   * One unreadable implant must never take the set down with it — the cortex it
+   * would hide is the knowledge needed to fix it. */
+  async readableStateFor(brain: Brain): Promise<[ServeState | null, string | null]> {
+    const reason = this.unreadableReason(brain);
+    if (reason !== null) return [null, reason];
+    try {
+      return [await this.stateFor(brain), null];
+    } catch (error) {
+      return [null, describeUnreadable(error)];
+    }
+  }
+
+  /** Why this brain cannot be read, in words an agent can act on — or null when it
+   * is fine. Checked before any compile, because compiling an absent or unreadable
+   * root is what used to invent a phantom brain. */
+  unreadableReason(brain: Brain): string | null {
+    if (brain.state !== null) return null;
+    try {
+      const stat = statSync(brain.root);
+      if (!stat.isDirectory()) return "the bundle root is not a directory";
+      accessSync(brain.root, constants.R_OK | constants.X_OK);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") return "the bundle root does not exist";
+      return describeUnreadable(error);
+    }
+    let raw: string;
+    try {
+      raw = readFileSync(join(brain.root, ".brainpick", "manifest.json"), "utf8");
+    } catch (error) {
+      // never compiled here — stateFor compiles it, legitimately
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      return describeUnreadable(error);
+    }
+    try {
+      JSON.parse(raw);
+    } catch {
+      return "manifest.json is not valid JSON";
+    }
+    return null;
+  }
+
+  /** Manifest only — what brain_overview's `brains` needs without loading.
+   * Callers MUST consult `unreadableReason` first: an empty object here means "no
+   * manifest yet", never "unreadable" (spec/100 forbids reporting a brain that
+   * could not be read as an empty one). */
   manifestOf(brain: Brain): Record<string, unknown> {
     if (brain.state !== null) return brain.state.manifest;
     try {
@@ -545,6 +592,101 @@ export function qualifyPaths<T>(alias: string, obj: T): T {
     return out as T;
   }
   return obj;
+}
+
+/** An exception, as a phrase about the BUNDLE rather than about the engine
+ * (spec/100): the agent reading it has to fix a repository, not debug a stack. */
+export function describeUnreadable(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  if (code === "EACCES" || code === "EPERM") return "permission denied reading the bundle";
+  if (code === "ENOENT") return "the bundle root does not exist";
+  if (code === "ENOTDIR") return "the bundle root is not a directory";
+  if (error instanceof SyntaxError) return "manifest.json is not valid JSON";
+  if (code) return `the bundle could not be read (${code})`;
+  return "the bundle could not be read";
+}
+
+/** The `MAJOR.MINOR.PATCH` core as a comparable tuple, or null when it does not
+ * parse — unknown is never treated as behind. */
+function versionCore(version: string): number[] | null {
+  const parts = version.trim().split(".").slice(0, 3);
+  const nums = parts.map((p) => Number(p));
+  return nums.length > 0 && nums.every((n) => Number.isInteger(n)) ? nums : null;
+}
+
+function compareCore(a: number[], b: number[]): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/** spec/100: the version/format disagreement across a SET, or null when uniform.
+ * A null value is unknown, not behind — a wiki has no format, an uncompiled brain
+ * no version — and an unreadable brain is excluded (a louder problem, reported
+ * separately). */
+export function skewOf(entries: Record<string, unknown>[]): Record<string, unknown> | null {
+  const rows = entries.filter((e) => e.unreadable !== true);
+  const result: Record<string, unknown> = {};
+
+  const formats = rows
+    .filter((e) => typeof e.format === "number")
+    .map((e) => ({ alias: String(e.alias), format: e.format as number }));
+  if (formats.length > 0) {
+    const latest = Math.max(...formats.map((f) => f.format));
+    const behind = formats
+      .filter((f) => f.format < latest)
+      .sort((x, y) => x.format - y.format || x.alias.localeCompare(y.alias));
+    if (behind.length > 0) result.format = { latest, behind };
+  }
+
+  const versions = rows
+    .filter((e) => typeof e.version === "string")
+    .map((e) => ({ alias: String(e.alias), version: e.version as string, core: versionCore(e.version as string) }))
+    .filter((v): v is { alias: string; version: string; core: number[] } => v.core !== null);
+  if (versions.length > 0) {
+    const top = versions.reduce((best, v) => (compareCore(v.core, best.core) > 0 ? v : best), versions[0]!);
+    const behind = versions
+      .filter((v) => compareCore(v.core, top.core) < 0)
+      .sort((x, y) => compareCore(x.core, y.core) || x.alias.localeCompare(y.alias))
+      .map(({ alias, version }) => ({ alias, version }));
+    if (behind.length > 0) result.version = { latest: top.version, behind };
+  }
+
+  if (Object.keys(result).length === 0) return null;
+  const parts: string[] = [];
+  if (result.format) {
+    const f = result.format as { latest: number; behind: { alias: string; format: number }[] };
+    const names = f.behind.map((b) => b.alias).join(", ");
+    const at = f.behind.length === 1 ? `is at ${f.behind[0]!.format}` : "are behind";
+    parts.push(
+      `brain format skew: ${names} ${at}, this set is at ${f.latest} — conventions and journal paths ` +
+        `differ between them; verify where a doc belongs before writing to ${names} ` +
+        `(brainpick migrate --to ${f.latest})`,
+    );
+  }
+  if (result.version) {
+    const v = result.version as { latest: string; behind: { alias: string }[] };
+    const names = v.behind.map((b) => b.alias).join(", ");
+    parts.push(
+      `engine skew: ${names} last compiled by an older brainpick than ${v.latest} — ` +
+        `recompile with the current engine (brainpick compile)`,
+    );
+  }
+  result.hint = `${parts.join("; ")}.`;
+  return result;
+}
+
+/** spec/100: the loud half. Names every brain that could not be read, and the one
+ * command that fixes it. */
+export function unreadableHint(unreadable: { alias: string; root: string; reason: string }[]): string {
+  const names = unreadable.map((u) => `${u.alias} (${u.reason})`).join(", ");
+  const root = unreadable.slice(0, 1).map((u) => `--root ${u.root}`).join(" ");
+  return (
+    `${unreadable.length} brain${unreadable.length === 1 ? "" : "s"} could not be read: ${names}. ` +
+    `Other brains still answer; fix with \`brainpick compile ${root}\`.`
+  );
 }
 
 /** A short, human root for brain_overview's `brains` — relative to cwd when it
