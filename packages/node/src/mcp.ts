@@ -937,6 +937,22 @@ function aliasList(set: BrainSet): string {
   return set.brains.map((b) => b.alias).join(", ");
 }
 
+/**
+ * spec/70 Freshness: adopt any out-of-process compile before a payload reads held
+ * state, so every tool observes the artifacts on disk rather than the snapshot taken
+ * when the server started. Returns `target` so callers can wrap in place. In a
+ * federated set only the brains already loaded are adopted — an unloaded brain
+ * compiles on its first `stateFor`, which is adoption enough.
+ */
+function fresh<T extends ServeState | BrainSet>(target: T): T {
+  if (target instanceof BrainSet) {
+    for (const brain of target.brains) brain.state?.adoptExternalCompile();
+  } else {
+    target.adoptExternalCompile();
+  }
+  return target;
+}
+
 export function overviewPayload(state: ServeState, budgetTokens?: number | null, scope?: string | null): Payload;
 export function overviewPayload(set: BrainSet, budgetTokens?: number | null, scope?: string | null): Promise<Payload>;
 export function overviewPayload(
@@ -944,6 +960,7 @@ export function overviewPayload(
   budgetTokens?: number | null,
   scope?: string | null,
 ): Payload | Promise<Payload> {
+  fresh(target);
   if (!(target instanceof BrainSet)) return singleOverview(target, budgetTokens);
   return federatedOverview(target, budgetTokens, scope);
 }
@@ -993,6 +1010,7 @@ export async function searchPayload(
   scope?: string | null,
   now?: Date | null,
 ): Promise<Payload> {
+  fresh(target);
   if (!(target instanceof BrainSet)) return singleSearch(target, query, mode, limit, budgetTokens, now);
   if (!target.federated) {
     return singleSearch(await target.stateFor(target.brains[0]!), query, mode, limit, budgetTokens, now);
@@ -1102,6 +1120,7 @@ export function readPayload(
   sections?: readonly string[] | null,
   budgetTokens?: number | null,
 ): Payload | Promise<Payload> {
+  fresh(target);
   if (!(target instanceof BrainSet)) return singleRead(target, doc, sections, budgetTokens);
   return federatedRead(target, doc, sections, budgetTokens);
 }
@@ -1143,6 +1162,7 @@ export function neighborsPayload(
   layer: unknown = "links",
   budgetTokens?: number | null,
 ): Payload | Promise<Payload> {
+  fresh(target);
   if (!(target instanceof BrainSet)) return singleNeighbors(target, doc, depth, layer, budgetTokens);
   return federatedNeighbors(target, doc, depth, layer, budgetTokens);
 }
@@ -1173,6 +1193,8 @@ export async function writePayload(
   mode: unknown = "create",
   options: WritePayloadOptions = {},
 ): Promise<Payload> {
+  // a write resolves its base and conflict check against current records too
+  fresh(target);
   if (!(target instanceof BrainSet)) return singleWrite(target, doc, content, mode, options);
   if (!target.federated) {
     return singleWrite(await target.stateFor(target.brains[0]!), stripAlias(target, doc), content, mode, options);
@@ -1210,6 +1232,7 @@ export function showPayload(
   annotation?: string | null,
   clear = false,
 ): Promise<Payload> {
+  fresh(target);
   if (!(target instanceof BrainSet)) return singleShow(target, nodes, focus, mode, annotation, clear);
   return federatedShow(target, nodes, focus, mode, annotation, clear);
 }

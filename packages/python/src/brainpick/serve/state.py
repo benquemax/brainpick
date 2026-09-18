@@ -205,6 +205,9 @@ class ServeState:
         self.whats_new: dict | None = None  # spec/80: the release-ledger notice, when one applies
         self.loop: asyncio.AbstractEventLoop | None = None
         self._subscribers: set[asyncio.Queue] = set()
+        # spec/70 Freshness: (mtime_ns, size) of the manifest behind the held
+        # artifacts, so a read-path adoption check costs one stat.
+        self._manifest_stamp: tuple[int, int] | None = None
 
     # -- loading -----------------------------------------------------------------
 
@@ -220,6 +223,11 @@ class ServeState:
 
     def reload_artifacts(self) -> None:
         bp = self.root / ".brainpick"
+        try:  # spec/70 Freshness: stamp BEFORE the read, so a compile racing this
+            stamp = (bp / "manifest.json").stat()  # load is re-adopted, never skipped
+            self._manifest_stamp = (stamp.st_mtime_ns, stamp.st_size)
+        except OSError:
+            self._manifest_stamp = None
         self.manifest = json.loads((bp / "manifest.json").read_text(encoding="utf-8"))
         self.graph = json.loads((bp / "t1" / "graph.json").read_text(encoding="utf-8"))
         lines = (bp / "t1" / "docs.jsonl").read_text(encoding="utf-8").splitlines()
@@ -281,6 +289,27 @@ class ServeState:
             self._emit_delta(result.delta)
         else:  # the very first compile has no old graph to diff — resync via snapshot
             self._fanout(("graph.snapshot", self.seq, _dumps({"graph": self.graph, "seq": self.seq})))
+
+    def adopt_external_compile(self) -> None:
+        """spec/70 Freshness: observe the artifacts on disk before a read.
+
+        The read path's guard in front of `rescan_from_manifest`. A brain is shared
+        memory — `git pull`, a CLI compile, another agent or another machine all
+        change the bundle from outside this process — so a held snapshot ages
+        silently and a stale read is indistinguishable from a correct one. Cheap by
+        design: an unchanged manifest costs one stat, so tools may call this every
+        time. Never compiles; the manifest is the handoff (a bundle whose sources
+        moved without a compile stays unseen, by design)."""
+        path = self.root / ".brainpick" / "manifest.json"
+        try:
+            stamp = path.stat()
+        except OSError:
+            return
+        fingerprint = (stamp.st_mtime_ns, stamp.st_size)
+        if fingerprint == self._manifest_stamp:
+            return
+        self._manifest_stamp = fingerprint
+        self.rescan_from_manifest()
 
     def rescan_from_manifest(self) -> None:
         """Adopt an out-of-process compile: diff the held graph against the new artifacts."""

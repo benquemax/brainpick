@@ -691,3 +691,60 @@ def test_overview_update_notice_is_absent_without_one_and_leads_the_hint_with_on
     noticed = overview_payload(state)
     assert noticed["update"] == state.update
     assert noticed["hint"].startswith("brainpick 0.6.0 is available (you run 0.5.0): pip install -U brainpick.")
+
+
+# -- freshness (spec/70 Freshness) -----------------------------------------------------
+
+def test_read_tools_adopt_an_out_of_process_compile(kotiaurinko):
+    """A brain is shared memory: git pull / CLI compile / another agent change the
+    bundle from outside this process, and every tool must observe the artifacts on
+    disk rather than the snapshot taken when the server started."""
+    from brainpick.compile.pipeline import run_compile
+
+    state = make_state(kotiaurinko)
+    before = overview_payload(state)["counts"]["docs"]
+
+    (kotiaurinko / "uusi.md").write_text(NEW_DOC, encoding="utf-8")
+    run_compile(kotiaurinko)  # "another process" compiled behind our back
+
+    assert overview_payload(state)["counts"]["docs"] == before + 1
+    assert any(h["path"] == "uusi.md" for h in search_payload(state, "Uusi kivi")["hits"])
+    assert read_payload(state, "uusi.md")["path"] == "uusi.md"
+    # uusi.md links to kuu.md, so the new doc is a neighbour of the old one
+    assert any(n["path"] == "uusi.md" for n in neighbors_payload(state, "kuu.md")["nodes"])
+
+
+def test_adoption_emits_the_delta_so_live_clients_resync(kotiaurinko):
+    """Adoption is the same transition the watcher performs — subscribers see it."""
+    from brainpick.compile.pipeline import run_compile
+
+    state = make_state(kotiaurinko)
+    queue = state.subscribe()
+    (kotiaurinko / "uusi.md").write_text(NEW_DOC, encoding="utf-8")
+    run_compile(kotiaurinko)
+
+    overview_payload(state)
+    ((name, _event_id, data),) = drain(queue)
+    assert name == "graph.delta"
+    assert "uusi.md" in json.loads(data)["cause"]["paths"]
+
+
+def test_adoption_is_read_cheap_when_nothing_changed(kotiaurinko, monkeypatch):
+    """An unchanged seq is a stat and a compare — never a reload, never a compile."""
+    state = make_state(kotiaurinko)
+
+    def explode():
+        raise AssertionError("reload_artifacts must not run when seq is unchanged")
+
+    monkeypatch.setattr(state, "reload_artifacts", explode)
+    overview_payload(state)
+    search_payload(state, "kuu")
+    read_payload(state, "kuu.md")
+
+
+def test_adoption_never_compiles_a_stale_bundle(kotiaurinko):
+    """The manifest is the handoff: sources changed without a compile stay unseen."""
+    state = make_state(kotiaurinko)
+    before = overview_payload(state)["counts"]["docs"]
+    (kotiaurinko / "uusi.md").write_text(NEW_DOC, encoding="utf-8")  # no compile
+    assert overview_payload(state)["counts"]["docs"] == before

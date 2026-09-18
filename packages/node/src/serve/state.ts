@@ -294,6 +294,20 @@ function isFile(path: string): boolean {
   }
 }
 
+/**
+ * spec/70 Freshness: an identity for the manifest file cheap enough to take on every
+ * read — nanosecond mtime plus size, so a same-millisecond rewrite still differs.
+ * null when the file cannot be stat'd (an uncompiled bundle holds its state).
+ */
+function manifestStamp(path: string): string | null {
+  try {
+    const stat = statSync(path, { bigint: true });
+    return `${stat.mtimeNs}:${stat.size}`;
+  } catch {
+    return null;
+  }
+}
+
 /** t1/todos.json (spec/20) — absent (compiled before it existed) reads as "no
  * to-do lists"; the next compile writes it. */
 function loadTodos(bp: string): TodoRecord[] {
@@ -341,6 +355,11 @@ export class ServeState {
   /** spec/80: the release-ledger notice, when one applies. */
   whatsNew: WhatsNewNotice | null = null;
   private subscribers = new Set<EventQueue>();
+  /**
+   * spec/70 Freshness: the manifest's (mtime, size) behind the held artifacts, so a
+   * read-path adoption check costs one stat.
+   */
+  private manifestStamp: string | null = null;
 
   constructor(root: string, config: Config) {
     this.root = root;
@@ -361,6 +380,9 @@ export class ServeState {
 
   reloadArtifacts(): void {
     const bp = join(this.root, ".brainpick");
+    // spec/70 Freshness: stamp BEFORE the read, so a compile racing this load is
+    // re-adopted on the next call rather than skipped
+    this.manifestStamp = manifestStamp(join(bp, "manifest.json"));
     this.manifest = JSON.parse(readFileSync(join(bp, "manifest.json"), "utf8")) as Record<string, unknown>;
     this.graph = JSON.parse(readFileSync(join(bp, "t1", "graph.json"), "utf8")) as Graph;
     const lines = readFileSync(join(bp, "t1", "docs.jsonl"), "utf8").split("\n");
@@ -400,6 +422,23 @@ export class ServeState {
       // the very first compile has no old graph to diff — resync via snapshot
       this.fanout(["graph.snapshot", this.seq, dumps({ graph: this.graph, seq: this.seq })]);
     }
+  }
+
+  /**
+   * spec/70 Freshness: observe the artifacts on disk before a read.
+   *
+   * The read path's guard in front of {@link rescanFromManifest}. A brain is shared
+   * memory — `git pull`, a CLI compile, another agent or another machine all change
+   * the bundle from outside this process — so a held snapshot ages silently and a
+   * stale read is indistinguishable from a correct one. Cheap by design: an
+   * unchanged manifest costs one stat, so tools may call this every time. Never
+   * compiles; the manifest is the handoff.
+   */
+  adoptExternalCompile(): void {
+    const stamp = manifestStamp(join(this.root, ".brainpick", "manifest.json"));
+    if (stamp === null || stamp === this.manifestStamp) return;
+    this.manifestStamp = stamp;
+    this.rescanFromManifest();
   }
 
   /** Adopt an out-of-process compile: diff the held graph against the new artifacts. */

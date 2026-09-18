@@ -541,3 +541,24 @@ def test_qualify_paths_reaches_skill_payloads():
         "depends_on": [{"path": "me:skills/c.md", "title": "C"}],
         "dependents": [{"path": "me:skills/a.md", "title": "A"}],
         "tools": [{"path": "me:tools/x", "exists": True}]}
+
+
+def test_federated_reads_adopt_out_of_process_compiles_per_brain(tmp_path):
+    """spec/70 Freshness holds across a federated set: each loaded brain is adopted
+    on the calls that touch it, so one brain going stale never hides another."""
+    from brainpick.compile.pipeline import run_compile
+    from brainpick.mcp_server import overview_payload, search_payload
+
+    brain_set = make_set(tmp_path, here="aurinko")
+    aurinko = brain_set.by_alias("aurinko")
+    overview_payload(brain_set)  # loads the focus brain's state
+    before = overview_payload(brain_set)["counts"]["docs"]
+
+    (aurinko.root / "uusi.md").write_text(
+        "---\ntype: Concept\ntitle: Uusi kivi\ndescription: A new rock.\n---\n\n"
+        "# Uusi kivi\n\nNear [Kuu](kuu.md).\n", encoding="utf-8")
+    run_compile(aurinko.root)  # another process compiled that brain
+
+    assert overview_payload(brain_set)["counts"]["docs"] == before + 1
+    hits = search_payload(brain_set, "Uusi kivi")["hits"]
+    assert any(h["path"] == "aurinko:uusi.md" for h in hits)

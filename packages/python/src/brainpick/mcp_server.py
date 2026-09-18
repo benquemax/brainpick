@@ -748,6 +748,22 @@ def _as_set(target) -> BrainSet | None:
     return target if isinstance(target, BrainSet) else None
 
 
+def _fresh(target):
+    """spec/70 Freshness: adopt any out-of-process compile before a payload reads
+    held state, so every tool observes the artifacts on disk rather than the
+    snapshot taken when the server started. Returns `target` so callers can wrap
+    in place. In a federated set only the brains already loaded are adopted — an
+    unloaded brain compiles on its first `state_for`, which is adoption enough."""
+    brain_set = _as_set(target)
+    if brain_set is None:
+        target.adopt_external_compile()
+        return target
+    for brain in brain_set.brains:
+        if brain.state is not None:
+            brain.state.adopt_external_compile()
+    return target
+
+
 def _strip_alias(brain_set: BrainSet, doc: str) -> str:
     """A single-brain set accepts (and drops) its own alias prefix."""
     alias, rel = split_qualified(doc)
@@ -770,7 +786,7 @@ def _brains_listing(brain_set: BrainSet) -> list[dict]:
 
 
 def overview_payload(target, budget_tokens: int | None = None, scope: str | None = None) -> dict:
-    brain_set = _as_set(target)
+    brain_set = _as_set(_fresh(target))
     if brain_set is None:
         return _single_overview(target, budget_tokens)
     if not brain_set.federated:
@@ -798,7 +814,7 @@ def overview_payload(target, budget_tokens: int | None = None, scope: str | None
 def search_payload(target, query: str, mode: str = "auto", limit: int = 8,
                    budget_tokens: int | None = None, scope: str | None = None,
                    now: datetime | None = None) -> dict:
-    brain_set = _as_set(target)
+    brain_set = _as_set(_fresh(target))
     if brain_set is None:
         return _single_search(target, query, mode, limit, budget_tokens, now=now)
     if not brain_set.federated:
@@ -883,7 +899,7 @@ def _route(brain_set: BrainSet, doc: str, verb: str) -> tuple:
 
 def read_payload(target, doc: str, sections: list[str] | None = None,
                  budget_tokens: int | None = None) -> dict:
-    brain_set = _as_set(target)
+    brain_set = _as_set(_fresh(target))
     if brain_set is None:
         return _single_read(target, doc, sections, budget_tokens)
     if not brain_set.federated:
@@ -902,7 +918,7 @@ def read_payload(target, doc: str, sections: list[str] | None = None,
 
 def neighbors_payload(target, doc: str, depth: int = 1, layer: str = "links",
                       budget_tokens: int | None = None) -> dict:
-    brain_set = _as_set(target)
+    brain_set = _as_set(_fresh(target))
     if brain_set is None:
         return _single_neighbors(target, doc, depth, layer, budget_tokens)
     if not brain_set.federated:
@@ -921,7 +937,8 @@ def neighbors_payload(target, doc: str, depth: int = 1, layer: str = "links",
 def write_payload(target, doc: str, content: str, mode: str = "create",
                   base_sha: str | None = None, budget_tokens: int | None = None,
                   refusal: str | None = None) -> dict:
-    brain_set = _as_set(target)
+    # a write resolves its base and conflict check against current records too
+    brain_set = _as_set(_fresh(target))
     if brain_set is None:
         return _single_write(target, doc, content, mode, base_sha, budget_tokens, refusal)
     if not brain_set.federated:
@@ -952,7 +969,7 @@ def write_payload(target, doc: str, content: str, mode: str = "create",
 def show_payload(target, nodes: list[str] | None = None, focus: str | None = None,
                  mode: str | None = None, annotation: str | None = None,
                  clear: bool = False) -> dict:
-    brain_set = _as_set(target)
+    brain_set = _as_set(_fresh(target))
     if brain_set is None:
         return _single_show(target, nodes, focus, mode, annotation, clear)
     if not brain_set.federated:

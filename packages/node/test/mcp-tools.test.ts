@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
 import * as showClientModule from "../src/show-client";
+import { runCompile } from "../src/compile/pipeline";
 import { loadConfig } from "../src/config";
 import { sha256Hex } from "../src/core/canonical";
 import {
@@ -708,4 +709,59 @@ test("overview update notice is absent without one and leads the hint with one",
   const noticed = overviewPayload(state);
   expect(noticed["update"]).toEqual(state.update);
   expect(String(noticed["hint"]).startsWith("brainpick 0.6.0 is available (you run 0.5.0): npm install -g brainpick.")).toBe(true);
+});
+
+// -- freshness (spec/70 Freshness) ----------------------------------------------------
+
+test("read tools adopt an out-of-process compile", async () => {
+  // A brain is shared memory: git pull / CLI compile / another agent change the
+  // bundle from outside this process, and every tool must observe the artifacts on
+  // disk rather than the snapshot taken when the server started.
+  const root = copyBundle();
+  const state = await makeState(root);
+  const before = (overviewPayload(state)["counts"] as Record<string, number>)["docs"]!;
+
+  writeFileSync(join(root, "uusi.md"), NEW_DOC, "utf8");
+  await runCompile(root); // "another process" compiled behind our back
+
+  expect((overviewPayload(state)["counts"] as Record<string, number>)["docs"]).toBe(before + 1);
+  const hits = (await searchPayload(state, "Uusi kivi"))["hits"] as Array<Record<string, unknown>>;
+  expect(hits.some((h) => h["path"] === "uusi.md")).toBe(true);
+  expect(readPayload(state, "uusi.md")["path"]).toBe("uusi.md");
+  const nodes = neighborsPayload(state, "kuu.md")["nodes"] as Array<Record<string, unknown>>;
+  expect(nodes.some((n) => n["path"] === "uusi.md")).toBe(true);
+});
+
+test("adoption emits the delta so live clients resync", async () => {
+  const root = copyBundle();
+  const state = await makeState(root);
+  const queue = state.subscribe();
+  writeFileSync(join(root, "uusi.md"), NEW_DOC, "utf8");
+  await runCompile(root);
+
+  overviewPayload(state);
+  const events = queue.drain();
+  expect(events).toHaveLength(1);
+  expect(events[0]![0]).toBe("graph.delta");
+  const delta = JSON.parse(events[0]![2] as string) as Record<string, unknown>;
+  expect((delta["cause"] as { paths: string[] }).paths).toContain("uusi.md");
+});
+
+test("adoption is read-cheap when nothing changed", async () => {
+  // an unchanged seq is a stat and a compare — never a reload, never a compile
+  const state = await makeState(copyBundle());
+  const spy = vi.spyOn(state, "reloadArtifacts");
+  overviewPayload(state);
+  await searchPayload(state, "kuu");
+  readPayload(state, "kuu.md");
+  expect(spy).not.toHaveBeenCalled();
+});
+
+test("adoption never compiles a stale bundle", async () => {
+  // the manifest is the handoff: sources changed without a compile stay unseen
+  const root = copyBundle();
+  const state = await makeState(root);
+  const before = (overviewPayload(state)["counts"] as Record<string, number>)["docs"]!;
+  writeFileSync(join(root, "uusi.md"), NEW_DOC, "utf8"); // no compile
+  expect((overviewPayload(state)["counts"] as Record<string, number>)["docs"]).toBe(before);
 });

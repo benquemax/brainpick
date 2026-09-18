@@ -15,6 +15,30 @@ payloads is qualified `alias:path`, `brain_search`/`brain_overview` take
 `scope`, and `brain_overview` adds `brains`; a single-brain server emits
 exactly the shapes below.
 
+## Freshness
+
+**Every tool call observes the artifacts on disk, not a snapshot taken when
+the server started.** Before a tool reads held state, the server adopts any
+out-of-process compile: it compares `.brainpick/manifest.json`'s `seq`
+against the held `seq` and, when they differ, reloads the artifacts and
+emits the delta (spec/60). An unchanged `seq` is one stat and one compare,
+so tools stay read-cheap.
+
+This is normative because a brain is shared memory: `git pull`, a CLI
+`brainpick compile`, another agent, or another machine all change the
+bundle from outside this process. A server that refreshed only on its own
+`brain_write` would answer from a snapshot that silently ages for the whole
+session, and a stale read is indistinguishable from a confident correct
+answer at the call site. Freshness therefore belongs to the tool contract,
+not to the transport or the host: `brainpick mcp` (stdio) and `/mcp` behave
+identically, and neither may depend on a filesystem watcher being
+available.
+
+Adoption never compiles. A bundle whose sources changed without a compile
+stays stale by design — the manifest is the handoff between the compiler
+and every reader. In a federated set (spec/75) each brain's state is
+adopted independently, on the calls that touch it.
+
 ## brain_overview({scope?, budget_tokens?})
 
 No required args. → `{"bundle", "counts": {"docs", "edges", "tags",
