@@ -16,6 +16,7 @@ import { loadConfig, type ServeConfig } from "../src/config";
 import { sha256Hex } from "../src/core/canonical";
 import { buildApp, type BuildAppOptions, type ServeHandles } from "../src/serve/app";
 import { sseFrame } from "../src/serve/live";
+import { SPEC_VERSION, VERSION } from "../src/version";
 import { recompileAndBroadcast } from "../src/serve/watcher";
 import { cleanup, copyBundle, prependPath, stageFakeHenxels, tempDir, stageT3Export } from "./helpers";
 
@@ -160,7 +161,9 @@ test("sse frame format", () => {
 test("health", async () => {
   const { base } = await serve(await makeApp(copyBundle()));
   const { body } = await getJson(`${base}/api/health`);
-  expect(body).toEqual({ impl: "node", name: "brainpick", spec_version: "0.1", version: "0.6.1" });
+  // the version comes from the package, not a literal: a hardcoded one turns every
+  // release bump into a red suite (and re-hardcoding it just defers the next break)
+  expect(body).toEqual({ impl: "node", name: "brainpick", spec_version: SPEC_VERSION, version: VERSION });
 });
 
 test("status", async () => {

@@ -105,9 +105,13 @@ def test_sse_frame_format():
 
 
 def test_health(kotiaurinko):
+    # the version comes from the package, not a literal: a hardcoded one turns every
+    # release bump into a red suite (and re-hardcoding it just defers the next break)
+    from brainpick import __version__
+
     with TestClient(make_app(kotiaurinko)) as client:
         assert client.get("/api/health").json() == {
-            "impl": "python", "name": "brainpick", "spec_version": "0.1", "version": "0.6.1",
+            "impl": "python", "name": "brainpick", "spec_version": "0.1", "version": __version__,
         }
 
 
