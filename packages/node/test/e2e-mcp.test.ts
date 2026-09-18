@@ -80,10 +80,12 @@ test("mcp stdio roundtrip", { timeout: 120_000 }, async () => {
 
   await withSession(root, async (client) => {
     const tools = (await client.listTools()).tools.map((t) => t.name);
+    // brain_contract is always exposed (spec/100); the sync verbs are not,
+    // because [serve] git defaults to off.
     expect(new Set(tools)).toEqual(
       new Set([
         "brain_overview", "brain_search", "brain_read",
-        "brain_neighbors", "brain_write", "brain_show",
+        "brain_neighbors", "brain_write", "brain_show", "brain_contract",
       ]),
     );
 

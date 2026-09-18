@@ -7,7 +7,7 @@
  * three-way / LLM proposal on the 409, at parity with the Python engine).
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -32,6 +32,7 @@ import {
 } from "./federation";
 import type { Brain } from "./federation";
 import { loadConfig } from "./config";
+import { checkFresh, runCompile } from "./compile/pipeline";
 import { atomicWrite } from "./core/fs";
 import { cpLen, PY_SPACE_CLASS, pyFloatRepr, pyRstrip, pySplitLines, pyStrip } from "./core/pyfmt";
 import { detectHenxels, findHenxels, needsShellForScript } from "./detect";
@@ -42,6 +43,7 @@ import type { FadedHit } from "./query/half-life";
 import type { SearchHit } from "./query/keyword";
 import { bfsNeighborhood, jsonable, resolveDoc, type ServeState } from "./serve/state";
 import { recompileAndBroadcast } from "./serve/watcher";
+import { gitStatus, pushBrain, syncBrain } from "./sync";
 import { connectableHost, postShow } from "./show-client";
 import { VERSION } from "./version";
 
@@ -1325,6 +1327,217 @@ export async function writePayload(
   return result;
 }
 
+function requirement(
+  id: string,
+  required: boolean,
+  satisfied: boolean,
+  what: string,
+  why: string,
+  detail?: string | null,
+  fix?: string | null,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { id, required, satisfied, what, why };
+  if (!satisfied) {
+    if (detail) out["detail"] = detail;
+    if (fix) out["fix"] = fix;
+  }
+  return out;
+}
+
+/** spec/100 brain_contract: the requirements a bundle must satisfy, as data.
+ *
+ * Reporting that a brain is unreadable says what is wrong, never what right looks
+ * like. An implant is deliberately free to choose its own folder layout, naming
+ * and memory types — so the small, stable floor brainpick actually needs has to be
+ * announceable, or every fix starts by reading brainpick's source. This is
+ * `brainpick doctor` for agents rather than humans. */
+export async function contractPayload(
+  target: ServeState | BrainSet,
+  compileFirst = true,
+): Promise<Payload> {
+  // NOT via fresh(): adopting a compile reads the manifest, and a corrupt manifest
+  // is precisely a condition this tool exists to diagnose. It must survive every
+  // bundle state, including the broken ones.
+  let state: ServeState | BrainSet = target;
+  try {
+    state = fresh(target);
+  } catch {
+    state = target;
+  }
+  let root: string;
+  let alias: string;
+  let held: ServeState;
+  if (state instanceof BrainSet) {
+    const brain = state.focus;
+    const [readable, reason] = await state.readableStateFor(brain);
+    root = brain.root;
+    alias = brain.alias;
+    if (readable === null) {
+      return {
+        brain: alias,
+        satisfied: false,
+        requirements: [
+          requirement(
+            "bundle-root",
+            true,
+            false,
+            "a directory holding brainpick.toml, or passed as --root",
+            "the engine reads config only in exactly that directory — no upward walk",
+            reason,
+            `brainpick compile --root ${root}`,
+          ),
+        ],
+        hint: `${alias} could not be read: ${reason}.`,
+      };
+    }
+    held = readable;
+  } else {
+    held = state;
+    root = state.root;
+    alias = basename(state.root);
+  }
+
+  if (compileFirst) {
+    try {
+      await runCompile(root, false, null, held.config);
+      await held.load();
+    } catch {
+      // a failed compile shows up as an unmet requirement below
+    }
+  }
+
+  const reqs: Record<string, unknown>[] = [];
+  const rootOk = existsSync(root) && statSync(root).isDirectory();
+  reqs.push(
+    requirement(
+      "bundle-root",
+      true,
+      rootOk,
+      "a directory holding brainpick.toml, or passed as --root",
+      "the engine reads config only in exactly that directory — no upward walk",
+      rootOk ? null : "the bundle root does not exist",
+      `brainpick compile --root ${root}`,
+    ),
+  );
+
+  const manifestPath = join(root, ".brainpick", "manifest.json");
+  let manifest: Record<string, unknown> | null = null;
+  let manifestDetail: string | null = null;
+  if (!existsSync(manifestPath)) {
+    manifestDetail = "no .brainpick/manifest.json — this bundle was never compiled";
+  } else {
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    } catch (error) {
+      manifestDetail =
+        error instanceof SyntaxError
+          ? "manifest.json is not valid JSON"
+          : `manifest.json could not be read (${String(error)})`;
+    }
+  }
+  reqs.push(
+    requirement(
+      "manifest",
+      true,
+      manifest !== null,
+      ".brainpick/manifest.json, valid JSON, written by `brainpick compile`",
+      "the manifest is the handoff between the compiler and every reader",
+      manifestDetail,
+      `brainpick compile --root ${root}`,
+    ),
+  );
+
+  const missing: string[] = [];
+  if (manifest !== null) {
+    for (const rel of ["t1/graph.json", "t1/docs.jsonl"]) {
+      if (!existsSync(join(root, ".brainpick", ...rel.split("/")))) missing.push(rel);
+    }
+  }
+  reqs.push(
+    requirement(
+      "artifacts",
+      true,
+      manifest !== null && missing.length === 0,
+      "the t1/ artifacts the manifest names, readable",
+      "every read — search, overview, neighbors — is served from them, not from the markdown",
+      missing.length > 0
+        ? `missing: ${missing.join(", ")}`
+        : manifest !== null
+          ? null
+          : "no manifest, so no artifacts to check",
+      `brainpick compile --root ${root}`,
+    ),
+  );
+
+  let freshOk = false;
+  let freshDetail: string | null = null;
+  try {
+    const verdict = checkFresh(root);
+    freshOk = verdict.fresh;
+    freshDetail = verdict.fresh ? null : verdict.reason;
+  } catch (error) {
+    freshDetail = String(error);
+  }
+  reqs.push(
+    requirement(
+      "fresh",
+      false,
+      freshOk,
+      "artifacts newer than the sources they were compiled from",
+      "a stale read is indistinguishable from a correct one at the call site",
+      freshDetail,
+      `brainpick compile --root ${root}`,
+    ),
+  );
+
+  const records = held.records ?? [];
+  const total = records.length;
+  const typed = records.filter((r) => String((r as unknown as Record<string, unknown>)["type"] ?? "").trim()).length;
+  reqs.push(
+    requirement(
+      "frontmatter",
+      false,
+      total === 0 || typed === total,
+      "docs carry OKF frontmatter; `type` is the one MUST",
+      "a doc without it still compiles, but ranks and groups as an unknown — " +
+        "layout is yours, this is what it costs",
+      total === 0 || typed === total ? null : `${total - typed} of ${total} docs have no \`type\``,
+      "add `type:` to the frontmatter of the docs listed by `brainpick doctor`",
+    ),
+  );
+
+  const format = held.config?.brain?.format ?? 0;
+  reqs.push(
+    requirement(
+      "brain-format",
+      false,
+      Boolean(format),
+      "[brain] format — absent means a wiki, which is legitimate",
+      "the format decides where knowledge goes: journal paths, and whether conventions exist at all",
+      format ? null : "no [brain] section — this bundle is a wiki, not a brain",
+      "add [brain] format = 3 to brainpick.toml (brainpick migrate --to 3)",
+    ),
+  );
+
+  const requiredCount = reqs.filter((r) => r["required"] === true).length;
+  const unmet = reqs.filter((r) => r["required"] === true && r["satisfied"] === false);
+  const advisory = reqs.filter((r) => r["required"] === false && r["satisfied"] === false);
+  let hint: string;
+  if (unmet.length > 0) {
+    hint =
+      `${unmet.length} of ${requiredCount} required requirements unmet: ` +
+      `${unmet.map((r) => r["id"]).join(", ")} — ${String(unmet[0]!["fix"] ?? "see `what` and `why`")}.`;
+  } else if (advisory.length > 0) {
+    hint =
+      `every required requirement is met; ${advisory.length} optional one(s) open ` +
+      `(${advisory.map((r) => r["id"]).join(", ")}) — layout is yours, these are the only ` +
+      `things brainpick needs.`;
+  } else {
+    hint = "every requirement is met.";
+  }
+  return { brain: alias, satisfied: unmet.length === 0, requirements: reqs, hint };
+}
+
 export function showPayload(
   target: ServeState | BrainSet,
   nodes?: string[] | null,
@@ -1532,6 +1745,86 @@ export function createMcpServer(state: ServeState | BrainSet, writeRefusal: stri
         await showPayload(target, nodes ?? null, focus ?? null, mode ?? null, annotation ?? null, clear ?? false),
       ),
   );
+
+  /** The one brain a sync verb acts on — never a set: each brain is a separate
+   * repository with a separate remote and a separate right to refuse (spec/100). */
+  const brainState = async (alias?: string | null): Promise<ServeState> => {
+    if (!(state instanceof BrainSet)) return state;
+    const chosen = (alias ? state.byAlias(alias) : null) ?? state.focus;
+    return state.stateFor(chosen);
+  };
+
+  server.registerTool(
+    "brain_contract",
+    {
+      description:
+        "What this bundle must satisfy for brainpick to work, as data: every " +
+        "requirement with its id, whether it is met, what it means and why it matters " +
+        "— plus a fix for each unmet one. Folder layout, file naming and memory types " +
+        "are yours to choose; this is the small floor underneath them. Call it when a " +
+        "brain reports unreadable, or before wiring a new implant.",
+      inputSchema: { brain: z.string().optional() },
+    },
+    async ({ brain }) => textResult(await contractPayload(await brainState(brain ?? null))),
+  );
+
+  // spec/100: the sync verbs are exposed by the [serve] git ladder
+  // (off | status | sync | push), default off — an upgrade adds no git capability.
+  // A tool outside the level is ABSENT from tools/list, never a runtime refusal.
+  // createMcpServer is synchronous, so read the level from config rather than from a
+  // loaded state: an unloaded brain would otherwise have to be compiled just to learn
+  // which tools to register.
+  const focusConfig =
+    state instanceof BrainSet
+      ? (state.focus.state?.config ?? loadConfig(state.focus.root))
+      : state.config;
+  const levels: Record<string, number> = { off: 0, status: 1, sync: 2, push: 3 };
+  const allowed = levels[focusConfig.serve.git] ?? 0;
+
+  if (allowed >= 1) {
+    server.registerTool(
+      "brain_status",
+      {
+        description:
+          "Where this brain's checkout stands against its remote: ahead, behind, " +
+          "dirty, conflicted. Read-only — fetches, never merges or commits. Run it " +
+          "before answering from a brain another machine may have moved on.",
+        inputSchema: { brain: z.string().optional() },
+      },
+      async ({ brain }) => textResult(gitStatus((await brainState(brain ?? null)).root)),
+    );
+  }
+
+  if (allowed >= 2) {
+    server.registerTool(
+      "brain_sync",
+      {
+        description:
+          "Pull the remote's work into this brain and resolve what collides, " +
+          "doc-wise rather than line-wise, so no conflict markers ever reach a doc. " +
+          "Commits NOTHING: merged docs are proposals to review, and unresolved ones " +
+          "come back with both versions for you to reconcile with brain_write.",
+        inputSchema: { brain: z.string().optional(), budget_tokens: z.number().optional() },
+      },
+      async ({ brain, budget_tokens }) =>
+        textResult(await syncBrain(await brainState(brain ?? null), budget_tokens ?? null)),
+    );
+  }
+
+  if (allowed >= 3) {
+    server.registerTool(
+      "brain_push",
+      {
+        description:
+          "Publish this brain: compile, run its henxels contract, stage the bundle, " +
+          "commit with your message, push. Refuses when behind (run brain_sync first), " +
+          "when conflicts remain, or when the contract cannot be run — an unverified " +
+          "push is not a push. Hooks always run.",
+        inputSchema: { message: z.string(), brain: z.string().optional() },
+      },
+      async ({ message, brain }) => textResult(await pushBrain(await brainState(brain ?? null), message)),
+    );
+  }
 
   server.registerResource(
     "brain-index",
