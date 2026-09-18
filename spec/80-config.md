@@ -49,6 +49,7 @@ port = 4747
 transports = ["streamable-http"]   # + "sse" for the legacy transport
 watch = true
 writes = "guarded"              # guarded | off
+git = "off"                     # off | status | sync | push — sync tools (spec/100)
 token = ""                      # required for non-localhost binds
 max_asset_bytes = 8388608       # 8 MiB — POST /api/assets upload cap (spec/50)
 

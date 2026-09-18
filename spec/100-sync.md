@@ -141,9 +141,17 @@ a commit message for shared memory.
 3. Compile before committing, so the freshness marker matches the sources
    the commit contains. A brain whose contract runs `--check-fresh` on
    pre-commit will otherwise reject the very commit this tool is making.
-4. Stage the bundle, commit, push.
+4. Run the contract (below).
+5. Stage the bundle, commit, push.
+
+Staging is scoped to the bundle: engines MUST NOT `git add -A` a whole
+repository. A brain repo may hold files that are not the brain, and a tool
+that publishes on an agent's word must not sweep up work nobody reviewed.
+A push with nothing staged in the bundle is refused, not an empty commit.
 
 → `{"ok", "brain", "commit", "pushed", "hint"}`.
+
+### The contract gate
 
 **Hooks always run.** Engines MUST NOT pass `--no-verify`, and MUST NOT
 offer an option that does. The henxels contract is the mechanism that keeps
@@ -151,6 +159,31 @@ a brain true across machines; a tool that could bypass it would make every
 other guarantee in this spec advisory. A hook rejection is returned
 verbatim as `{"ok": false, "instruction": …}`, exactly as a `brain_write`
 contract violation is (spec/70).
+
+Relying on the hook alone is NOT sufficient, and this is normative. The
+henxels-managed hook resolves the `henxels` executable through the
+environment it inherits and, when it cannot find one, prints a warning and
+**exits 0** — the commit lands with the contract unenforced. That is a
+defensible choice for a human at a terminal and a dangerous one here,
+because an MCP server is the process most likely to have a stripped PATH;
+spec/70's `brain_write` already searches the per-user launcher dirs for
+exactly this reason.
+
+An engine MUST therefore resolve henxels itself, by the same rules as
+`brain_write`, and run the contract over the bundle BEFORE committing:
+
+- contract passes → continue;
+- contract fails → refuse, returning its output verbatim;
+- **contract could not be run** (no `henxels` executable resolvable, while
+  the bundle has a `henxels.yaml` that governs it) → refuse, with
+  `{"ok": false, "contract": "unavailable", "instruction": …}` naming how
+  to install it.
+
+A bundle with no governing contract pushes normally — that is a bundle
+with no contract, not a contract that was skipped. The distinction the
+engine MUST preserve is between *passed* and *did not run*: a push whose
+contract was skipped is not a verified push, and reporting it as one is
+the failure this section exists to prevent.
 
 ## Configuration and exposure
 
@@ -303,6 +336,75 @@ already re-observes the manifest.
 exception class. It exists to be read by the agent that must fix it, and
 it names what is wrong with the bundle — not what went wrong inside the
 engine.
+
+## The implant contract, announced
+
+Reporting that a brain cannot be read is only half a fix. `reason` says what
+is wrong; it does not say what *right* looks like. An agent holding
+"manifest.json is not valid JSON" still has to discover, from the source or
+from this spec, what brainpick actually requires of a bundle — and implants
+are exactly where that hurts, because the whole point of an implant is that
+each project chooses its own shape.
+
+That flexibility is real and deliberate: brainpick does not care about
+folder structure, file naming, or how a project organises its knowledge.
+What it requires is small, stable, and worth stating out loud. An engine
+MUST be able to announce it.
+
+`brain_contract({brain?})` returns the requirements a bundle must satisfy,
+as data:
+
+```json
+{"brain": "proj", "satisfied": false,
+ "requirements": [
+   {"id": "bundle-root", "required": true, "satisfied": true,
+    "what": "a directory holding brainpick.toml, or passed as --root",
+    "why": "the engine reads config only in exactly that directory — no upward walk"},
+   {"id": "manifest", "required": true, "satisfied": false,
+    "what": ".brainpick/manifest.json, valid JSON, written by `brainpick compile`",
+    "why": "the manifest is the handoff between the compiler and every reader",
+    "detail": "manifest.json is not valid JSON",
+    "fix": "brainpick compile --root ."}],
+ "hint": "1 of 6 requirements unmet — …"}
+```
+
+Normative shape: every requirement has a stable `id` (a name a project can
+cite in an issue), `required` (false for the optional tiers), `satisfied`,
+`what` (the requirement in one line), and `why` (what breaks without it —
+an agent that understands the reason can fix a layout the engine never
+anticipated). `detail` and `fix` are present only when unsatisfied. The
+list is ordered by dependency: a bundle root before a manifest, a manifest
+before tiers.
+
+**What brainpick actually requires** is the floor this tool announces, and
+it is short by design:
+
+| `id` | Required | What |
+|------|----------|------|
+| `bundle-root` | yes | a directory holding `brainpick.toml`, or named by `--root` |
+| `manifest` | yes | `.brainpick/manifest.json`, valid JSON, from `brainpick compile` |
+| `artifacts` | yes | the `t1/` artifacts the manifest names, readable |
+| `fresh` | no | artifacts newer than the sources they were compiled from |
+| `frontmatter` | no | docs carry OKF frontmatter; `type` is the one MUST |
+| `brain-format` | no | `[brain] format` — absent means a wiki, which is legitimate |
+
+Everything else — folder layout, file naming, how docs link, which memory
+types exist — is the project's choice, and engines MUST NOT report a
+project's layout as a defect. `frontmatter` is advisory precisely because a
+doc without it still compiles; it is listed so an agent knows what it
+costs, not so an engine can refuse.
+
+This is `brainpick doctor` made available to agents rather than humans:
+doctor prints ✓/✗ lines to a terminal, and an agent operating a brain over
+MCP cannot read them. The same checks, as a payload. An engine that already
+implements doctor SHOULD share its check implementations, so the two can
+never disagree about what is required.
+
+`brain_contract` is read-only and MUST be exposed whenever the brain tools
+are — it is not behind `[serve] git`, since a bundle that cannot be read is
+exactly the situation in which an agent needs to ask what was expected.
+When the unreadable or skew reports name a brain, their hints SHOULD point
+at it.
 
 ## What this does not fix
 
