@@ -15,6 +15,30 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.1
+    date: 2026-09-24
+    brain_format: 3
+    summary: >-
+      `brainpick serve` serves the bundle again when `[bundle] root` points
+      below the repo root: the CLI applied that path twice and served a
+      `<repo>/_brain/_brain` that does not exist, so the UI showed one
+      generated index, no links, and T2 reported off.
+    agent_action: >-
+      Upgrade and restart any running `brainpick serve`. If you worked around
+      this by serving from inside the bundle directory, drop the workaround —
+      that route reads no repo-root `brainpick.toml`, so it silently loses
+      `[bundle] exclude`, `[brain]` and the embedding backend.
+    changes:
+      - kind: fixed
+        area: cli
+        text: >-
+          `serve` pre-resolved `--root` with `resolve_bundle()` and handed the
+          result to `build_app()`, which joins `[bundle] root` itself — so a
+          repo-root config pointing at `_brain` was served as `_brain/_brain`.
+          The CLI now passes the raw `--root`, matching the Node engine, and
+          prints the resolved bundle. A brain whose bundle IS the repo root
+          (`root = "."`) was never affected, which is why this survived a
+          release.
   - version: 0.8.0
     date: 2026-09-19
     brain_format: 3

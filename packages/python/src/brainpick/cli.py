@@ -82,10 +82,15 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
     import uvicorn
 
-    from brainpick.config import resolve_bundle
+    from brainpick.config import load_config
     from brainpick.serve.app import build_app
 
-    root, config = resolve_bundle(args.root)  # --root may be a repo root above the bundle (spec/80)
+    # --root may be a repo root above the bundle (spec/80). build_app resolves
+    # `root / [bundle] root` itself, so hand it the raw --root: pre-resolving
+    # with resolve_bundle() here would apply [bundle] root twice and serve a
+    # bundle/_brain that does not exist. The Node engine does the same.
+    root = Path(args.root).resolve()
+    config = load_config(root)
     if args.host is not None:
         config.serve.host = args.host
     if args.port is not None:
@@ -96,7 +101,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     app = build_app(root, config)
     display_host = "127.0.0.1" if config.serve.host in ("0.0.0.0", "::") else config.serve.host
     url = f"http://{display_host}:{config.serve.port}/"
-    print(f"serving {root} at {url} — UI /, REST /api, live /api/live, MCP /mcp (Ctrl-C stops)",
+    bundle = (root / config.bundle.root).resolve()
+    print(f"serving {bundle} at {url} — UI /, REST /api, live /api/live, MCP /mcp (Ctrl-C stops)",
           flush=True)
     if args.open:
         threading.Timer(0.8, webbrowser.open, [url]).start()

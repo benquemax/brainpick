@@ -49,7 +49,14 @@ def test_serve_root_may_be_a_repo_root_above_the_bundle(tmp_path, monkeypatch):
     just the bundle directory itself. Regression for the 2026-09-10 incident:
     `brainpick serve --root <bundle>` silently never read the repo-root
     brainpick.toml (no exclude, no [brain] config), while every other
-    subcommand resolved it correctly via the same resolve_bundle."""
+    subcommand resolved it correctly via the same resolve_bundle.
+
+    And for the follow-on incident that fix caused: build_app joins
+    `root / [bundle] root` ITSELF, so _cmd_serve must hand it the raw --root.
+    Pre-resolving with resolve_bundle() applied [bundle] root twice and served
+    `<repo>/_brain/_brain` — a path that does not exist — so the UI showed one
+    generated index and nothing else, with T2 reported off. The Node engine
+    passes the raw root to buildApp; this asserts the Python CLI matches."""
     (tmp_path / "brainpick.toml").write_text(
         '[bundle]\nroot = "_brain"\nexclude = ["raw/*"]\n', encoding="utf-8",
     )
@@ -66,8 +73,10 @@ def test_serve_root_may_be_a_repo_root_above_the_bundle(tmp_path, monkeypatch):
     main(["serve", "--root", str(tmp_path), "--port", "0"])
 
     assert len(calls) == 1
-    resolved_root, config = calls[0]
-    assert resolved_root == bundle.resolve()  # descended into _brain/, not tmp_path itself
+    passed_root, config = calls[0]
+    # build_app joins [bundle] root itself — hand it the repo root, undescended.
+    assert passed_root == tmp_path.resolve()
+    assert (passed_root / config.bundle.root).resolve() == bundle.resolve()
     assert config.bundle.exclude == ["raw/*"]  # the repo-root brainpick.toml was actually read
 
 

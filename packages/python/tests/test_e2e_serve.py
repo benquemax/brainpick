@@ -18,6 +18,7 @@ import httpx
 import uvicorn
 from starlette.testclient import TestClient
 
+from brainpick.cli import main as cli_main
 from brainpick.compile.pipeline import run_compile
 from brainpick.config import load_config
 from brainpick.core.canonical import sha256_hex
@@ -1019,3 +1020,39 @@ def test_cleared_presentation_replays_as_the_empty_shape(kotiaurinko):
             assert json.loads(replayed["data"]) == {
                 "annotation": None, "focus": None, "mode": None, "nodes": [], "seq": 2,
             }
+
+
+def test_serve_cli_serves_a_bundle_below_the_repo_root(tmp_path, monkeypatch):
+    """End-to-end guard for the double-resolution incident: with a repo-root
+    brainpick.toml whose [bundle] root points at _brain/, `brainpick serve
+    --root <repo>` must serve the bundle's real docs.
+
+    _cmd_serve used to pre-resolve with resolve_bundle() and hand the result to
+    build_app, which joins [bundle] root again — serving <repo>/_brain/_brain.
+    That path does not exist, so the API reported a single generated index and
+    the UI looked empty. The unit test in test_cli.py mocks build_app and so
+    cannot see a wrong path; this one runs the real thing.
+    """
+    (tmp_path / "brainpick.toml").write_text(
+        '[bundle]\nroot = "_brain"\n', encoding="utf-8",
+    )
+    bundle = tmp_path / "_brain"
+    bundle.mkdir()
+    (bundle / "index.md").write_text("# Brain\n\nSee [Kuu](kuu.md).\n", encoding="utf-8")
+    (bundle / "kuu.md").write_text(
+        "---\ntype: Concept\ntitle: Kuu\ndescription: The moon.\n---\n\n"
+        "# Kuu\n\nBack to [index](index.md).\n", encoding="utf-8",
+    )
+    run_compile(tmp_path)
+
+    captured = {}
+    monkeypatch.setattr("uvicorn.run", lambda app, **k: captured.setdefault("app", app))
+    cli_main(["serve", "--root", str(tmp_path), "--port", "0", "--no-watch"])
+
+    assert "app" in captured, "serve never reached uvicorn.run"
+    with running_server(captured["app"]) as base_url:
+        status = httpx.get(f"{base_url}/api/status").json()
+        assert status["bundle_root"] == str(bundle.resolve())
+        assert status["docs"] > 1, "served the doubled path, not the real bundle"
+        ids = {n["id"] for n in httpx.get(f"{base_url}/api/graph").json()["nodes"]}
+        assert "kuu.md" in ids
