@@ -15,6 +15,38 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.3
+    date: 2026-09-25
+    brain_format: 3
+    summary: >-
+      Two more places where one path meant two roots. `brainpick register REPO`
+      now registers the bundle a repo-root `brainpick.toml` points at, and
+      `brain_push` runs `henxels check --all` instead of handing henxels the
+      bundle directory as if it were a file.
+    agent_action: >-
+      If a registry entry shows `bundle_path = ""` for a repo whose config has
+      `[bundle] root`, remove it and register again (`brainpick register REPO
+      --remove`, then `brainpick register REPO --cortex`), and delete any
+      `index.md` or `.brainpick/` the old entry left at the repo root. Upgrade
+      henxels to 0.19.2 as well: it now expands a directory argument, so both
+      sides of brain_push agree.
+    changes:
+      - kind: fixed
+        area: cli
+        text: >-
+          `register` and `register --from-hosts` resolve `[bundle] root` before
+          writing the entry, and the bundle id is read from the repo's config.
+          A repo-root path used to be stored as the bundle, so the registry-mode
+          server compiled the whole repo as the brain and wrote its artifacts
+          at the repo root.
+      - kind: fixed
+        area: mcp
+        text: >-
+          `brain_push` verifies the contract with `henxels check --all` — the
+          same run the pre-commit hook does, repo-level henxels included. With
+          the bundle path as the argument, henxels before 0.19.2 judged the
+          directory entry as a file ("_brain — should be .md") and refused
+          every push of a subdirectory bundle.
   - version: 0.8.2
     date: 2026-09-25
     brain_format: 3
