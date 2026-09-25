@@ -553,3 +553,34 @@ def test_push_runs_the_whole_contract_not_the_bundle_path(tmp_path, monkeypatch)
     result = push_brain(state_for(local), "add uusi")
     assert result["contract"] == "pass"
     assert seen and seen[0][1:] == ["check", "--all"]
+
+
+def test_push_stages_the_report_the_compile_refreshed_above_the_bundle(tmp_path):
+    """brain_push compiles first, and a compile refreshes the opt-in AGENTS.md report
+    at the repo root above a subdirectory bundle. Staging only the bundle left that
+    report modified after every push — the remote's copy went stale and the next
+    brain_status called the checkout dirty."""
+    from brainpick.integrate import _REPORT_PLACEHOLDER
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    shutil.copytree(FIXTURE_BUNDLES / "kotiaurinko", repo / "_brain")
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "_brain"\n', encoding="utf-8")
+    (repo / "AGENTS.md").write_text("# Agents\n\n" + _REPORT_PLACEHOLDER + "\n", encoding="utf-8")
+    git(tmp_path, "init", "-q", str(repo))
+    git(repo, "config", "user.email", "t@example.com")
+    git(repo, "config", "user.name", "T")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "seed")
+    origin = tmp_path / "origin.git"
+    git(tmp_path, "clone", "-q", "--bare", str(repo), str(origin))
+    git(repo, "remote", "add", "origin", str(origin))
+    git(repo, "fetch", "-q", "origin")
+    git(repo, "branch", "--set-upstream-to", f"origin/{branch_of(repo)}", branch_of(repo))
+    (repo / "_brain" / "uusi.md").write_text(
+        "---\ntype: Concept\ntitle: Uusi\ndescription: d\n---\n\n# Uusi\n", encoding="utf-8")
+
+    result = push_brain(ServeState(repo / "_brain", load_config(repo)), "add uusi")
+    assert result["ok"] is True and result["pushed"] is True
+    assert "brainpick:begin report" in (repo / "AGENTS.md").read_text(encoding="utf-8")
+    assert "AGENTS.md" not in git(repo, "status", "--porcelain")

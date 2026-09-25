@@ -342,6 +342,23 @@ def run_contract(root: str | Path, config=None) -> tuple[str, str | None]:
     return "pass", None
 
 
+def _report_pathspecs(root: Path, repo: Path) -> list[str]:
+    """Repo-relative paths of the AGENTS.md files carrying a brainpick report block
+    (spec/20): the bundle root's and, when the bundle is a subdirectory, the repo
+    root's. Only files that exist and hold the block — never created here."""
+    from brainpick.compile.t1 import REPORT_BEGIN_PREFIX
+
+    out: list[str] = []
+    for base in {root.resolve(), repo.resolve()}:
+        agents = base / "AGENTS.md"
+        try:
+            if REPORT_BEGIN_PREFIX in agents.read_text(encoding="utf-8"):
+                out.append(os.path.relpath(agents, repo))
+        except OSError:
+            continue
+    return sorted(out)
+
+
 def push_brain(state, message: str) -> dict:
     """spec/100 brain_push: compile, run the contract, stage the bundle, commit, push.
     Hooks always run — no engine may pass --no-verify."""
@@ -401,12 +418,16 @@ def push_brain(state, message: str) -> dict:
     # not the brain, and a tool that publishes on an agent's word must not sweep up
     # work nobody reviewed.
     pathspec = os.path.relpath(root, repo) or "."
-    code, _, err = run_git(repo, "add", "--", pathspec)
+    # ...plus the opt-in AGENTS.md report the compile above just refreshed: it lives
+    # at the bundle root and, for a subdirectory bundle, at the repo root — outside
+    # the bundle pathspec, so it stayed modified after every push.
+    pathspecs = [pathspec] + _report_pathspecs(root, repo)
+    code, _, err = run_git(repo, "add", "--", *pathspecs)
     if code != 0:
         result["hint"] = f"git add failed: {err.strip()}"
         return result
 
-    code, staged, _ = run_git(repo, "diff", "--cached", "--name-only", "--", pathspec)
+    code, staged, _ = run_git(repo, "diff", "--cached", "--name-only", "--", *pathspecs)
     if not staged.strip():
         ahead = status["ahead"]
         if ahead > 0:  # nothing new to commit, but local commits still need sending
