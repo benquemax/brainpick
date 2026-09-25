@@ -106,6 +106,7 @@ export interface BrainConfig {
   origin: string; // canonical git URL — a lookup key, never the identity ([bundle] id is)
   audience: string; // personal | team | public — who this brain is written for
   readers: string[]; // for team: the assumed readers
+  contributing: string[]; // spec/105: pages a contributor reads first (bundle-relative)
 }
 
 /** [half_life] — the ranking factor that fades stale docs (spec/50, spec/80):
@@ -160,7 +161,7 @@ export function defaultConfig(): Config {
     validate: { henxels: "auto" },
     update: { check: true },
     similarity_gaps: { threshold: 0.75, max_pairs: 50 },
-    brain: { format: 0, origin: "", audience: "personal", readers: [] },
+    brain: { format: 0, origin: "", audience: "personal", readers: [], contributing: [] },
     half_life: { default: 0, folders: {} },
   };
 }

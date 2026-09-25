@@ -393,6 +393,8 @@ program
   .option("--cortex", "mark it as the agent's own brain — at most one (scope 'me')")
   .option("--implant", "mark it as an attached repository bundle — any number")
   .option("--user", "deprecated spelling of --cortex")
+  .option("--read-only", "this mount may not push: writes redirect, fixes go upstream as proposals (spec/105)")
+  .option("--read-write", "clear --read-only (the default)")
   .option("--remove", "drop PATH from the registry")
   .option("--from-hosts", "register every `mcp --root DIR` found in agent host configs (spec/75 migration)")
   .option("--dry-run", "with --from-hosts: report, don't write")
@@ -404,15 +406,19 @@ program
         cortex?: boolean;
         implant?: boolean;
         user?: boolean;
+        readOnly?: boolean;
+        readWrite?: boolean;
         remove?: boolean;
         fromHosts?: boolean;
         dryRun?: boolean;
       },
     ) => {
-      const { runRegister } = await import("./federation");
+      const { runRegister, READ_ONLY, READ_WRITE } = await import("./federation");
+      const access = opts.readOnly ? READ_ONLY : opts.readWrite ? READ_WRITE : null;
       process.exitCode = runRegister(path ?? null, {
         alias: opts.alias ?? null,
         role: opts.cortex || opts.user ? "cortex" : opts.implant ? "implant" : null,
+        access,
         remove: opts.remove,
         fromHosts: opts.fromHosts,
         dryRun: opts.dryRun,

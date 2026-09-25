@@ -244,11 +244,17 @@ export type SyncPayload = {
   unresolved: { path: string; theirs: string; yours: string; reason: string }[];
   committed: boolean;
   hint: string;
+  diverged?: boolean; // spec/105: read-only mount has local commits
 };
 
 /** spec/100 brain_sync: bring the remote's work in, resolve what collides
- * doc-wise, recompile — and commit NOTHING. */
-export async function syncBrain(state: ServeState, _budgetTokens?: number | null): Promise<SyncPayload> {
+ * doc-wise, recompile — and commit NOTHING.
+ * spec/105: on a read-only brain this becomes a pure fast-forward mirror. */
+export async function syncBrain(
+  state: ServeState,
+  _budgetTokens?: number | null,
+  access: string = "read-write",
+): Promise<SyncPayload> {
   const root = state.root;
   const repo = repoRoot(root) ?? root;
   const result: SyncPayload = {
@@ -277,8 +283,37 @@ export async function syncBrain(state: ServeState, _budgetTokens?: number | null
     return result;
   }
 
-  const [, behind] = aheadBehind(repo);
+  const [ahead, behind] = aheadBehind(repo);
   result.behind_before = behind;
+
+  // spec/105: a read-only mount is a pure mirror — fast-forward only, never merge
+  if (access === "read-only") {
+    if (ahead > 0) {
+      result.diverged = true;
+      result.hint =
+        `${ahead} local commit(s) on a read-only mount — this checkout has diverged ` +
+        `from upstream. Reset it by hand, or register it --read-write if you push here; ` +
+        `propose changes with brain_contribute instead.`;
+      return result;
+    }
+    if (behind === 0) {
+      result.ok = true;
+      result.hint = "already up to date with the remote.";
+      return result;
+    }
+    const ff = runGit(repo, ["merge", "--ff-only", "@{u}"]);
+    if (ff.code !== 0) {
+      result.diverged = true;
+      result.hint = `fast-forward failed: ${ff.stderr.trim() || "unknown error"} — a read-only mount is never merged; clean the checkout by hand.`;
+      return result;
+    }
+    try { await runCompile(root, false, null, state.config); } catch { /* next read reports */ }
+    await state.load();
+    result.ok = true;
+    result.hint = `fast-forwarded ${behind} commit(s) from the remote — the mirror now matches upstream.`;
+    return result;
+  }
+
   if (behind === 0) {
     result.ok = true;
     result.hint = "already up to date with the remote.";
@@ -406,14 +441,29 @@ export type PushPayload = {
   hint: string;
   contract?: ContractOutcome;
   instruction?: string | null;
+  access?: string; // spec/105: "read-only" when refused
 };
 
 /** spec/100 brain_push: compile, run the contract, stage the bundle, commit, push.
- * Hooks always run — no engine may pass --no-verify. */
-export async function pushBrain(state: ServeState, message: string): Promise<PushPayload> {
+ * Hooks always run — no engine may pass --no-verify.
+ * spec/105: on a read-only brain, refuses and names brain_contribute. */
+export async function pushBrain(
+  state: ServeState,
+  message: string,
+  access: string = "read-write",
+): Promise<PushPayload> {
   const root = state.root;
   const repo = repoRoot(root) ?? root;
   const result: PushPayload = { ok: false, brain: basenameOf(root), commit: null, pushed: false, hint: "" };
+
+  // spec/105: a read-only mount never pushes — redirect to brain_contribute
+  if (access === "read-only") {
+    result.access = "read-only";
+    result.hint =
+      "this brain is read-only (a mirror of its upstream) — propose changes with " +
+      "brain_contribute and send them upstream with brain_submit.";
+    return result;
+  }
 
   if (!isRepo(root)) {
     result.hint = "not a git repository — nothing to push.";

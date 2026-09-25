@@ -267,7 +267,7 @@ test("extraction model section parses without warnings", () => {
 
 test("brain defaults mean not a brain", () => {
   const { cfg } = load(tempDir());
-  expect(cfg.brain).toEqual({ format: 0, origin: "", audience: "personal", readers: [] });
+  expect(cfg.brain).toEqual({ format: 0, origin: "", audience: "personal", readers: [], contributing: [] });
   expect(isBrain(cfg)).toBe(false);
 });
 
@@ -280,6 +280,7 @@ test("brain section from toml", () => {
     origin: "git@github.com:me/x.git",
     audience: "team",
     readers: ["tom", "agents"],
+    contributing: [],
   });
   expect(isBrain(cfg)).toBe(true);
 });

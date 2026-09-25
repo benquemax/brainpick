@@ -51,6 +51,16 @@ export function canonical(...parts: string[]): string {
     return lexical;
   }
 }
+/** spec/105: mount-level access control. A read-only brain is a mirror of its
+ * upstream — writes redirect, sync fast-forwards only, push refuses. */
+export const READ_ONLY = "read-only";
+export const READ_WRITE = "read-write";
+
+export function normalizeAccess(value: unknown): string {
+  if (value === READ_ONLY) return READ_ONLY;
+  return READ_WRITE; // absent / unknown → read-write (spec/105)
+}
+
 export type RegistryEntry = Record<string, unknown> & {
   id: string;
   repo: string;
@@ -60,6 +70,7 @@ export type RegistryEntry = Record<string, unknown> & {
   host: string;
   alias?: string;
   role?: string;
+  access?: string;
 };
 
 // -- qualified paths -------------------------------------------------------------------
@@ -76,6 +87,17 @@ export function splitQualified(doc: unknown): [string | null, string] {
 
 export function qualify(alias: string, path: string): string {
   return `${alias}:${path}`;
+}
+
+/** spec/105: the brain:// link for a doc in a brain — null when the bundle has no id. */
+export function brainLinkFor(brain: Brain, rel: string): string | null {
+  try {
+    const id = loadConfig(brain.root).bundle.id;
+    if (!id) return null;
+    return `brain://${brain.alias}-${id}/${rel}`;
+  } catch {
+    return null;
+  }
 }
 
 // -- aliases ---------------------------------------------------------------------------
@@ -254,6 +276,8 @@ export interface RegisterOptions {
   /** Deprecated spelling of `role: "cortex"` (spec/75). */
   user?: boolean;
   role?: string | null;
+  /** spec/105: mount-level access control. read-only = mirror, never push. */
+  access?: string | null;
 }
 
 /** Add the bundle at `root` to the registry (or update its entry in place when the
@@ -280,6 +304,10 @@ export function registerBrain(root: string, path: string = registryPath(), optio
       }
     }
   }
+  // spec/105: access is a mount fact — read-only written, read-write pops the key
+  if (options.access === READ_ONLY) entry.access = READ_ONLY;
+  else if (options.access === READ_WRITE || options.access === "") delete entry.access;
+
   if (existing === null) entries.push(entry);
   else entries[existingIndex] = entry;
   saveRegistry(entries, path);
@@ -322,6 +350,7 @@ export interface BrainInit {
   root: string;
   role?: string | null;
   here?: boolean;
+  access?: string;
 }
 
 export class Brain {
@@ -329,6 +358,7 @@ export class Brain {
   readonly root: string;
   readonly role: string | null;
   readonly here: boolean;
+  readonly access: string;
   state: ServeState | null = null;
 
   constructor(init: BrainInit) {
@@ -336,6 +366,7 @@ export class Brain {
     this.root = canonical(init.root);
     this.role = init.role ?? null;
     this.here = init.here ?? false;
+    this.access = normalizeAccess(init.access);
   }
 
   get loaded(): boolean {
@@ -561,7 +592,7 @@ export function resolveBrainSet(roots: string[], options: ResolveOptions = {}): 
     // a registry brain whose root contains cwd IS here (spec/75) — marker or not
     const isHere = here === null ? isWithin(cwd, root) : root === here || isWithin(here, root);
     const alias = entry.alias || aliasForRepo(entry.repo);
-    brains.push(new Brain({ alias, root, role: entry.role ?? null, here: isHere }));
+    brains.push(new Brain({ alias, root, role: entry.role ?? null, here: isHere, access: entry.access }));
   }
   if (here !== null && !brains.some((b) => b.here)) brains.unshift(new Brain({ alias: null, root: here, here: true }));
   if (brains.length === 0) return new BrainSet([new Brain({ alias: null, root: cwd, here: true })]);
@@ -896,6 +927,7 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
       const root = entryRoot(entry);
       const marks =
         (isCortex(entry.role) ? " (me)" : entry.role === IMPLANT ? " (implant)" : "") +
+        (entry.access === READ_ONLY ? " (read-only)" : "") +
         (entry.enabled ? "" : " (disabled)") + (root ? "" : " (missing)");
       const shown = root ?? `${entry.repo}/${entry.bundle_path}`.replace(/\/+$/, "");
       print(`  ${shownAlias(entry).padEnd(20)} ${shown}${marks}`);
@@ -920,8 +952,10 @@ export function runRegister(path: string | null, options: RegisterRunOptions = {
     alias: options.alias ?? null,
     user: options.user ?? false,
     role: options.role ?? null,
+    access: options.access ?? null,
   });
-  const mark = isCortex(entry.role) ? " (me)" : entry.role === IMPLANT ? " (implant)" : "";
+  let mark = isCortex(entry.role) ? " (me)" : entry.role === IMPLANT ? " (implant)" : "";
+  if (entry.access === READ_ONLY) mark += " (read-only)";
   print(`registered ${shownAlias(entry)}${mark} → ${root}`);
   print(`registry: ${registry}`);
   print("brainpick mcp (no --root) now fronts every registered brain plus the one you're in.");

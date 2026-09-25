@@ -21,10 +21,12 @@ import { cmpStr, sha256Hex } from "./core/canonical";
 import { splitFrontmatter } from "./core/frontmatter";
 import {
   BrainSet,
+  brainLinkFor,
   isCortex,
   parseScope,
   qualify,
   qualifyPaths,
+  READ_ONLY,
   relativeRoot,
   skewOf,
   splitQualified,
@@ -43,6 +45,7 @@ import type { FadedHit } from "./query/half-life";
 import type { SearchHit } from "./query/keyword";
 import { bfsNeighborhood, jsonable, resolveDoc, type ServeState } from "./serve/state";
 import { recompileAndBroadcast } from "./serve/watcher";
+import { annotations, contributePayload, submitPayload } from "./contribute";
 import { gitStatus, pushBrain, syncBrain } from "./sync";
 import { connectableHost, postShow } from "./show-client";
 import { VERSION } from "./version";
@@ -925,7 +928,7 @@ async function singleShow(
 // `alias:path` docs are still accepted; a federated set fans out / routes and
 // qualifies every path it returns.
 
-type Payload = Record<string, unknown>;
+export type Payload = Record<string, unknown>;
 
 function stripAlias(set: BrainSet, doc: string): string {
   const [alias, rel] = splitQualified(doc);
@@ -1241,6 +1244,12 @@ async function federatedRead(
   const result = qualifyPaths(brain.alias, singleRead(await set.stateFor(brain), rel, sections, budgetTokens));
   result["brain"] = brain.alias;
   if (!result["truncated"]) result["hint"] = `brain_neighbors '${result["path"]}' walks the links around this doc.`;
+  // spec/105: cross-brain backlinks — your cortex notes that point at an implant page
+  const anns = annotations(set, brain, String(result["path"] ?? qualify(brain.alias, rel)));
+  if (anns.length > 0) {
+    result["annotations"] = anns;
+    result["hint"] += ` ${anns.length} other brain page(s) point at this one (annotations) — your own notes or corrections; read them before trusting this page alone.`;
+  }
   return result;
 }
 
@@ -1317,6 +1326,23 @@ export async function writePayload(
   } else {
     brain = target.byAlias(alias);
     if (brain === null) return { ok: false, instruction: `no brain called '${alias}' — brains here: ${aliasList(target)}` };
+  }
+  // spec/105: a read-only mount refuses writes with a redirect
+  if (brain.access === READ_ONLY) {
+    const link = brainLinkFor(brain, rel);
+    const cortex = target.cortex;
+    const cortexHint = cortex
+      ? `write your own note in ${cortex.alias} with brain_write '${qualify(cortex.alias, rel)}', or `
+      : "write your own note in your cortex, or ";
+    return {
+      ok: false,
+      access: READ_ONLY,
+      brain: brain.alias,
+      brain_link: link,
+      instruction:
+        `${brain.alias} is read-only (a mirror of its upstream) — ${cortexHint}` +
+        `propose fixes upstream with brain_contribute.`,
+    };
   }
   const result = await singleWrite(await target.stateFor(brain), rel, content, mode, options);
   if (result["ok"]) {
@@ -1778,8 +1804,16 @@ export function createMcpServer(state: ServeState | BrainSet, writeRefusal: stri
     state instanceof BrainSet
       ? (state.focus.state?.config ?? loadConfig(state.focus.root))
       : state.config;
-  const levels: Record<string, number> = { off: 0, status: 1, sync: 2, push: 3 };
+  // spec/100 + spec/105: the ladder off|status|sync|contribute|push, climbed upwards
+  const levels: Record<string, number> = { off: 0, status: 1, sync: 2, contribute: 3, push: 4 };
   const allowed = levels[focusConfig.serve.git] ?? 0;
+
+  /** The access of the brain a sync verb acts on — read-write unless the mount says otherwise. */
+  async function brainAccess(alias: string | null): Promise<string> {
+    if (!(state instanceof BrainSet)) return "read-write";
+    const brain = alias ? state.byAlias(alias) : state.focus;
+    return brain?.access ?? "read-write";
+  }
 
   if (allowed >= 1) {
     server.registerTool(
@@ -1803,15 +1837,64 @@ export function createMcpServer(state: ServeState | BrainSet, writeRefusal: stri
           "Pull the remote's work into this brain and resolve what collides, " +
           "doc-wise rather than line-wise, so no conflict markers ever reach a doc. " +
           "Commits NOTHING: merged docs are proposals to review, and unresolved ones " +
-          "come back with both versions for you to reconcile with brain_write.",
+          "come back with both versions for you to reconcile with brain_write. " +
+          "On a read-only brain this is a pure fast-forward mirror.",
         inputSchema: { brain: z.string().optional(), budget_tokens: z.number().optional() },
       },
       async ({ brain, budget_tokens }) =>
-        textResult(await syncBrain(await brainState(brain ?? null), budget_tokens ?? null)),
+        textResult(await syncBrain(await brainState(brain ?? null), budget_tokens ?? null, await brainAccess(brain ?? null))),
     );
   }
 
   if (allowed >= 3) {
+    server.registerTool(
+      "brain_contribute",
+      {
+        description:
+          "Propose a change to a brain you cannot push to (a read-only implant): " +
+          "the same arguments as brain_write plus a commit message. The change is " +
+          "written and committed in a separate working copy (a git worktree on " +
+          "branch contrib/<proposal>) — never in the mounted brain — after passing " +
+          "that brain's own contract. Several calls stack on one proposal; read the " +
+          "read_first pages it returns; then brain_submit. drop=true removes a proposal.",
+        inputSchema: {
+          doc: z.string().optional(),
+          content: z.string().optional(),
+          message: z.string().default(""),
+          brain: z.string().optional(),
+          mode: z.string().optional(),
+          base_sha: z.string().optional(),
+          proposal: z.string().optional(),
+          drop: z.boolean().optional(),
+          budget_tokens: z.number().optional(),
+        },
+      },
+      async ({ doc, content, message, brain, mode, base_sha, proposal, drop, budget_tokens }) =>
+        textResult(await contributePayload(state, brain ?? null, doc ?? null, content ?? null, mode ?? "create", base_sha ?? null, message, proposal ?? null, drop ?? false, budget_tokens ?? null)),
+    );
+
+    server.registerTool(
+      "brain_submit",
+      {
+        description:
+          "Send a proposal upstream as a pull request (asking the owners to take " +
+          "it). Pushes only to YOUR copy of the repository (the fork), never to the " +
+          "original: with gh/tea it opens the pull request and returns pr_url; with " +
+          "a `fork` remote it returns a compare_url to click; otherwise a patch file. " +
+          "title and body are drafted from your commits and the checks that ran.",
+        inputSchema: {
+          proposal: z.string(),
+          brain: z.string().optional(),
+          title: z.string().optional(),
+          body: z.string().optional(),
+        },
+      },
+      async ({ proposal, brain, title, body }) =>
+        textResult(await submitPayload(state, brain ?? null, proposal, title ?? null, body ?? null)),
+    );
+  }
+
+  if (allowed >= 4) {
     server.registerTool(
       "brain_push",
       {
@@ -1819,10 +1902,11 @@ export function createMcpServer(state: ServeState | BrainSet, writeRefusal: stri
           "Publish this brain: compile, run its henxels contract, stage the bundle, " +
           "commit with your message, push. Refuses when behind (run brain_sync first), " +
           "when conflicts remain, or when the contract cannot be run — an unverified " +
-          "push is not a push. Hooks always run.",
+          "push is not a push. Hooks always run. A read-only brain refuses and points " +
+          "at brain_contribute.",
         inputSchema: { message: z.string(), brain: z.string().optional() },
       },
-      async ({ message, brain }) => textResult(await pushBrain(await brainState(brain ?? null), message)),
+      async ({ message, brain }) => textResult(await pushBrain(await brainState(brain ?? null), message, await brainAccess(brain ?? null))),
     );
   }
 
