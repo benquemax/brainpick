@@ -225,10 +225,12 @@ def _split_root(root: Path) -> tuple[str, str]:
     return str(repo), root.relative_to(repo).as_posix()
 
 
-def _bundle_id(root: Path) -> str:
+def _bundle_id(config_root: Path) -> str:
+    """`[bundle] id` from the config that governs the bundle — at the repo, not
+    the bundle, when they differ — else a fresh id."""
     from brainpick.config import generate_bundle_id, load_config
 
-    return load_config(root).bundle.id or generate_bundle_id()
+    return load_config(config_root).bundle.id or generate_bundle_id()
 
 
 def register_brain(root: str | Path, path: str | Path | None = None, alias: str | None = None,
@@ -248,7 +250,7 @@ def register_brain(root: str | Path, path: str | Path | None = None, alias: str 
     while port in used_ports:
         port += 1
     entry = dict(existing) if existing else {
-        "id": _bundle_id(root), "repo": repo, "bundle_path": bundle_path, "port": port,
+        "id": _bundle_id(Path(repo)), "repo": repo, "bundle_path": bundle_path, "port": port,
         "enabled": True, "host": DEFAULT_HOST,
     }
     if alias:

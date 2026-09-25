@@ -1,4 +1,5 @@
 """CLI wiring: the serve/mcp/compile/init/doctor subcommands exist and describe themselves."""
+import subprocess
 import io
 import json
 
@@ -344,3 +345,24 @@ def test_compile_prints_the_update_notice_when_one_is_known(kotiaurinko, capsys,
     assert main(["compile", "--root", str(kotiaurinko)]) == 0
     out = capsys.readouterr().out
     assert "note: brainpick 9.9.9 is available" in out and "pip install -U brainpick" in out
+
+
+def test_cli_register_resolves_a_repo_root_to_its_bundle(kotiaurinko, tmp_path, monkeypatch, capsys):
+    # `register REPO` where REPO/brainpick.toml points at a subdirectory bundle must
+    # store the bundle (repo + bundle_path), like `mcp --root REPO` resolves it — or
+    # the registry-mode server compiles the whole repo as the brain and serves every
+    # .md in it, with its config read from nowhere.
+    from brainpick.federation import entry_root, load_registry
+
+    registry = tmp_path / "brains.toml"
+    monkeypatch.setenv("BRAINPICK_REGISTRY", str(registry))
+    repo = kotiaurinko.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "kotiaurinko"\n', encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)  # repo + bundle_path needs a repo above
+    assert main(["register", str(repo), "--cortex"]) == 0
+    capsys.readouterr()
+    entries = load_registry(registry)
+    assert entries[0]["bundle_path"] == "kotiaurinko"
+    assert entry_root(entries[0]) == kotiaurinko.resolve()
+    assert main(["register", str(repo), "--remove"]) == 0  # the same spelling removes it
+    assert load_registry(registry) == []

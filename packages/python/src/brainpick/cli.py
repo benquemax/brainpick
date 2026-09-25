@@ -488,7 +488,12 @@ def _cmd_register(args: argparse.Namespace) -> int:
         print(f"registry: {registry}")
         return 0
 
-    root = Path(args.path).resolve()
+    from brainpick.config import resolve_bundle
+
+    # PATH may be a repo root above its bundle ([bundle] root, spec/80) — register
+    # the bundle it governs, as `mcp --root` would, or the registry-mode server
+    # compiles the whole repo as the brain and reads its config from nowhere.
+    root, _ = resolve_bundle(args.path, env)
     if args.remove:
         if unregister_brain(root, registry):
             print(f"removed {root} from {registry}")
@@ -513,6 +518,7 @@ def _register_from_hosts(args: argparse.Namespace, registry, env, shown_alias) -
     """spec/75: the one-command migration — every `mcp --root DIR` in the agent
     host configs becomes a registry entry; then ONE replacement entry is shown.
     Never edits a host config."""
+    from brainpick.config import resolve_bundle
     from brainpick.federation import entry_root, load_registry, register_brain, scan_hosts
     from brainpick.scaffold import brainpick_command
 
@@ -526,7 +532,7 @@ def _register_from_hosts(args: argparse.Namespace, registry, env, shown_alias) -
     registered = 0
     for item in found:
         via = ", ".join(item.hosts)
-        root = item.root.resolve()
+        root, _ = resolve_bundle(item.root, env)  # a `--root` repo root → its bundle (spec/80)
         if root in existing:
             print(f"  already registered {root} ({via})")
             continue
