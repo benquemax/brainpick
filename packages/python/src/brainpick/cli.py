@@ -443,7 +443,7 @@ def _cmd_mcp(args: argparse.Namespace) -> int:
     if brain_set.federated:
         target = brain_set
         refusal = WRITES_OFF_REFUSAL if all(
-            load_config(b.root).serve.writes == "off" for b in brain_set.brains) else None
+            load_config(b.config_root or b.root).serve.writes == "off" for b in brain_set.brains) else None
     else:
         target = brain_set.state_for(brain_set.brains[0])
         refusal = WRITES_OFF_REFUSAL if target.config.serve.writes == "off" else None

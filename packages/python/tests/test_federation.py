@@ -769,3 +769,21 @@ def test_permission_denied_implant_degrades_instead_of_raising(tmp_path):
              "reason": "permission denied reading the bundle"}]
     finally:
         broken.root.chmod(0o755)
+
+
+def test_state_for_reads_the_config_above_a_subdirectory_bundle(tmp_path):
+    # `mcp --root REPO` resolves to REPO/<bundle> (spec/80), but the brain's config
+    # still lives at REPO: loading it from the bundle dir found no brainpick.toml and
+    # silently used defaults — [serve] git stayed off, [half_life] and [bundle]
+    # exclude did not apply, and stderr said "no brainpick.toml at …/bundle".
+    from brainpick.cli import main
+
+    bundle = copy_bundle(tmp_path, "kotiaurinko", under="repo/_brain")
+    repo = bundle.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "_brain"\n\n[serve]\ngit = "push"\n', encoding="utf-8")
+    main(["compile", "--root", str(repo)])
+
+    brain_set = resolve_brain_set([str(repo)], cwd=repo, registry_path=tmp_path / "none.toml")
+    brain = brain_set.brains[0]
+    assert brain.root == bundle.resolve()
+    assert brain_set.state_for(brain).config.serve.git == "push"

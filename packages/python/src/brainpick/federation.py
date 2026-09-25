@@ -202,10 +202,16 @@ def entry_root(entry: dict, env: dict | None = None) -> Path | None:
     """Where a registry entry's bundle lives on THIS machine: a local repo directly,
     a remote one from its daemon clone — None when that clone does not exist
     (federation never clones)."""
-    repo = entry["repo"]
-    base = Path(repo).expanduser() if is_local_repo(repo) else data_dir(env) / "brains" / entry["id"]
+    base = _entry_base(entry, env)
     root = base / entry["bundle_path"] if entry.get("bundle_path") else base
     return root.resolve() if root.is_dir() else None
+
+
+def _entry_base(entry: dict, env: dict | None = None) -> Path:
+    """The repo (or daemon clone) a registry entry points at — where its
+    brainpick.toml lives, one level above a `bundle_path` bundle."""
+    repo = entry["repo"]
+    return Path(repo).expanduser() if is_local_repo(repo) else data_dir(env) / "brains" / entry["id"]
 
 
 def _split_root(root: Path) -> tuple[str, str]:
@@ -295,10 +301,17 @@ class Brain:
     root: Path
     role: str | None = None
     here: bool = False
+    # Where brainpick.toml lives when the bundle is a subdirectory of its repo
+    # ([bundle] root, spec/80). `root` is the bundle; the config is NOT there, so
+    # loading it from `root` silently yields defaults (no [serve] git, no
+    # [half_life], no [bundle] exclude). None means the bundle is its own root.
+    config_root: Path | None = None
     state: object = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.root = Path(self.root).resolve()
+        if self.config_root is not None:
+            self.config_root = Path(self.config_root).resolve()
 
     @property
     def loaded(self) -> bool:
@@ -351,7 +364,7 @@ class BrainSet:
             from brainpick.config import load_config
             from brainpick.serve.state import ServeState
 
-            state = ServeState(brain.root, load_config(brain.root))
+            state = ServeState(brain.root, load_config(brain.config_root or brain.root))
             state.load()
             brain.state = state
         return brain.state
@@ -482,8 +495,10 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
         brains = []
         for arg in roots:
             alias, path = _parse_root_arg(arg)
-            root, _ = resolve_bundle(cwd / path, env)  # --root may be a repo root above the bundle (spec/80)
-            brains.append(Brain(alias=alias, root=root, here=(root == discover_here(cwd))))
+            config_root = (cwd / path).resolve()
+            root, _ = resolve_bundle(config_root, env)  # --root may be a repo root above the bundle (spec/80)
+            brains.append(Brain(alias=alias, root=root, here=(root == discover_here(cwd)),
+                                config_root=config_root))
         return BrainSet(brains)
 
     here = discover_here(cwd)
@@ -498,7 +513,8 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
         is_here = (cwd.resolve().is_relative_to(root) if here is None
                    else root == here or here.is_relative_to(root))
         alias = entry.get("alias") or alias_for_repo(entry["repo"])
-        brains.append(Brain(alias=alias, root=root, role=entry.get("role"), here=is_here))
+        brains.append(Brain(alias=alias, root=root, role=entry.get("role"), here=is_here,
+                            config_root=_entry_base(entry, env)))
     if here is not None and not any(b.here for b in brains):
         brains.insert(0, Brain(alias=None, root=here, here=True))
     if not brains:
