@@ -15,6 +15,55 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.6
+    date: 2026-09-25
+    brain_format: 3
+    summary: >-
+      Read-only implants and the contribution flow (Python engine): mount a
+      brain you cannot push to as a true mirror (writes redirect, sync
+      fast-forwards only), propose fixes via brain_contribute (worktree
+      proposals gated by the target's own contract) and send them upstream
+      with brain_submit (forge CLI, fork remote, or patch file — never
+      touches origin). brain_read gains cross-brain annotations.
+    agent_action: >-
+      Register read-only implants with `brainpick register --read-only`. Set
+      `[serve] git = "contribute"` (or `"push"`) to expose brain_contribute
+      and brain_submit. Your cortex notes that link to an implant page now
+      surface as annotations when reading that page.
+    changes:
+      - kind: added
+        area: mcp
+        text: >-
+          brain_contribute stages a proposed change in a git worktree on
+          contrib/<name>, branched from origin's newest default, gated by the
+          target brain's own henxels contract — the served checkout is never
+          touched. First contact is apply-and-brief: the write lands and
+          read_first returns the implant's contribution rules.
+      - kind: added
+        area: mcp
+        text: >-
+          brain_submit sends a proposal upstream without ever writing origin:
+          gh/tea opens the PR from a fork, a fork remote yields a compare_url,
+          else a format-patch file. Title and body are drafted from commits
+          and the checks that ran.
+      - kind: added
+        area: mcp
+        text: >-
+          brain_read returns annotations — docs in other mounted brains whose
+          brain:// links point at the page being read — so your cortex notes
+          ride along whenever you re-read an implant page.
+      - kind: added
+        area: config
+        text: >-
+          Registry entries accept access = "read-only" | "read-write" (default
+          read-write). A read-only mount makes brain_write refuse with a
+          brain:// link and a two-route redirect, brain_sync a pure mirror,
+          and brain_push a refusal naming brain_contribute.
+      - kind: changed
+        area: cli
+        text: >-
+          brainpick register gains --read-only and --read-write flags; the
+          listing marks read-only mounts.
   - version: 0.8.5
     date: 2026-09-25
     brain_format: 3
