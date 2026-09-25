@@ -15,6 +15,29 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.5
+    date: 2026-09-25
+    brain_format: 3
+    summary: >-
+      A session started inside a brain's repo no longer fronts the repo itself
+      as a second brain: `here` resolves through `[bundle] root`, so it
+      coincides with the registered bundle instead of compiling every .md in
+      the repo and timing out the MCP host's connect.
+    agent_action: >-
+      If `brainpick mcp` (no --root) was slow or timed out when Claude Code was
+      opened in the brain's repo, upgrade and delete any `index.md` or
+      `.brainpick/` left at the repo root beside brainpick.toml. `brain_overview`
+      should count the bundle's docs only, with paths relative to the bundle.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          `discover_here` took any directory holding brainpick.toml as a
+          bundle root. For a repo-root config pointing at a subdirectory
+          bundle, the repo was inserted as the `here` brain beside the registry
+          entry for the same bundle — a federated set of two, one of them the
+          whole repo. It now resolves `[bundle] root` and carries the config
+          root, so `here` equals the registered bundle and is not duplicated.
   - version: 0.8.4
     date: 2026-09-25
     brain_format: 3
