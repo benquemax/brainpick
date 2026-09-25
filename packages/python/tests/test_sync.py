@@ -526,3 +526,30 @@ def test_contract_optional_requirements_never_fail_the_whole(tmp_path):
     fmt = next(r for r in payload["requirements"] if r["id"] == "brain-format")
     assert fmt["required"] is False
     assert payload["satisfied"] is True  # satisfied tracks the REQUIRED floor
+
+
+def test_push_runs_the_whole_contract_not_the_bundle_path(tmp_path, monkeypatch):
+    """brain_push verifies the contract the way the pre-commit hook does — every
+    henxel, over the whole tree — so it must call `henxels check --all`. Passing
+    the bundle directory as a path made henxels test the directory entry itself
+    as a file ("_brain — should be .md"), which failed every push of a
+    subdirectory bundle governed by a repo-root contract."""
+    import subprocess as sp
+
+    local, _ = make_pair(tmp_path)
+    (local / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
+    (local / "uusi.md").write_text("---\ntype: Concept\n---\n\n# U\n", encoding="utf-8")
+    monkeypatch.setattr("brainpick.sync.find_henxels", lambda *a, **k: "henxels")
+    seen = []
+    real_run = sp.run
+
+    def fake_run(argv, **kwargs):  # intercept henxels only; git still runs for real
+        if argv[0] != "henxels":
+            return real_run(argv, **kwargs)
+        seen.append(argv)
+        return sp.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("brainpick.sync.subprocess.run", fake_run)
+    result = push_brain(state_for(local), "add uusi")
+    assert result["contract"] == "pass"
+    assert seen and seen[0][1:] == ["check", "--all"]

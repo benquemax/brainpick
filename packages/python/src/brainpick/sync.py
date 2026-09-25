@@ -327,9 +327,11 @@ def run_contract(root: str | Path, config=None) -> tuple[str, str | None]:
             "`uv tool install henxels` — or commit and push from a shell where it is "
             "available. Refusing to publish an unverified commit.")
     cwd = contract.parent if contract is not None else root
-    target = os.path.relpath(root, cwd) or "."
+    # `--all`, not the bundle path: a push verifies the whole contract the way the
+    # pre-commit hook does (repo-level henxels included), and henxels given a
+    # directory argument tests the directory entry itself as a file.
     try:
-        proc = subprocess.run([executable, "check", target], cwd=cwd,
+        proc = subprocess.run([executable, "check", "--all"], cwd=cwd,
                               capture_output=True, text=True, timeout=120)
     except subprocess.TimeoutExpired:
         return "fail", "henxels check timed out after 120s — nothing was committed"
