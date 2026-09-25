@@ -15,6 +15,30 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.2
+    date: 2026-09-25
+    brain_format: 3
+    summary: >-
+      `brainpick mcp --root <repo>` reads the repo's `brainpick.toml` again when
+      `[bundle] root` points below it. The brain set resolved the root down to
+      the bundle and then loaded the config from the bundle, found nothing there
+      and used defaults — so over MCP `[serve] git` stayed off (no sync verbs in
+      tools/list), `[half_life]` never faded and `[bundle] exclude` never hid.
+    agent_action: >-
+      Upgrade and restart any `brainpick mcp` server whose `--root` is a repo
+      root above its bundle, then check tools/list for brain_status / brain_sync
+      / brain_push if `[serve] git` is set. A stderr line "no brainpick.toml at
+      …/<bundle> — using defaults" on server start was this bug.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          `Brain` carries a `config_root` — the `--root` argument, or a registry
+          entry's repo — and `BrainSet.state_for` plus the mcp writes-refusal
+          load the config from there instead of from the bundle. Same family as
+          the 0.8.1 `serve` double-join: one path was made to mean two roots.
+          The Node engine never resolves `[bundle] root` inside its brain set,
+          so it is unchanged.
   - version: 0.8.1
     date: 2026-09-24
     brain_format: 3
