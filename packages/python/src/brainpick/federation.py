@@ -289,11 +289,27 @@ def is_bundle_root(path: Path) -> bool:
 
 
 def discover_here(cwd: str | Path) -> Path | None:
-    """The nearest ancestor-or-self of cwd that is a bundle root (spec/75)."""
+    """The nearest ancestor-or-self of cwd that is a bundle root (spec/75) — the
+    BUNDLE a repo-root brainpick.toml governs, not the repo: a config with
+    `[bundle] root = "_brain"` marks the repo as a config root, and taking it as
+    the bundle compiled every .md in the repo as a second brain."""
+    found = discover_here_with_config(cwd)
+    return found[0] if found else None
+
+
+def discover_here_with_config(cwd: str | Path) -> tuple[Path, Path] | None:
+    """(bundle root, config root) for `here`, or None. The config root is where
+    brainpick.toml lives; it equals the bundle root unless [bundle] root points
+    below it."""
+    from brainpick.config import resolve_bundle
+
     path = Path(cwd).resolve()
     for candidate in (path, *path.parents):
-        if is_bundle_root(candidate):
-            return candidate
+        if (candidate / "brainpick.toml").is_file():
+            bundle, _ = resolve_bundle(candidate)
+            return bundle, candidate
+        if (candidate / ".brainpick").is_dir():
+            return candidate, candidate
     return None
 
 
@@ -503,7 +519,8 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
                                 config_root=config_root))
         return BrainSet(brains)
 
-    here = discover_here(cwd)
+    found = discover_here_with_config(cwd)
+    here, here_config = found if found else (None, None)
     brains: list[Brain] = []
     for entry in load_registry(registry_path):
         if not entry.get("enabled", True):
@@ -518,7 +535,7 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
         brains.append(Brain(alias=alias, root=root, role=entry.get("role"), here=is_here,
                             config_root=_entry_base(entry, env)))
     if here is not None and not any(b.here for b in brains):
-        brains.insert(0, Brain(alias=None, root=here, here=True))
+        brains.insert(0, Brain(alias=None, root=here, here=True, config_root=here_config))
     if not brains:
         return BrainSet([Brain(alias=None, root=cwd.resolve(), here=True)])
     ordered = sorted(brains, key=lambda b: (0 if b.here else 1 if is_cortex(b.role) else 2))

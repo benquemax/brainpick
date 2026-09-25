@@ -787,3 +787,19 @@ def test_state_for_reads_the_config_above_a_subdirectory_bundle(tmp_path):
     brain = brain_set.brains[0]
     assert brain.root == bundle.resolve()
     assert brain_set.state_for(brain).config.serve.git == "push"
+
+
+def test_discover_here_resolves_a_repo_root_to_its_bundle(tmp_path):
+    # A repo-root brainpick.toml with [bundle] root = "_brain" marks the REPO as a
+    # bundle root, so a session started in the repo got the repo itself as the
+    # "here" brain — a second brain beside the registered bundle, compiling every
+    # .md in the repo (and timing out the MCP host's 30 s connect).
+    bundle = copy_bundle(tmp_path, "kotiaurinko", under="repo/_brain")
+    repo = bundle.parent
+    (repo / "brainpick.toml").write_text('[bundle]\nroot = "_brain"\n', encoding="utf-8")
+    assert discover_here(repo) == bundle.resolve()
+    assert discover_here(repo / "automation") == bundle.resolve() if (repo / "automation").exists() else True
+    assert discover_here(bundle / "saaret") == bundle.resolve()
+    brains = resolve_brain_set([], cwd=repo, registry_path=tmp_path / "none.toml").brains
+    assert [b.root for b in brains] == [bundle.resolve()]
+    assert brains[0].config_root == repo.resolve()
