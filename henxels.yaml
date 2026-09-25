@@ -48,7 +48,7 @@ henxels:
   # https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
   - henxel: "Every concept doc is kebab-case markdown with OKF frontmatter (type is the one MUST)"
     in: ./docs/*
-    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/runtime-parity.md.codx/*"]
+    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/similarity-gaps-allowlist.toml", "docs/runtime-parity.md.codx/*"]
     allowed_filetypes: .md
     filename_casing: kebab-case
     required_frontmatter: [type, about, title, description]
@@ -67,7 +67,7 @@ henxels:
 
   - henxel: "Every doc's subject is classified by ontological category (about)"
     in: ./docs/*
-    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/runtime-parity.md.codx/*"]
+    except: ["**/index.md", "**/log.md", "docs/references/*", "docs/assets/*", "docs/brainpick.toml", "docs/similarity-gaps-allowlist.toml", "docs/runtime-parity.md.codx/*"]
     frontmatter_values:
       about: [person, organization, place, thing, event, process, concept]
     why: >

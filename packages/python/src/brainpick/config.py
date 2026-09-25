@@ -54,7 +54,7 @@ class ServeConfig:
     transports: list[str] = field(default_factory=lambda: ["streamable-http"])
     watch: bool = True
     writes: str = "guarded"
-    git: str = "off"    # off | status | sync | push — the sync tools (spec/100)
+    git: str = "off"    # off | status | sync | contribute | push — the sync tools (spec/100, spec/105)
     token: str = ""
     max_asset_bytes: int = 8388608  # 8 MiB — the POST /api/assets upload cap (spec/50)
 
@@ -122,6 +122,9 @@ class BrainConfig:
     origin: str = ""            # canonical git URL — a lookup key, never the identity ([bundle] id is)
     audience: str = "personal"  # personal | team | public — who this brain is written for
     readers: list[str] = field(default_factory=list)  # for team: the assumed readers
+    # spec/105: the pages a contributor reads first (bundle-relative) — carried as
+    # read_first on every brain_contribute; falls back to CONTRIBUTING.md / conventions
+    contributing: list[str] = field(default_factory=list)
 
     @property
     def is_brain(self) -> bool:

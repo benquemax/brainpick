@@ -687,7 +687,7 @@ def test_brain_show_registered_as_sixth_tool_even_when_writes_refused(kotiaurink
 
 
 def test_sync_tools_appear_only_at_their_serve_git_level(kotiaurinko):
-    """spec/100: the ladder off|status|sync|push. A tool outside the level is ABSENT
+    """spec/100 + spec/105: the ladder off|status|sync|contribute|push. A tool outside the level is ABSENT
     from tools/list — an unavailable capability is invisible, not a runtime refusal."""
     import asyncio
 
@@ -702,8 +702,11 @@ def test_sync_tools_appear_only_at_their_serve_git_level(kotiaurinko):
     assert "brain_status" in names("status")
     assert not {"brain_sync", "brain_push"} & names("status")
     assert {"brain_status", "brain_sync"} <= names("sync")
-    assert "brain_push" not in names("sync")
-    assert {"brain_status", "brain_sync", "brain_push"} <= names("push")
+    assert not {"brain_contribute", "brain_submit", "brain_push"} & names("sync")
+    # spec/105: contribute sits below push — nothing on it writes a remote the agent does not own
+    assert {"brain_status", "brain_sync", "brain_contribute", "brain_submit"} <= names("contribute")
+    assert "brain_push" not in names("contribute")
+    assert {"brain_status", "brain_sync", "brain_contribute", "brain_submit", "brain_push"} <= names("push")
 
 
 def test_overview_update_notice_is_absent_without_one_and_leads_the_hint_with_one(kotiaurinko):

@@ -189,11 +189,11 @@ the failure this section exists to prevent.
 
 ```toml
 [serve]
-git = "off"        # off | status | sync | push
+git = "off"        # off | status | sync | contribute | push
 ```
 
-A ladder, not a set: `status` enables `brain_status`; `sync` enables it and
-`brain_sync`; `push` enables all three. Default **`off`** — an engine adds
+A ladder, not a set, climbed upwards: `status` enables `brain_status`; `sync` enables it and
+`brain_sync`; `contribute` adds `brain_contribute` and `brain_submit` (spec/105); `push` enables all. Default **`off`** — an engine adds
 no git capability to an existing deployment on upgrade.
 
 Exposure rules, which are normative:

@@ -11,6 +11,10 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "requires_henxels": {
+      "description": "Minimum henxels version this contract needs (e.g. \">=0.6\" or \"0.6\"). An older install blocks with a clear upgrade message instead of cryptic per-check errors.",
+      "type": "string"
+    },
     "settings": { "$ref": "#/$defs/settings" },
     "henxels": {
       "description": "The rule list. Each item is one henxel.",
@@ -44,7 +48,36 @@
               "additionalProperties": false,
               "properties": {
                 "above": { "type": "number", "minimum": 0, "maximum": 1 },
-                "ignore": { "type": "array", "items": { "type": "string" } }
+                "ignore": { "type": "array", "items": { "type": "string" } },
+                "at_most": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Show at most this many duplicate warnings, then a count (default 20). Keeps a bulk import from burying the output."
+                },
+                "budget": {
+                  "type": ["number", "string"],
+                  "description": "Optional wall-clock cap for the scan: seconds as a number, or \"30s\" / \"5m\" / \"1h\". Unset = always scan to completion. When exceeded, results are partial and one warning says so."
+                }
+              }
+            }
+          ]
+        },
+        "judge": {
+          "description": "The language model that judges natural-language henxels (make_sure_that). Any OpenAI-compatible chat endpoint — local (Ollama, llama.cpp, vLLM, LM Studio) or remote — with or without an API key. `true` = Ollama defaults (http://localhost:11434/v1, qwen3:8b). The key is never in the YAML: name the env var that holds it.",
+          "oneOf": [
+            { "type": "boolean" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "base_url": { "type": "string", "description": "Endpoint root ending in /v1 (default http://localhost:11434/v1)." },
+                "model": { "type": "string", "description": "Model id as the endpoint knows it (default qwen3:8b)." },
+                "api_key_env": { "type": "string", "description": "Environment variable holding the API key (default OPENAI_API_KEY). Unset or empty = no Authorization header." },
+                "timeout": { "type": "number", "minimum": 1, "description": "Seconds to wait per verdict before failing open (default 60)." },
+                "max_chars": { "type": "integer", "minimum": 1000, "description": "Evidence (diff) budget per verdict; longer diffs are truncated (default 60000)." },
+                "extra_body": { "type": "object", "description": "Extra JSON merged into the request body, e.g. {\"chat_template_kwargs\": {\"enable_thinking\": false}} for vLLM/Qwen." },
+                "block_above": { "type": "number", "minimum": 0, "maximum": 1, "description": "A `level: block` henxel blocks only when the judge's confidence is at least this; below it the failure warns (default 0.8). Confidence needs logprobs from the endpoint; without them a failure is taken at face value." },
+                "warn_above": { "type": "number", "minimum": 0, "maximum": 1, "description": "Failures below this confidence are dropped entirely (default 0)." }
               }
             }
           ]
@@ -118,6 +151,7 @@
         "forbidden_subfolders": { "$ref": "#/$defs/scalarOrList" },
         "must_not_exist": { "type": "boolean" },
         "max_lines": { "type": "integer", "minimum": 1, "description": "each file in scope stays under this many lines" },
+        "max_files": { "type": "integer", "minimum": 1, "description": "a location holds at most N files directly (subfolders not counted) — keep a folder from silting up, e.g. one journal month at the top level" },
         "no_secrets": { "type": "boolean", "description": "files contain no credentials (private keys, API tokens, passwords)" },
         "append_only": { "type": "boolean", "description": "staged edits only add lines to the end; existing lines are never changed" },
         "immutable": { "type": "boolean", "description": "files here can be added but never modified once committed" },
@@ -139,6 +173,14 @@
           "items": {
             "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
           }
+        },
+        "make_sure_that": {
+          "description": "A natural-language rule judged by a language model (settings.judge) against the staged changes in scope. `true` judges the henxel's own sentence (and `why:`); a string or list of strings judges those sentences instead. `@path` in a sentence hands that repo file to the judge. Diff-only: passes when nothing in scope changed. Unsure or unreachable judges only warn.",
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" } }
+          ]
         },
         "markdown_lint": { "type": "boolean" },
         "markdown_links_absolute": { "type": "boolean" },

@@ -21,7 +21,9 @@ from brainpick.core.canonical import sha256_hex
 from brainpick.core.frontmatter import split_frontmatter
 from brainpick.detect import detect_henxels, find_henxels
 from brainpick.federation import (
+    READ_ONLY,
     BrainSet,
+    brain_link_for,
     is_cortex,
     parse_scope,
     qualify,
@@ -36,6 +38,7 @@ from brainpick.merge import find_base, resolve
 from brainpick.query.keyword import tokenize
 from brainpick.query.router import KNOWN_MODES, run_search
 from brainpick.serve.state import ServeState, bfs_neighborhood, jsonable, resolve_doc
+from brainpick.contribute import contribute, drop_proposal, submit
 from brainpick.sync import git_status, push_brain, sync_brain
 from brainpick.serve.watcher import recompile_and_broadcast
 WRITES_OFF_REFUSAL = (
@@ -798,6 +801,7 @@ def _brains_listing(brain_set: BrainSet) -> tuple[list[dict], list[dict]]:
         entry = {
             "alias": brain.alias,
             "role": brain.role,
+            "access": brain.access,
             "here": brain.here,
             "root": relative_root(brain.root),
         }
@@ -855,6 +859,12 @@ def overview_payload(target, budget_tokens: int | None = None, scope: str | None
                       "paths are alias:path.")
     if result["truncated"]:
         result["hint"] += " Tree trimmed to fit budget_tokens."
+    read_only = [b.alias for b in brain_set.brains if b.access == READ_ONLY]
+    if read_only:  # spec/105: say where complements go before the agent tries to write
+        own = brain_set.cortex.alias if brain_set.cortex else "your own brain"
+        result["hint"] += (f" {', '.join(read_only)} {'is' if len(read_only) == 1 else 'are'} "
+                           f"read-only (a mirror of upstream) — complement in {own}, propose "
+                           "fixes with brain_contribute.")
     # spec/100: skew leads the hint, and unreadable leads skew — a brain that cannot
     # be read is a worse condition than one that is merely behind.
     skew = skew_of(listing)
@@ -982,7 +992,45 @@ def read_payload(target, doc: str, sections: list[str] | None = None,
     result["brain"] = brain.alias
     if not result["truncated"]:
         result["hint"] = f"brain_neighbors '{result['path']}' walks the links around this doc."
+    annotations = _annotations(brain_set, brain, result.get("path", qualify(brain.alias, rel)))
+    if annotations:  # spec/105: the cortex overlay, seen from the implant's side
+        result["annotations"] = annotations
+        result["hint"] += (f" {len(annotations)} other brain page(s) point at this one (annotations) — "
+                           "your own notes or corrections; read them before trusting this page alone.")
     return result
+
+
+_BRAIN_LINK = re.compile(r"brain://[a-z0-9-]*?([a-z0-9]{21})/([^\s)>\]\"']+)")
+
+
+def _annotations(brain_set: BrainSet, brain, qualified_path: str) -> list[dict]:
+    """Every doc in every OTHER brain of the set whose brain:// links (spec/85,
+    slug-then-id) point at this doc — resolved by [bundle] id against the set."""
+    from brainpick.config import load_config
+
+    try:
+        target_id = load_config(brain.config_root or brain.root).bundle.id
+    except Exception:  # noqa: BLE001
+        return []
+    if not target_id:
+        return []
+    _, rel = split_qualified(qualified_path)
+    rel = rel.lstrip("/")
+    found = []
+    for other in brain_set.brains:
+        if other is brain or brain_set.unreadable_reason(other) is not None:
+            continue
+        state = brain_set.state_for(other)
+        for record in state.records:
+            text = record.get("text") or ""
+            if "brain://" not in text:
+                continue
+            for m in _BRAIN_LINK.finditer(text):
+                if m.group(1) == target_id and m.group(2).rstrip(".,;:") == rel:
+                    found.append({"brain": other.alias, "path": qualify(other.alias, record["path"]),
+                                  "title": record.get("title") or record["path"]})
+                    break
+    return found
 
 
 def neighbors_payload(target, doc: str, depth: int = 1, layer: str = "links",
@@ -1027,12 +1075,94 @@ def write_payload(target, doc: str, content: str, mode: str = "create",
         if brain is None:
             aliases = ", ".join(b.alias for b in brain_set.brains)
             return {"ok": False, "instruction": f"no brain called '{alias}' — brains here: {aliases}"}
+    if brain.access == READ_ONLY:
+        return read_only_refusal(brain_set, brain, rel)
     result = _single_write(brain_set.state_for(brain), rel, content, mode, base_sha, budget_tokens, refusal)
     if result.get("ok"):
         result["path"] = qualify(brain.alias, result["path"])
         result["brain"] = brain.alias
         result["hint"] = f"brain_read '{result['path']}' to verify — connected UIs already got the delta."
     return result
+
+
+def _contribute_target(target, brain: str | None, doc: str | None) -> tuple[object, str | None, str | None, dict | None]:
+    """(state, alias, doc, refusal) — the one brain a proposal acts on. In a
+    federated set `brain` is required: a proposal never guesses between brains."""
+    brain_set = _as_set(_fresh(target))
+    if brain_set is None:
+        return target, None, doc, None
+    if not brain_set.federated:
+        only = brain_set.brains[0]
+        return brain_set.state_for(only), only.alias, (_strip_alias(brain_set, doc) if doc else doc), None
+    aliases = ", ".join(b.alias for b in brain_set.brains)
+    if not brain:
+        alias, rel = split_qualified(doc) if doc else (None, None)
+        if alias is None:
+            return None, None, None, {"ok": False, "instruction":
+                                      f"name the brain — brain_contribute proposes to one brain: "
+                                      f"pass brain=<alias>, one of {aliases}"}
+        brain = alias
+    chosen = brain_set.by_alias(brain)
+    if chosen is None:
+        return None, None, None, {"ok": False, "instruction": f"no brain called '{brain}' — brains here: {aliases}"}
+    rel = doc
+    if doc:
+        alias, stripped = split_qualified(doc)
+        if alias is not None and alias != chosen.alias:
+            return None, None, None, {"ok": False, "instruction":
+                                      f"doc '{doc}' names brain '{alias}' but brain='{chosen.alias}' — pick one"}
+        rel = stripped if alias is not None else doc
+    return brain_set.state_for(chosen), chosen.alias, rel, None
+
+
+def contribute_payload(target, brain: str | None, doc: str | None, content: str | None = None,
+                       mode: str = "create", base_sha: str | None = None, message: str = "",
+                       proposal: str | None = None, drop: bool = False,
+                       budget_tokens: int | None = None) -> dict:
+    """spec/105 brain_contribute over one brain of the set."""
+    state, alias, rel, refusal = _contribute_target(target, brain, doc)
+    if refusal:
+        return refusal
+    if drop:
+        result = drop_proposal(state, proposal or (Path(rel).stem if rel else ""))
+    else:
+        if not rel or content is None:
+            return {"ok": False, "instruction": "brain_contribute needs doc and content (or drop=true with proposal)"}
+        result = contribute(state, rel, content, mode, base_sha, budget_tokens, message, proposal)
+    if alias:
+        result["brain"] = alias
+    return result
+
+
+def submit_payload(target, brain: str | None, proposal: str, title: str | None = None,
+                   body: str | None = None) -> dict:
+    """spec/105 brain_submit over one brain of the set."""
+    state, alias, _, refusal = _contribute_target(target, brain, None)
+    if refusal:
+        return refusal
+    result = submit(state, proposal, title, body)
+    if alias:
+        result["brain"] = alias
+    return result
+
+
+def read_only_refusal(brain_set: BrainSet, brain, rel: str) -> dict:
+    """spec/105: a refusal that only says "no" strands the knowledge the agent was
+    about to record. Name both routes — complement in the agent's own memory with
+    the cross-brain link pre-computed, or correct the implant through a proposal."""
+    rel = rel if rel.endswith(".md") else rel + ".md"
+    own = brain_set.cortex.alias if brain_set.cortex else None
+    link = brain_link_for(brain, rel)
+    ground = f" and ground it with {link}" if link else ""
+    where = f"brain_write '{own}:<path>'" if own else "brain_write into your own brain"
+    return {
+        "ok": False, "brain": brain.alias, "access": READ_ONLY, "brain_link": link,
+        "instruction": (
+            f"{brain.alias} is read-only (a mirror of its upstream — never written here). "
+            f"Two routes: (1) COMPLEMENT — write what you concluded into your own memory: "
+            f"{where}{ground}; (2) CORRECT the implant itself — brain_contribute with the "
+            f"same arguments proposes the change upstream as a pull request."),
+    }
 
 
 def _requirement(rid: str, required: bool, satisfied: bool, what: str, why: str,
@@ -1309,6 +1439,14 @@ def create_mcp_server(state, write_refusal: str | None = None):
         target = (brain_set.by_alias(brain) if brain else None) or brain_set.focus
         return brain_set.state_for(target)
 
+    def _brain_access(brain: str | None) -> str:
+        """spec/105: whether THIS mount of the brain may push — read-write or read-only."""
+        brain_set = _as_set(state)
+        if brain_set is None:
+            return "read-write"
+        target = (brain_set.by_alias(brain) if brain else None) or brain_set.focus
+        return target.access
+
     @server.tool()
     def brain_contract(brain: str | None = None) -> dict:
         """What this bundle must satisfy for brainpick to work, as data: every
@@ -1318,11 +1456,12 @@ def create_mcp_server(state, write_refusal: str | None = None):
         brain reports unreadable, or before wiring a new implant."""
         return contract_payload(_brain_state(brain))
 
-    # spec/100: the sync verbs are exposed by the [serve] git ladder
-    # (off | status | sync | push), default off — an upgrade adds no git capability.
-    # A tool outside the level is ABSENT from tools/list, never a runtime refusal.
+    # spec/100 + spec/105: the sync verbs are exposed by the [serve] git ladder
+    # (off | status | sync | contribute | push), climbed upwards, default off — an
+    # upgrade adds no git capability. A tool outside the level is ABSENT from
+    # tools/list, never a runtime refusal.
     git_level = getattr(_focus_state().config.serve, "git", "off")
-    levels = {"off": 0, "status": 1, "sync": 2, "push": 3}
+    levels = {"off": 0, "status": 1, "sync": 2, "contribute": 3, "push": 4}
     allowed = levels.get(git_level, 0)
 
     if allowed >= 1:
@@ -1340,16 +1479,42 @@ def create_mcp_server(state, write_refusal: str | None = None):
             doc-wise rather than line-wise, so no conflict markers ever reach a doc.
             Commits NOTHING: merged docs are proposals to review, and unresolved ones
             come back with both versions for you to reconcile with brain_write."""
-            return sync_brain(_brain_state(brain), budget_tokens)
+            return sync_brain(_brain_state(brain), budget_tokens, access=_brain_access(brain))
 
     if allowed >= 3:
+        @server.tool()
+        def brain_contribute(doc: str | None = None, content: str | None = None, message: str = "",
+                             brain: str | None = None, mode: str = "create",
+                             base_sha: str | None = None, proposal: str | None = None,
+                             drop: bool = False, budget_tokens: int | None = None) -> dict:
+            """Propose a change to a brain you cannot push to (a read-only implant):
+            the same arguments as brain_write plus a commit message. The change is
+            written and committed in a separate working copy (a git worktree on
+            branch contrib/<proposal>) — never in the mounted brain — after passing
+            that brain's own contract. Several calls stack on one proposal; read the
+            read_first pages it returns; then brain_submit. drop=true removes a proposal."""
+            return contribute_payload(state, brain, doc, content, mode, base_sha, message,
+                                      proposal, drop, budget_tokens)
+
+        @server.tool()
+        def brain_submit(proposal: str, brain: str | None = None, title: str | None = None,
+                         body: str | None = None) -> dict:
+            """Send a proposal upstream as a pull request (asking the owners to take
+            it). Pushes only to YOUR copy of the repository (the fork), never to the
+            original: with gh/tea it opens the pull request and returns pr_url; with
+            a `fork` remote it returns a compare_url to click; otherwise a patch file.
+            title and body are drafted from your commits and the checks that ran."""
+            return submit_payload(state, brain, proposal, title, body)
+
+    if allowed >= 4:
         @server.tool()
         def brain_push(message: str, brain: str | None = None) -> dict:
             """Publish this brain: compile, run its henxels contract, stage the
             bundle, commit with your message, push. Refuses when behind (run
             brain_sync first), when conflicts remain, or when the contract cannot be
-            run — an unverified push is not a push. Hooks always run."""
-            return push_brain(_brain_state(brain), message)
+            run — an unverified push is not a push. Hooks always run. A read-only
+            brain refuses and points at brain_contribute."""
+            return push_brain(_brain_state(brain), message, access=_brain_access(brain))
 
     @server.resource("brain://index")
     def brain_index() -> str:

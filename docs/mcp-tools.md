@@ -89,6 +89,14 @@ merge**: two agents can each append a true fact and produce a page that says
 two contradictory things, so sync resolves structure and leaves truth to a
 reader.
 
+On a brain mounted [read-only](read-only-implants.md) the same verbs bend:
+sync fast-forwards only (a mirror takes upstream's commits and creates
+none) and push refuses with a redirect. Two more verbs cover that case —
+**`brain_contribute`** stages a fix as a commit in a separate working copy
+(a git worktree) and **`brain_submit`** sends it upstream as a pull
+request, never touching the original repository; the whole flow is
+[contributing to an implant](contributing-to-an-implant.md).
+
 `brain_push` runs the contract *itself* rather than trusting the git hook.
 The henxels-managed hook warns and exits 0 when it cannot resolve the
 `henxels` executable — reasonable for a human at a terminal, dangerous for an
@@ -96,10 +104,12 @@ MCP server, which is the process most likely to have a stripped PATH. A push
 whose contract was skipped is not a verified push, so "could not run" is a
 refusal, not a pass.
 
-These three are gated by `[serve] git = off | status | sync | push`,
-**default `off`**: upgrading adds no git capability, and a tool outside the
-configured level is absent from `tools/list` rather than refusing when
-called.
+These verbs are gated by `[serve] git = off | status | sync | contribute |
+push`, **default `off`**: upgrading adds no git capability, and a tool
+outside the configured level is absent from `tools/list` rather than
+refusing when called. The ladder climbs upwards — `contribute` sits below
+`push` because a proposal can never write a repository the agent does not
+own.
 
 ## Every call sees the current brain
 

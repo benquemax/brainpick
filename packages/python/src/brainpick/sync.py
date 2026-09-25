@@ -27,6 +27,9 @@ from brainpick.detect import detect_henxels, find_henxels
 GIT_TIMEOUT = 30  # generous: fetch talks to a network
 
 
+READ_ONLY = "read-only"  # mirrors brainpick.federation.READ_ONLY without importing it
+
+
 class GitUnavailable(RuntimeError):
     """No `git` executable — the one condition a caller cannot paper over."""
 
@@ -164,12 +167,30 @@ def git_status(root: str | Path) -> dict:
     dirty = {"modified": modified, "untracked": untracked, "staged": staged}
 
     clean = ahead == 0 and behind == 0 and not conflicts and not any(dirty.values())
-    return {
+    return _with_proposals(root, {
         "repo": True, "branch": branch, "upstream": upstream,
         "ahead": ahead, "behind": behind, "dirty": dirty,
         "conflicts": conflicts, "clean": clean,
         "hint": _status_hint(upstream, ahead, behind, dirty, conflicts, clean),
-    }
+    })
+
+
+def _with_proposals(root: Path, result: dict) -> dict:
+    """spec/105: the proposals of this brain's repository ride on brain_status."""
+    from brainpick.contribute import list_proposals, proposals_hint
+
+    repo = repo_root(root) or root
+    code, out, _ = run_git(repo, "for-each-ref", "refs/heads/contrib/")
+    if code != 0 or not out.strip():
+        return result
+    run_git(repo, "fetch", "--quiet", "origin")  # `merged` is meaningless against a stale origin
+    proposals = list_proposals(root)
+    if proposals:
+        result["proposals"] = [{k: p[k] for k in ("name", "branch", "commits", "stale_base",
+                                                   "merged", *(["submitted"] if "submitted" in p else []))}
+                               for p in proposals]
+        result["hint"] = f"{result['hint']} {proposals_hint(proposals)}".strip()
+    return result
 
 
 def _status_hint(upstream, ahead, behind, dirty, conflicts, clean) -> str:
@@ -204,9 +225,11 @@ def _budget_shape(text: str | None, limit: int = 4000) -> str:
     return text if len(text) <= limit else text[:limit] + "\n… (trimmed)"
 
 
-def sync_brain(state, budget_tokens: int | None = None) -> dict:
+def sync_brain(state, budget_tokens: int | None = None, access: str = "read-write") -> dict:
     """spec/100 brain_sync: bring the remote's work in, resolve what collides
-    doc-wise, recompile — and commit NOTHING."""
+    doc-wise, recompile — and commit NOTHING. On a read-only mount (spec/105) the
+    checkout is a mirror: fast-forward only, a diverged checkout is reported and
+    never merged."""
     from brainpick.compile.pipeline import run_compile
     from brainpick.llm import make_chat
     from brainpick.merge import resolve
@@ -229,12 +252,17 @@ def sync_brain(state, budget_tokens: int | None = None) -> dict:
         result["hint"] = f"fetch failed: {err.strip() or 'unknown error'}"
         return result
 
-    _ahead, behind = ahead_behind(repo)
+    ahead, behind = ahead_behind(repo)
     result["behind_before"] = behind
+    if access == READ_ONLY:
+        result["diverged"] = False
     if behind == 0:
         result["ok"] = True
         result["hint"] = "already up to date with the remote."
         return result
+
+    if access == READ_ONLY:
+        return _fast_forward_mirror(state, root, repo, result, ahead, behind)
 
     # A dirty tree cannot be merged into; stash for the duration and restore after.
     stashed = False
@@ -282,6 +310,36 @@ def sync_brain(state, budget_tokens: int | None = None) -> dict:
 
     result["ok"] = True
     result["hint"] = _sync_hint(result)
+    return result
+
+
+def _fast_forward_mirror(state, root: Path, repo: Path, result: dict, ahead: int, behind: int) -> dict:
+    """spec/105: a read-only mount only ever moves to what upstream has (git
+    fast-forward — in plain words: catch up without merging anything)."""
+    from brainpick.compile.pipeline import run_compile
+
+    if ahead > 0:
+        result["diverged"] = True
+        result["hint"] = (f"this read-only mount has diverged from its upstream ({ahead} local "
+                          f"commit(s) it should not have, {behind} behind) — a mirror is never "
+                          "merged. Reset the checkout by hand to the remote branch, or register "
+                          "it --read-write if you do push here; propose changes with "
+                          "brain_contribute instead.")
+        return result
+    code, _, err = run_git(repo, "merge", "--ff-only", "@{u}")
+    if code != 0:
+        result["diverged"] = True
+        result["hint"] = (f"fast-forward failed: {err.strip() or 'unknown error'} — a read-only "
+                          "mount is never merged; clean the checkout by hand.")
+        return result
+    try:
+        run_compile(root, config=state.config)
+    except Exception:  # noqa: BLE001 — a compile problem is reported by the next read
+        pass
+    state.load()
+    result["ok"] = True
+    result["hint"] = (f"fast-forwarded {behind} commit(s) from the remote — the mirror now "
+                      "matches upstream.")
     return result
 
 
@@ -342,6 +400,17 @@ def run_contract(root: str | Path, config=None) -> tuple[str, str | None]:
     return "pass", None
 
 
+_DENIED = ("permission denied", "permission to", "not authorized", "403", "forbidden",
+           "denied to", "authentication failed", "could not read from remote")
+
+
+def _push_denied(output: str) -> bool:
+    """Whether a failed push looks like a rights problem rather than a network or a
+    stale-branch one — read from the remote's answer, never guessed (spec/105)."""
+    text = (output or "").lower()
+    return any(marker in text for marker in _DENIED)
+
+
 def _report_pathspecs(root: Path, repo: Path) -> list[str]:
     """Repo-relative paths of the AGENTS.md files carrying a brainpick report block
     (spec/20): the bundle root's and, when the bundle is a subdirectory, the repo
@@ -359,9 +428,10 @@ def _report_pathspecs(root: Path, repo: Path) -> list[str]:
     return sorted(out)
 
 
-def push_brain(state, message: str) -> dict:
+def push_brain(state, message: str, access: str = "read-write") -> dict:
     """spec/100 brain_push: compile, run the contract, stage the bundle, commit, push.
-    Hooks always run — no engine may pass --no-verify."""
+    Hooks always run — no engine may pass --no-verify. A read-only mount (spec/105)
+    refuses before touching anything and names the verb that works."""
     from brainpick.compile.pipeline import run_compile
 
     root = Path(state.root)
@@ -371,6 +441,12 @@ def push_brain(state, message: str) -> dict:
 
     if not is_repo(root):
         result["hint"] = "not a git repository — nothing to push."
+        return result
+    if access == READ_ONLY:
+        result["access"] = READ_ONLY
+        result["hint"] = (f"{root.name} is read-only (a mirror of its upstream) — nothing is "
+                          "committed or pushed here. Propose the change upstream with "
+                          "brain_contribute, then brain_submit; complement it in your own brain.")
         return result
     if not str(message).strip():
         result["hint"] = ("a commit message is required — an engine never invents one "
@@ -452,9 +528,11 @@ def push_brain(state, message: str) -> dict:
 
     code, out, err = run_git(repo, "push")
     if code != 0:
-        result.update({"commit": commit,
-                       "hint": f"committed {commit[:8]} but the push failed: "
-                               f"{(err or out).strip()}"})
+        hint = f"committed {commit[:8]} but the push failed: {(err or out).strip()}"
+        if _push_denied(err or out):
+            hint += (" — no push rights on this remote: register this brain --read-only "
+                     "and propose changes with brain_contribute instead (spec/105).")
+        result.update({"commit": commit, "hint": hint})
         return result
     result.update({"ok": True, "commit": commit, "pushed": True,
                    "hint": f"committed {commit[:8]} and pushed to {status['upstream']}."})

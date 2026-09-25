@@ -67,6 +67,8 @@ host = "127.0.0.1"
 alias = "me"              # optional — the federation address
 role = "cortex"           # optional — "cortex" marks the agent's own brain (scope "me");
                           # "implant" marks an attached repository bundle
+access = "read-only"      # optional — read-write (default) | read-only: whether THIS mount may
+                          # push (spec/105); absent or unknown reads as read-write
 ```
 
 `role` is one of `cortex`, `implant`, or absent. **`user` is the former name

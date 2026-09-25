@@ -26,8 +26,11 @@ the agent asks once.
 - **The registry** — the same `~/.config/brainpick/brains.toml` that
   [the daemon](daemon.md) keeps. [brainpick register](reference/cli/register.md)
   adds a bundle to it once; `--cortex` marks the agent's own brain (the `me`
-  scope). Federation reads the registry and never clones a remote entry — a
-  remote brain only takes part once the daemon has cloned it.
+  scope), and `--read-only` marks a mount that may never push — a mirror of
+  its upstream, the shape described in
+  [read-only implants](read-only-implants.md). Federation reads the registry
+  and never clones a remote entry — a remote brain only takes part once the
+  daemon has cloned it.
 - **Here** — the bundle the working directory sits in (found by walking up to
   a `brainpick.toml` or a `.brainpick/`). It joins the set even if it was never
   registered, and it is where an unqualified `brain_write` lands.

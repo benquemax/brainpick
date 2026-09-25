@@ -27,6 +27,13 @@ RESERVED_ALIASES = ("all", "here", "me")
 CORTEX = "cortex"       # the agent's own brain — at most one per set (spec/75)
 IMPLANT = "implant"     # an attached repository bundle — any number
 _LEGACY_CORTEX = "user"  # the former name of "cortex"; still read, never written
+READ_WRITE = "read-write"  # access (spec/105): this mount may push — the default, never written
+READ_ONLY = "read-only"    # this mount is a mirror: writes redirect, fixes go upstream as proposals
+
+
+def normalize_access(value: str | None) -> str:
+    """The registry `access` key: absent or unknown reads as read-write (spec/105)."""
+    return READ_ONLY if value == READ_ONLY else READ_WRITE
 
 
 def is_cortex(role: str | None) -> bool:
@@ -36,7 +43,7 @@ def is_cortex(role: str | None) -> bool:
 
 _SLUG = re.compile(r"[^a-z0-9]+")
 _QUALIFIED = re.compile(r"^([a-z0-9][a-z0-9-]*):(.+)$")
-_KEY_ORDER = ("id", "repo", "bundle_path", "port", "enabled", "host", "alias", "role")
+_KEY_ORDER = ("id", "repo", "bundle_path", "port", "enabled", "host", "alias", "role", "access")
 DEFAULT_PORT_BASE = 4750  # mirrors the daemon's registry (packages/desktop)
 DEFAULT_HOST = "127.0.0.1"
 
@@ -234,13 +241,15 @@ def _bundle_id(config_root: Path) -> str:
 
 
 def register_brain(root: str | Path, path: str | Path | None = None, alias: str | None = None,
-                   user: bool = False, role: str | None = None) -> dict:
+                   user: bool = False, role: str | None = None,
+                   access: str | None = None) -> dict:
     """Add the bundle at `root` to the registry (or update its entry in place when the
     same root is already registered). Returns the entry written.
 
     `role` is "cortex" (at most one in a registry — the newest claim wins) or
     "implant" (any number). `user=True` is the deprecated spelling of
-    role="cortex" (spec/75)."""
+    role="cortex" (spec/75). `access` is "read-only" (this mount may not push —
+    spec/105) or "read-write" (the default; clears the key)."""
     root = Path(root).resolve()
     entries = load_registry(path)
     repo, bundle_path = _split_root(root)
@@ -263,6 +272,11 @@ def register_brain(root: str | Path, path: str | Path | None = None, alias: str 
             for other in entries:
                 if other is not existing and is_cortex(other.get("role")):
                     other.pop("role")  # one cortex — the newest claim wins
+    if access is not None:
+        if normalize_access(access) == READ_ONLY:
+            entry["access"] = READ_ONLY
+        else:
+            entry.pop("access", None)  # the default is not written
     if existing is None:
         entries.append(entry)
     else:
@@ -279,6 +293,20 @@ def unregister_brain(root: str | Path, path: str | Path | None = None) -> bool:
         return False
     save_registry(kept, path)
     return True
+
+
+def brain_link_for(brain, rel: str) -> str | None:
+    """The spec/85 cross-brain link to `rel` in `brain` — slug-then-id — or None when
+    the brain has no [bundle] id to be addressed by (spec/105)."""
+    from brainpick.config import load_config
+
+    try:
+        bundle_id = load_config(brain.config_root or brain.root).bundle.id
+    except Exception:  # noqa: BLE001 — no link is better than a wrong one
+        return None
+    if not bundle_id:
+        return None
+    return f"brain://{brain.alias}-{bundle_id}/{rel.lstrip('/')}"
 
 
 # -- the brain set ---------------------------------------------------------------------
@@ -319,6 +347,9 @@ class Brain:
     root: Path
     role: str | None = None
     here: bool = False
+    # Whether THIS mount may push (spec/105): read-write, or read-only — a mirror of
+    # upstream whose writes redirect and whose fixes travel as proposals.
+    access: str = READ_WRITE
     # Where brainpick.toml lives when the bundle is a subdirectory of its repo
     # ([bundle] root, spec/80). `root` is the bundle; the config is NOT there, so
     # loading it from `root` silently yields defaults (no [serve] git, no
@@ -328,6 +359,7 @@ class Brain:
 
     def __post_init__(self) -> None:
         self.root = Path(self.root).resolve()
+        self.access = normalize_access(self.access)
         if self.config_root is not None:
             self.config_root = Path(self.config_root).resolve()
 
@@ -533,6 +565,7 @@ def resolve_brain_set(roots: list[str], cwd: str | Path | None = None,
                    else root == here or here.is_relative_to(root))
         alias = entry.get("alias") or alias_for_repo(entry["repo"])
         brains.append(Brain(alias=alias, root=root, role=entry.get("role"), here=is_here,
+                            access=normalize_access(entry.get("access")),
                             config_root=_entry_base(entry, env)))
     if here is not None and not any(b.here for b in brains):
         brains.insert(0, Brain(alias=None, root=here, here=True, config_root=here_config))

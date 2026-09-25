@@ -1,0 +1,26 @@
+# similarity-gaps-allowlist.toml — reviewed-and-rejected similarity-gap pairs (spec/45).
+
+[[dismissed]]
+a = "brain-template.md"
+b = "read-only-implants.md"
+reason = "the template scaffolds your OWN brain; read-only is about mounting someone else's — shared vocabulary, no conceptual edge"
+
+[[dismissed]]
+a = "agent-integrations.md"
+b = "read-only-implants.md"
+reason = "both mention mounting brains for agents, but integrations is about harness wiring, not access"
+
+[[dismissed]]
+a = "brain-template.md"
+b = "contributing-to-an-implant.md"
+reason = "the template's CONTRIBUTING talk is about henxels upstream, not brain proposals — lexical echo"
+
+[[dismissed]]
+a = "brain.md"
+b = "read-only-implants.md"
+reason = "brain.md defines what a brain IS; read-only is about how a mount of someone else's behaves — vocabulary overlap, no edge to add"
+
+[[dismissed]]
+a = "agent-integrations.md"
+b = "contributing-to-an-implant.md"
+reason = "integrations is about harness wiring; the contribution flow shares agent vocabulary only"

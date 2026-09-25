@@ -9,7 +9,8 @@ timestamp: 2026-09-06T16:00:00Z
 
 # brainpick register
 
-`brainpick register [PATH] [--alias ALIAS] [--cortex|--implant] [--remove]` (and
+`brainpick register [PATH] [--alias ALIAS] [--cortex|--implant]
+[--read-only|--read-write] [--remove]` (and
 `--from-hosts [--dry-run]`) maintains the
 federation registry, `~/.config/brainpick/brains.toml` — the same file
 [the daemon](../../daemon.md) keeps, so a brain registered here is one the
@@ -29,10 +30,15 @@ daemon can supervise and a brain the daemon added is one agents can query
   implant is queried alongside the cortex and, like it, writable; a write is
   refused only by the implant's own `[serve] writes` setting and its own
   henxels contract.
+- `--read-only` marks a mount that may never push (publish commits) — a
+  mirror of its upstream: writes refuse with a redirect and fixes travel as
+  proposals, the shape described in
+  [read-only implants](../../read-only-implants.md). `--read-write` clears
+  it (the default).
 - `--remove` drops PATH from the registry.
 - `brainpick register` with no PATH lists the registry: alias, root, and
-  `(me)`, `(implant)`, `(disabled)` or `(missing)` marks (`brainpick register .`
-  is the explicit form for the working directory).
+  `(me)`, `(implant)`, `(read-only)`, `(disabled)` or `(missing)` marks
+  (`brainpick register .` is the explicit form for the working directory).
 - `--from-hosts` is the migration from the pre-federation shape. It scans the
   agent host configs under `$HOME` — `~/.claude.json` (user and per-project
   `mcpServers`), `~/.config/opencode/opencode.json`, `~/.codex/config.toml`,
