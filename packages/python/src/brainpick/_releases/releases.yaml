@@ -15,6 +15,27 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.4
+    date: 2026-09-25
+    brain_format: 3
+    summary: >-
+      `brain_push` also stages the AGENTS.md report its own compile refreshed,
+      so a push of a subdirectory bundle no longer leaves the repo-root report
+      modified behind it.
+    agent_action: >-
+      If `brain_status` reports the checkout dirty right after a successful
+      `brain_push` and the only modified file is AGENTS.md, upgrade — the next
+      push carries it. Nothing to undo.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          The push staged the bundle pathspec only. The compile it runs first
+          rewrites the opt-in report block at the bundle root and at the repo
+          root above it (spec/20), both outside that pathspec for a
+          subdirectory bundle, so every push left the report uncommitted and
+          the remote's copy stale. The report files that carry the block are
+          now staged with the bundle; nothing is created.
   - version: 0.8.3
     date: 2026-09-25
     brain_format: 3
