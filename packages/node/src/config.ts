@@ -42,7 +42,7 @@ export interface ServeConfig {
   transports: string[];
   watch: boolean;
   writes: string;
-  git: string; // off | status | sync | push — the sync tools (spec/100)
+  git: string; // off | status | sync | contribute | push — the sync tools (spec/100, spec/105)
   token: string;
   max_asset_bytes: number; // 8 MiB default — the POST /api/assets upload cap (spec/50)
 }

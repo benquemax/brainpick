@@ -21,6 +21,7 @@ import { existsSync, statSync, writeFileSync } from "node:fs";
 import { relative, resolve as resolvePath } from "node:path";
 
 import { checkFresh, runCompile } from "./compile/pipeline";
+import { listProposals, proposalsHint } from "./contribute";
 import { detectHenxels, findHenxels, which } from "./detect";
 import { makeChat } from "./llm";
 import { resolve as resolveMerge } from "./merge";
@@ -141,6 +142,7 @@ export type StatusPayload = {
   conflicts: string[];
   clean: boolean;
   hint: string;
+  proposals?: Array<{ name: string; branch: string; commits: number; stale_base: boolean; merged: boolean; submitted?: unknown }>;
 };
 
 /** spec/100 brain_status: the checkout's relationship to its remote.
@@ -180,7 +182,7 @@ export function gitStatus(root: string): StatusPayload {
   const dirty = { modified, untracked, staged };
   const anyDirty = modified + untracked + staged > 0;
   const clean = ahead === 0 && behind === 0 && conflicts.length === 0 && !anyDirty;
-  return {
+  return withProposals(root, {
     repo: true,
     branch,
     upstream,
@@ -190,7 +192,24 @@ export function gitStatus(root: string): StatusPayload {
     conflicts,
     clean,
     hint: statusHint(upstream, ahead, behind, dirty, conflicts, clean),
-  };
+  });
+}
+
+/** spec/105: the proposals of this brain's repository ride on brain_status. */
+function withProposals(root: string, result: StatusPayload): StatusPayload {
+  const repo = repoRoot(root) ?? root;
+  const refs = runGit(repo, ["for-each-ref", "refs/heads/contrib/"]);
+  if (refs.code !== 0 || !refs.stdout.trim()) return result;
+  runGit(repo, ["fetch", "--quiet", "origin"]); // `merged` is meaningless against a stale origin
+  const proposals = listProposals(root);
+  if (proposals.length > 0) {
+    result.proposals = proposals.map((p) => ({
+      name: p.name, branch: p.branch, commits: p.commits, stale_base: p.stale_base, merged: p.merged,
+      ...(p.submitted ? { submitted: p.submitted } : {}),
+    }));
+    result.hint = `${result.hint} ${proposalsHint(proposals)}`.trim();
+  }
+  return result;
 }
 
 function statusHint(
@@ -285,20 +304,24 @@ export async function syncBrain(
 
   const [ahead, behind] = aheadBehind(repo);
   result.behind_before = behind;
+  if (access === "read-only") result.diverged = false;
+  if (behind === 0) {
+    result.ok = true;
+    result.hint = "already up to date with the remote.";
+    return result;
+  }
 
-  // spec/105: a read-only mount is a pure mirror — fast-forward only, never merge
+  // spec/105: a read-only mount only ever moves to what upstream has (git
+  // fast-forward — in plain words: catch up without merging anything)
   if (access === "read-only") {
     if (ahead > 0) {
       result.diverged = true;
       result.hint =
-        `${ahead} local commit(s) on a read-only mount — this checkout has diverged ` +
-        `from upstream. Reset it by hand, or register it --read-write if you push here; ` +
-        `propose changes with brain_contribute instead.`;
-      return result;
-    }
-    if (behind === 0) {
-      result.ok = true;
-      result.hint = "already up to date with the remote.";
+        `this read-only mount has diverged from its upstream (${ahead} local ` +
+        `commit(s) it should not have, ${behind} behind) — a mirror is never ` +
+        "merged. Reset the checkout by hand to the remote branch, or register " +
+        "it --read-write if you do push here; propose changes with " +
+        "brain_contribute instead.";
       return result;
     }
     const ff = runGit(repo, ["merge", "--ff-only", "@{u}"]);
@@ -307,16 +330,10 @@ export async function syncBrain(
       result.hint = `fast-forward failed: ${ff.stderr.trim() || "unknown error"} — a read-only mount is never merged; clean the checkout by hand.`;
       return result;
     }
-    try { await runCompile(root, false, null, state.config); } catch { /* next read reports */ }
+    try { await runCompile(root, false, null, state.config); } catch { /* the next read reports it */ }
     await state.load();
     result.ok = true;
     result.hint = `fast-forwarded ${behind} commit(s) from the remote — the mirror now matches upstream.`;
-    return result;
-  }
-
-  if (behind === 0) {
-    result.ok = true;
-    result.hint = "already up to date with the remote.";
     return result;
   }
 
@@ -431,6 +448,16 @@ export function runContract(root: string, config?: { validate?: { henxels?: stri
     return ["fail", `${proc.stdout ?? ""}${proc.stderr ?? ""}`.trim() || "henxels check failed"];
   }
   return ["pass", null];
+}
+
+const DENIED = ["permission denied", "permission to", "not authorized", "403", "forbidden",
+  "denied to", "authentication failed", "could not read from remote"];
+
+/** Whether a failed push looks like a rights problem rather than a network or a
+ * stale-branch one — read from the remote's answer, never guessed (spec/105). */
+export function pushDenied(output: string): boolean {
+  const text = (output ?? "").toLowerCase();
+  return DENIED.some((marker) => text.includes(marker));
 }
 
 export type PushPayload = {
@@ -560,7 +587,13 @@ export async function pushBrain(
   const pushed = runGit(repo, ["push"]);
   if (pushed.code !== 0) {
     result.commit = commit;
-    result.hint = `committed ${commit.slice(0, 8)} but the push failed: ${(pushed.stderr || pushed.stdout).trim()}`;
+    const output = pushed.stderr || pushed.stdout;
+    result.hint = `committed ${commit.slice(0, 8)} but the push failed: ${output.trim()}`;
+    if (pushDenied(output)) {
+      result.hint +=
+        " — no push rights on this remote: register this brain --read-only " +
+        "and propose changes with brain_contribute instead (spec/105).";
+    }
     return result;
   }
   result.ok = true;

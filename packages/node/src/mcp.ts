@@ -963,6 +963,7 @@ function brainsListing(set: BrainSet): [Payload[], Unreadable[]] {
       return {
         alias: brain.alias,
         role: brain.role,
+        access: brain.access,
         here: brain.here,
         root,
         docs: null,
@@ -977,6 +978,7 @@ function brainsListing(set: BrainSet): [Payload[], Unreadable[]] {
     return {
       alias: brain.alias,
       role: brain.role,
+      access: brain.access,
       here: brain.here,
       root,
       docs: Object.keys((manifest["files"] ?? {}) as Record<string, unknown>).length, // = counts.docs
@@ -1056,6 +1058,15 @@ async function federatedOverview(set: BrainSet, budgetTokens?: number | null, sc
     `${set.brains.length} brains (${aliasList(set)}) — tree shows '${focus.alias}'; ` +
     "brain_search searches all of them (scope narrows: here, me, or aliases); paths are alias:path.";
   if (single["truncated"]) hint += " Tree trimmed to fit budget_tokens.";
+  const readOnly = set.brains.filter((b) => b.access === READ_ONLY).map((b) => b.alias);
+  if (readOnly.length > 0) {
+    // spec/105: say where complements go before the agent tries to write
+    const own = set.cortex ? set.cortex.alias : "your own brain";
+    hint +=
+      ` ${readOnly.join(", ")} ${readOnly.length === 1 ? "is" : "are"} ` +
+      `read-only (a mirror of upstream) — complement in ${own}, propose ` +
+      "fixes with brain_contribute.";
+  }
   const ghosts = (single["top_ghosts"] as Array<Record<string, unknown>>).map((g) => ({
     ...g,
     target: qualify(focus.alias, String(g["target"])),
@@ -1245,7 +1256,7 @@ async function federatedRead(
   result["brain"] = brain.alias;
   if (!result["truncated"]) result["hint"] = `brain_neighbors '${result["path"]}' walks the links around this doc.`;
   // spec/105: cross-brain backlinks — your cortex notes that point at an implant page
-  const anns = annotations(set, brain, String(result["path"] ?? qualify(brain.alias, rel)));
+  const anns = await annotations(set, brain, String(result["path"] ?? qualify(brain.alias, rel)));
   if (anns.length > 0) {
     result["annotations"] = anns;
     result["hint"] += ` ${anns.length} other brain page(s) point at this one (annotations) — your own notes or corrections; read them before trusting this page alone.`;
@@ -1327,21 +1338,24 @@ export async function writePayload(
     brain = target.byAlias(alias);
     if (brain === null) return { ok: false, instruction: `no brain called '${alias}' — brains here: ${aliasList(target)}` };
   }
-  // spec/105: a read-only mount refuses writes with a redirect
+  // spec/105: a refusal that only says "no" strands the knowledge the agent was
+  // about to record — name both routes, the cross-brain link pre-computed.
   if (brain.access === READ_ONLY) {
-    const link = brainLinkFor(brain, rel);
-    const cortex = target.cortex;
-    const cortexHint = cortex
-      ? `write your own note in ${cortex.alias} with brain_write '${qualify(cortex.alias, rel)}', or `
-      : "write your own note in your cortex, or ";
+    const mdRel = rel.endsWith(".md") ? rel : `${rel}.md`;
+    const own = target.cortex ? target.cortex.alias : null;
+    const link = brainLinkFor(brain, mdRel);
+    const ground = link ? ` and ground it with ${link}` : "";
+    const where = own ? `brain_write '${own}:<path>'` : "brain_write into your own brain";
     return {
       ok: false,
-      access: READ_ONLY,
       brain: brain.alias,
+      access: READ_ONLY,
       brain_link: link,
       instruction:
-        `${brain.alias} is read-only (a mirror of its upstream) — ${cortexHint}` +
-        `propose fixes upstream with brain_contribute.`,
+        `${brain.alias} is read-only (a mirror of its upstream — never written here). ` +
+        `Two routes: (1) COMPLEMENT — write what you concluded into your own memory: ` +
+        `${where}${ground}; (2) CORRECT the implant itself — brain_contribute with the ` +
+        "same arguments proposes the change upstream as a pull request.",
     };
   }
   const result = await singleWrite(await target.stateFor(brain), rel, content, mode, options);

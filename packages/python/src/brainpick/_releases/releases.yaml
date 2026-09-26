@@ -15,6 +15,36 @@
 #   area: brain | cli | mcp | search | config | compile | webui | docs
 
 releases:
+  - version: 0.8.7
+    date: 2026-09-25
+    brain_format: 3
+    summary: >-
+      Read-only implants and the contribution flow now work in the npm
+      engine too (full parity with 0.8.6's Python engine), and both engines
+      fix a gap where brain_contribute skipped the target brain's own
+      henxels contract.
+    agent_action: >-
+      Nothing to migrate. If you contributed to an implant with 0.8.6,
+      re-check open proposals against that implant's contract: its check
+      did not run then.
+    changes:
+      - kind: fixed
+        area: mcp
+        text: >-
+          brain_contribute now runs the target brain's own henxels contract
+          before committing a proposal; 0.8.6 silently skipped it and
+          reported contract "none".
+      - kind: added
+        area: mcp
+        text: >-
+          Node engine: brain_contribute, brain_submit, the contribute rung on
+          [serve] git, read-only brain_write / brain_sync / brain_push,
+          brain_read annotations, proposals on brain_status and access on
+          brain_overview — the same payloads as the Python engine.
+      - kind: added
+        area: cli
+        text: >-
+          Node engine: `brainpick register --read-only` / `--read-write`.
   - version: 0.8.6
     date: 2026-09-25
     brain_format: 3

@@ -176,6 +176,41 @@ def test_contribute_requires_a_message_and_a_remote(tmp_path, proposals_home):
     assert result["ok"] is False and "remote" in result["hint"]
 
 
+def _fake_henxels(tmp_path, monkeypatch, code):
+    bin_dir = tmp_path / "fakehenxels"
+    bin_dir.mkdir()
+    exe = bin_dir / "henxels"
+    exe.write_text(f"#!/bin/sh\necho contract says no >&2\nexit {code}\n", encoding="utf-8")
+    exe.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+
+def _with_contract(mirror):
+    (mirror / "henxels.yaml").write_text("henxels: []\n", encoding="utf-8")
+    git(mirror, "add", "-A")
+    git(mirror, "commit", "-qm", "contract")
+    git(mirror, "push", "-q")
+
+
+def test_the_targets_contract_gates_the_proposal(tmp_path, proposals_home, monkeypatch):
+    mirror, _, _ = make_mirror(tmp_path)
+    _with_contract(mirror)
+    _fake_henxels(tmp_path, monkeypatch, 1)
+    result = contribute(state_for(mirror), "uusi-kivi", DOC, message="add")
+    assert result["ok"] is False and result["contract"] == "fail"
+    assert "contract says no" in result["instruction"]
+    assert git(mirror, "log", "--oneline", "origin/HEAD..contrib/uusi-kivi").strip() == ""
+    assert not (proposal_dir(mirror, "uusi-kivi") / "uusi-kivi.md").exists()
+
+
+def test_a_passing_contract_is_recorded(tmp_path, proposals_home, monkeypatch):
+    mirror, _, _ = make_mirror(tmp_path)
+    _with_contract(mirror)
+    _fake_henxels(tmp_path, monkeypatch, 0)
+    result = contribute(state_for(mirror), "uusi-kivi", DOC, message="add")
+    assert result["ok"] is True and result["contract"] == "pass"
+
+
 def test_first_contact_is_apply_and_brief(tmp_path, proposals_home):
     mirror, _, _ = make_mirror(tmp_path)
     (mirror / "CONTRIBUTING.md").write_text("# How\n", encoding="utf-8")

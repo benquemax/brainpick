@@ -7,7 +7,7 @@ about: concept
 title: Runtime parity
 description: What the pip and npm packages each do natively — the capability matrix that keeps "one spec, two engines" honest, and how the claims are proven.
 tags: [engine]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-09-25T00:00:00Z
 ---
 
 # Runtime parity
@@ -28,6 +28,7 @@ capability ladder these rows walk.
 | Serve: REST + web UI + live channel | native | native |
 | MCP stdio + streamable HTTP (5 tools) | native | native |
 | [Guarded writes](guarded-writes.md) + base_sha conflict detection | native | native |
+| [Read-only implants](read-only-implants.md) + [contributing to an implant](contributing-to-an-implant.md) (spec/105) | native | native |
 | Stale-write merge proposal (three-way / LLM) | native | native |
 | Auth: tokens, password, sessions | native | native |
 | init / doctor / integrate / the skill / CLI query mirrors | native | native |
@@ -104,6 +105,15 @@ export const validate = async () => {
       'packages/node/src/merge.ts is missing — the "Stale-write merge proposal" row claims npm ' +
         'parity (native). Restore the Node merge resolver, or update the row.',
     );
+  }
+
+  // Claim: the spec/105 row reads native/native — both MCP servers register the
+  // contribution verbs.
+  const pyMcp = read('packages/python/src/brainpick/mcp_server.py');
+  const nodeMcp = read('packages/node/src/mcp.ts');
+  for (const tool of ['brain_contribute', 'brain_submit']) {
+    if (!pyMcp.includes(`def ${tool}(`)) throw new Error(`the Python MCP server lacks ${tool} — the spec/105 row claims it`);
+    if (!nodeMcp.includes(`"${tool}"`)) throw new Error(`the Node MCP server lacks ${tool} — the spec/105 row claims it`);
   }
 };
 

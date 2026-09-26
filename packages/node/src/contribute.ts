@@ -274,7 +274,8 @@ export async function contribute(
   const rel = bundleRel(root, repo);
   const bundle = rel ? join(worktree, rel) : worktree;
   const wtConfig = loadConfig(existsSync(join(worktree, "brainpick.toml")) ? worktree : bundle);
-  wtConfig.validate.henxels = "never"; // the whole contract runs below
+  const ownSetting = wtConfig.validate.henxels; // the target's own choice, honoured below
+  wtConfig.validate.henxels = "never"; // the whole contract runs below, over the worktree
   const wtState = new ServeState(bundle, wtConfig);
 
   const [status, payload] = await guardedWrite(wtState, doc, content, mode, baseSha, budgetTokens);
@@ -285,6 +286,7 @@ export async function contribute(
   if (status !== "ok") return { ok: false, instruction: (payload as Record<string, unknown>)["instruction"] as string };
   const docRel = (payload as Record<string, unknown>)["path"] as string;
 
+  wtConfig.validate.henxels = ownSetting; // else runContract would skip it
   const [outcome, detail] = runContract(bundle, wtConfig as { validate?: { henxels?: string } });
   if (outcome === "unavailable" || outcome === "fail") {
     runGit(worktree, ["checkout", "--", "."]);
@@ -379,19 +381,18 @@ function forkOwner(repo: string): string | null {
   return parts ? parts[1] : null;
 }
 
+/** Only from data the engine has: the commit messages, the files, the checks —
+ * or, for the What section, the contributor's own words when given. */
 function draftBody(root: string, described: ProposalInfo, contract: string, what: string | null): string {
   const repo = repoRoot(root) ?? root;
-  let lines: string[];
-  if (what === null) {
+  if (!what) {
     const log = runGit(repo, ["log", "--reverse", "--format=%s", `${described.base}..${described.branch}`]);
-    lines = log.code === 0 ? log.stdout.split("\n").filter(Boolean).map((l) => `- ${l}`) : [];
-  } else {
-    lines = [];
+    const lines = log.code === 0 ? log.stdout.split("\n").filter((l) => l.trim()).map((l) => `- ${l}`) : [];
+    what = lines.join("\n") || "- (see commits)";
   }
-  const commits = lines.length > 0 ? lines.join("\n") : "- (see commits)";
   const pages = described.files.map((f) => `- ${f}`).join("\n") || "- (none)";
   return (
-    `## What\n${commits}\n\n## Pages\n${pages}\n\n` +
+    `## What\n${what}\n\n## Pages\n${pages}\n\n` +
     `## Checks (run locally, the implant's own contract)\n` +
     `- henxels contract: ${contract}\n- brainpick compile --check-fresh: pass\n` +
     `- base: ${described.base} (origin's default branch at proposal time` +
@@ -423,7 +424,7 @@ export async function submit(
   const logR = runGit(repo, ["log", "-1", "--format=%s", branch]);
   const resolvedTitle = (title ?? "").trim() || (logR.code === 0 ? logR.stdout.trim() : name);
   const contract = existsSync(worktree) ? (readConfig(worktree, "brainpick.proposal.contract") ?? "pass") : "pass";
-  const fullBody = draftBody(root, fresh, contract, body?.trim() ?? null);
+  const fullBody = draftBody(root, fresh, contract, body?.trim() || null);
   const stale = fresh.stale_base ? " Upstream has moved since this proposal was based; the maintainer may need to rebase." : "";
 
   const originR = runGit(repo, ["remote", "get-url", "origin"]);
@@ -566,24 +567,30 @@ export async function submitPayload(
 
 // -- annotations (cross-brain backlinks) ---------------------------------------------
 
-const BRAIN_LINK_RE = /brain:\/\/[a-z0-9-]*?([a-z0-9]{21})\/([^\s)>\"']+)/g;
+const BRAIN_LINK_RE = /brain:\/\/[a-z0-9-]*?([a-z0-9]{21})\/([^\s)>\]"']+)/g;
 
-export function annotations(set: BrainSet, brain: Brain, qualifiedPath: string): Array<{ brain: string; path: string; title: string }> {
+/** Every doc in every OTHER brain of the set whose brain:// links (spec/85,
+ * slug-then-id) point at this doc — resolved by [bundle] id against the set. */
+export async function annotations(
+  set: BrainSet,
+  brain: Brain,
+  qualifiedPath: string,
+): Promise<Array<{ brain: string; path: string; title: string }>> {
   let targetId: string;
   try { targetId = loadConfig(brain.root).bundle.id; } catch { return []; }
   if (!targetId) return [];
   const [, rel] = splitQualified(qualifiedPath);
-  const cleanRel = rel.replace(/^\//, "");
+  const cleanRel = rel.replace(/^\/+/, "");
   const found: Array<{ brain: string; path: string; title: string }> = [];
   for (const other of set.brains) {
-    if (other === brain || !other.state) continue;
-    for (const record of other.state.records) {
+    if (other === brain || set.unreadableReason(other) !== null) continue;
+    const state = await set.stateFor(other);
+    for (const record of state.records) {
       const text = record.text ?? "";
       if (!text.includes("brain://")) continue;
       for (const m of text.matchAll(BRAIN_LINK_RE)) {
         if (m[1] === targetId && m[2]!.replace(/[.,;:]+$/, "") === cleanRel) {
-          found.push({ brain: other.alias, path: qualify(other.alias, record.path),
-            title: record.title || record.path });
+          found.push({ brain: other.alias, path: qualify(other.alias, record.path), title: record.title || record.path });
           break;
         }
       }

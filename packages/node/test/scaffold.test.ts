@@ -21,7 +21,9 @@ const NO_BACKENDS: ProbeResult[] = [
   ["lm studio", null],
   ["llama.cpp", null],
 ];
-const OLLAMA: Backend = { kind: "ollama", endpoint: "http://127.0.0.1:11434", model: "nomic-embed-text:latest" };
+// a closed port, not :11434 — a host running a real Ollama (without this model)
+// would otherwise make init's T2 compile block on it: the fake must be hermetic
+const OLLAMA: Backend = { kind: "ollama", endpoint: "http://127.0.0.1:9", model: "nomic-embed-text:latest" };
 const OLLAMA_FOUND: ProbeResult[] = [
   ["ollama", OLLAMA],
   ["lm studio", null],
@@ -153,7 +155,7 @@ test("init records a detected backend in brainpick.local.toml", async () => {
   const local = readFileSync(join(root, "brainpick.local.toml"), "utf8");
   expect(local).toContain("[models.embedding]");
   expect(local).toContain('kind = "ollama"');
-  expect(local).toContain('endpoint = "http://127.0.0.1:11434"');
+  expect(local).toContain('endpoint = "http://127.0.0.1:9"');
   expect(local).toContain('model = "nomic-embed-text:latest"');
   expect(out.text()).toContain("nomic-embed-text");
   // spec/30: an English-only model is named as such, with the multilingual pull
@@ -408,7 +410,7 @@ test("doctor reports found backends", async () => {
   const out = capture();
   expect(await runDoctor(root, { env: {}, probes: OLLAMA_FOUND, print: out.print })).toBe(0);
   const text = out.text();
-  expect(text).toContain("✓ ollama: nomic-embed-text:latest at http://127.0.0.1:11434");
+  expect(text).toContain("✓ ollama: nomic-embed-text:latest at http://127.0.0.1:9");
   expect(text).toContain("English-only"); // spec/30: doctor names it too
   expect(text).toContain("lm studio: not reachable");
 });

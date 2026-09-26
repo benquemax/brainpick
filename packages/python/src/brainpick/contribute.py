@@ -293,6 +293,7 @@ def contribute(state, doc: str, content: str, mode: str = "create", base_sha: st
         return result
     bundle = worktree / _bundle_rel(root, repo) if _bundle_rel(root, repo) else worktree
     wt_state = ServeState(bundle, load_config(worktree if (worktree / "brainpick.toml").is_file() else bundle))
+    own_setting = wt_state.config.validate.henxels  # the target's own choice, honoured below
     wt_state.config.validate.henxels = "never"  # the whole contract runs below, over the worktree
 
     status, payload = guarded_write(wt_state, doc, content, mode, base_sha, budget_tokens)
@@ -303,6 +304,7 @@ def contribute(state, doc: str, content: str, mode: str = "create", base_sha: st
         return {"ok": False, "brain": root.name, "instruction": payload["instruction"]}
     rel = payload["path"]
 
+    wt_state.config.validate.henxels = own_setting  # else run_contract would skip it
     outcome, detail = run_contract(bundle, wt_state.config)
     if outcome in ("unavailable", "fail"):
         run_git(worktree, "checkout", "--", ".")  # the doc stays unwritten in the proposal

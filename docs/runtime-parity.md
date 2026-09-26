@@ -4,7 +4,7 @@ about: concept
 title: Runtime parity
 description: What the pip and npm packages each do natively — the capability matrix that keeps "one spec, two engines" honest, and how the claims are proven.
 tags: [engine]
-timestamp: 2026-08-03T00:00:00Z
+timestamp: 2026-09-25T00:00:00Z
 ---
 
 # Runtime parity
@@ -25,6 +25,7 @@ capability ladder these rows walk.
 | Serve: REST + web UI + live channel | native | native |
 | MCP stdio + streamable HTTP (5 tools) | native | native |
 | [Guarded writes](guarded-writes.md) + base_sha conflict detection | native | native |
+| [Read-only implants](read-only-implants.md) + [contributing to an implant](contributing-to-an-implant.md) (spec/105) | native | native |
 | Stale-write merge proposal (three-way / LLM) | native | native |
 | Auth: tokens, password, sessions | native | native |
 | init / doctor / integrate / the skill / CLI query mirrors | native | native |
