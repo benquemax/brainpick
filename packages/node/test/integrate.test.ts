@@ -404,6 +404,7 @@ describe("integrate root, target and YAML quoting", () => {
 
   test("name and blank description stay valid YAML", () => {
     const stub = renderSkillStub({ path: "skills/yes.md", title: "Yes", description: "  \n ", depends_on: [], tools: [], export: [] } as never);
+    expect(stub).toContain('name: "yes"'); // default YAML 1.2 parsing would not catch a bare `yes`
     expect(frontmatter(stub)).toEqual({ name: "yes", description: "Yes" });
   });
 

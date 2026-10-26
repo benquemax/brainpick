@@ -20,6 +20,7 @@
  * shipped copies are byte-identical to the canonicals.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { stringify as stringifyYaml } from "yaml";
@@ -199,8 +200,9 @@ export function renderSkillStub(skill: SkillRecord): string {
   // the strip so a blank description cannot reach the stub (mirrors integrate.py).
   const description = (skill.description ?? "").split(/[\s\u0085\u001c-\u001f]+/).filter(Boolean).join(" ") || skill.title;
   // stringify quotes only when needed: a bare `a: b` or `a #b` (or name `yes`) is
-  // invalid/mistyped YAML and the harness silently drops the skill. lineWidth 0 = no folding.
-  const frontmatter = stringifyYaml({ name: stemOf(skill.path), description }, { lineWidth: 0 }).trimEnd();
+  // invalid/mistyped YAML and the harness silently drops the skill. lineWidth 0 = no folding;
+  // version 1.1 makes `yes`/`on` get quoted, as PyYAML does.
+  const frontmatter = stringifyYaml({ name: stemOf(skill.path), description }, { lineWidth: 0, version: "1.1" }).trimEnd();
   const fill: Record<string, string> = {
     frontmatter,
     title: skill.title,
@@ -357,7 +359,7 @@ export async function runIntegrate(target: string, root: string, options: Integr
   }
   const voice = new Voice(options.env ?? process.env, print);
   voice.banner();
-  const override = options.skillsDir ? resolve(options.skillsDir) : undefined;
+  const override = options.skillsDir ? resolve(options.skillsDir.replace(/^~(?=\/|$)/, homedir())) : undefined;
   const resolved = resolve(root);
   let isDir = false;
   try {
