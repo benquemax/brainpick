@@ -197,7 +197,7 @@ function stemOf(path: string): string {
 export function renderSkillStub(skill: SkillRecord): string {
   // split/join also flattens YAML line-break characters; the title fallback comes after
   // the strip so a blank description cannot reach the stub (mirrors integrate.py).
-  const description = (skill.description ?? "").split(/\s+/).filter(Boolean).join(" ") || skill.title;
+  const description = (skill.description ?? "").split(/[\s\u0085\u001c-\u001f]+/).filter(Boolean).join(" ") || skill.title;
   // stringify quotes only when needed: a bare `a: b` or `a #b` (or name `yes`) is
   // invalid/mistyped YAML and the harness silently drops the skill. lineWidth 0 = no folding.
   const frontmatter = stringifyYaml({ name: stemOf(skill.path), description }, { lineWidth: 0 }).trimEnd();

@@ -407,6 +407,11 @@ describe("integrate root, target and YAML quoting", () => {
     expect(frontmatter(stub)).toEqual({ name: "yes", description: "Yes" });
   });
 
+  test("YAML line-break characters in a description are flattened", () => {
+    const stub = renderSkillStub({ path: "skills/x.md", title: "X", description: "a\u0085b\u2028c", depends_on: [], tools: [], export: [] } as never);
+    expect(frontmatter(stub).description).toBe("a b c");
+  });
+
   test("skillsDir is rejected for agents-md", async () => {
     const lines: string[] = [];
     const code = await runIntegrate("agents-md", await tomlRepo(), { print: (l) => lines.push(l), skillsDir: tempDir() });
