@@ -396,3 +396,12 @@ def test_stub_frontmatter_is_valid_yaml_for_awkward_descriptions(toml_repo):
     for tricky in ('"starts with a quote', "ends with colon:", "- dash", "ä: ö # å", "[x]"):
         fm = render_skill_stub({"path": "skills/x.md", "title": "X", "description": tricky}).split("---", 2)[1]
         assert yaml.safe_load(fm)["description"] == tricky
+
+
+def test_stub_name_and_blank_description_stay_valid_yaml():
+    fm = render_skill_stub({"path": "skills/yes.md", "title": "Yes", "description": "  \n "}).split("---", 2)[1]
+    assert yaml.safe_load(fm) == {"name": "yes", "description": "Yes"}
+
+
+def test_integrate_target_rejected_for_agents_md(toml_repo, tmp_path):
+    assert run_integrate("agents-md", toml_repo, skills_dir=tmp_path) == 1

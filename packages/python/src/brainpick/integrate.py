@@ -180,8 +180,7 @@ def _graph_before_grep_hook() -> str:
 
 
 _STUB_TEMPLATE = """---
-name: {name}
-{description_line}
+{frontmatter}
 ---
 
 # {title}
@@ -199,12 +198,15 @@ def render_skill_stub(skill: dict) -> str:
     """The pointer stub for one exported skill (spec/85 *Exported skills*): the
     harness loads it on its trigger, the brain stays canonical."""
     name = posixpath.splitext(posixpath.basename(skill["path"]))[0]
-    description = (skill.get("description") or skill["title"]).replace("\n", " ").strip()
-    # safe_dump quotes only when needed: a bare `a: b` or `a #b` would be invalid YAML
-    # and the harness silently drops the skill. Huge width keeps it on one line.
-    description_line = yaml.safe_dump({"description": description}, allow_unicode=True, width=10**9).rstrip("\n")
+    # split/join also flattens YAML line-break characters (\x85, U+2028) that safe_dump
+    # would fold; falling back to the title after the strip keeps an empty value out.
+    description = " ".join((skill.get("description") or "").split()) or skill["title"]
+    # safe_dump quotes only when needed: a bare `a: b` or `a #b` (or name `yes`) is
+    # invalid/mistyped YAML and the harness silently drops the skill.
+    frontmatter = yaml.safe_dump({"name": name, "description": description},
+                                 allow_unicode=True, width=10**9, sort_keys=False).rstrip("\n")
     return _STUB_TEMPLATE.format(
-        name=name, description_line=description_line, title=skill["title"], path=skill["path"],
+        frontmatter=frontmatter, title=skill["title"], path=skill["path"],
         prerequisites=", ".join(skill.get("depends_on") or []) or "none",
         tools=", ".join(skill.get("tools") or []) or "none",
     )
@@ -359,6 +361,9 @@ def run_integrate(target: str, root: str | Path, dry_run: bool = False,
     voice = _Voice(os.environ)
     voice.banner()
     root = Path(root).resolve()
+    if skills_dir and target == "agents-md":
+        print("--target only applies to claude-code, opencode and dsh (agents-md writes no skills)")
+        return 1
     skills_dir = Path(skills_dir).expanduser().resolve() if skills_dir else None
     if not root.is_dir():
         voice.line("✗", f"{root} is not a directory")
