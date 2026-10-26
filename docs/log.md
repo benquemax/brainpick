@@ -1,5 +1,13 @@
 # Update log
 
+## 2026-10-26
+
+- Fixed: [brainpick integrate](reference/cli/integrate.md) finds exported skills
+  through `brainpick.toml`'s `[bundle] root` instead of looking under `--root`,
+  and quotes stub descriptions as valid YAML (a `: ` or ` #` used to make the
+  harness drop the skill). Added: `--target DIR` writes the skills to a chosen
+  directory such as `~/.claude/skills`.
+
 ## 2026-09-14
 
 - Added: brain format 3 — [Conventions](conventions.md) are the sixth

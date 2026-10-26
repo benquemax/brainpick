@@ -352,7 +352,7 @@ def _cmd_skill_new(args: argparse.Namespace) -> int:
 def _cmd_integrate(args: argparse.Namespace) -> int:
     from brainpick.integrate import run_integrate
 
-    return run_integrate(args.target, Path(args.root), dry_run=args.dry_run)
+    return run_integrate(args.target, Path(args.root), dry_run=args.dry_run, skills_dir=args.skills_dir)
 
 
 def connectable_host(host: str) -> str:
@@ -689,6 +689,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_integrate.add_argument("target", metavar="<target>",
                              help="the harness to wire up: claude-code | opencode | agents-md | dsh")
     p_integrate.add_argument("--root", default=".", help="where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)")
+    p_integrate.add_argument("--target", dest="skills_dir", metavar="DIR",
+                             help="skills directory to write <name>/SKILL.md into, e.g. ~/.claude/skills "
+                                  "(default: the harness's repo-level skills dir)")
     p_integrate.add_argument("--dry-run", action="store_true",
                              help="print what integrate would do without writing anything")
     p_integrate.set_defaults(func=_cmd_integrate)

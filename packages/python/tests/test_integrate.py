@@ -4,6 +4,7 @@ import json
 import shutil
 
 import pytest
+import yaml
 
 from brainpick.compile.pipeline import run_compile
 from brainpick.compile.t1 import REPORT_BEGIN_PREFIX, REPORT_END_MARKER
@@ -347,3 +348,51 @@ def test_compile_never_touches_the_ritual_block(repo):
     after = agents.read_text(encoding="utf-8")
     start, end = after.index(RITUAL_BEGIN_PREFIX), after.index(RITUAL_END_MARKER)
     assert after[start:end] == before[before.index(RITUAL_BEGIN_PREFIX):before.index(RITUAL_END_MARKER)]
+
+
+# -- integrate resolves the bundle from brainpick.toml, honours --target, quotes YAML --
+
+
+NASTY = 'Use when: brewing # coffee, "quoted" and more'
+
+
+@pytest.fixture
+def toml_repo(tmp_path):
+    """--root holds brainpick.toml; the bundle is a subdir (`_brain`); two skill
+    pages, only one exported; the exported description needs YAML quoting."""
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "brainpick.toml").write_text('[bundle]\nroot = "_brain"\n', encoding="utf-8")
+    skills = tmp_path / "_brain" / "skills"
+    skills.mkdir(parents=True)
+    for name, extra in (("exported", f'export: agent-skill\ndescription: {json.dumps(NASTY)}\n'),
+                        ("private", "")):
+        (skills / f"{name}.md").write_text(
+            f"---\ntype: skill\ntitle: {name.title()}\n{extra}---\n# {name.title()}\n", encoding="utf-8")
+    run_compile(tmp_path)
+    return tmp_path
+
+
+def test_integrate_finds_exported_skills_via_the_config_root(toml_repo, capsys):
+    assert run_integrate("claude-code", toml_repo) == 0
+    skills = toml_repo / ".claude" / "skills"
+    assert (skills / "exported" / "SKILL.md").is_file()
+    assert not (skills / "private").exists()
+
+
+def test_integrate_target_redirects_skill_and_stubs(toml_repo, tmp_path_factory, capsys):
+    target = tmp_path_factory.mktemp("home-skills")
+    assert run_integrate("claude-code", toml_repo, skills_dir=target) == 0
+    assert (target / "exported" / "SKILL.md").is_file()
+    assert (target / "brainpick" / "SKILL.md").is_file()
+    assert not (target / "private").exists()
+    assert not (toml_repo / ".claude").exists()
+
+
+def test_stub_frontmatter_is_valid_yaml_for_awkward_descriptions(toml_repo):
+    run_integrate("claude-code", toml_repo)
+    text = (toml_repo / ".claude" / "skills" / "exported" / "SKILL.md").read_text(encoding="utf-8")
+    meta = yaml.safe_load(text.split("---", 2)[1])
+    assert meta == {"name": "exported", "description": NASTY}
+    for tricky in ('"starts with a quote', "ends with colon:", "- dash", "ä: ö # å", "[x]"):
+        fm = render_skill_stub({"path": "skills/x.md", "title": "X", "description": tricky}).split("---", 2)[1]
+        assert yaml.safe_load(fm)["description"] == tricky
