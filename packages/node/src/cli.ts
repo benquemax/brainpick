@@ -379,10 +379,11 @@ program
   .command("integrate <target>")
   .description("install brainpick into an agent harness (skill, MCP, report)")
   .option("--root <path>", "where brainpick.toml lives — the repo root, not the bundle it points at (default: current directory)", ".")
+  .option("--target <dir>", "skills directory to write <name>/SKILL.md into, e.g. ~/.claude/skills (default: the harness's repo-level skills dir)")
   .option("--dry-run", "print what integrate would do without writing anything")
-  .action(async (target: string, opts: { root: string; dryRun?: boolean }) => {
+  .action(async (target: string, opts: { root: string; dryRun?: boolean; target?: string }) => {
     const { runIntegrate } = await import("./integrate");
-    process.exitCode = await runIntegrate(target, opts.root, { dryRun: opts.dryRun ?? false });
+    process.exitCode = await runIntegrate(target, opts.root, { dryRun: opts.dryRun ?? false, skillsDir: opts.target });
   });
 
 program
