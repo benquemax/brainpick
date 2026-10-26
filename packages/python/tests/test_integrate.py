@@ -405,3 +405,18 @@ def test_stub_name_and_blank_description_stay_valid_yaml():
 
 def test_integrate_target_rejected_for_agents_md(toml_repo, tmp_path):
     assert run_integrate("agents-md", toml_repo, skills_dir=tmp_path) == 1
+
+
+def test_integrate_never_overwrites_a_skill_it_did_not_write(toml_repo, tmp_path_factory, capsys):
+    target = tmp_path_factory.mktemp("home-skills")
+    own = target / "exported" / "SKILL.md"
+    own.parent.mkdir()
+    own.write_text("---\nname: exported\n---\nhand-written\n", encoding="utf-8")
+    assert run_integrate("claude-code", toml_repo, skills_dir=target) == 0
+    assert own.read_text(encoding="utf-8").endswith("hand-written\n")
+    assert "not written by brainpick" in capsys.readouterr().out
+
+
+def test_stub_flattens_yaml_line_break_characters():
+    fm = render_skill_stub({"path": "skills/x.md", "title": "X", "description": "a\x85b c"}).split("---", 2)[1]
+    assert yaml.safe_load(fm)["description"] == "a b c"

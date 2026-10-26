@@ -193,6 +193,8 @@ function stemOf(path: string): string {
   return path.split("/").pop()!.replace(/\.md$/, "");
 }
 
+const STUB_MARK = "This skill lives in the brain at";
+
 /** The pointer stub for one exported skill (spec/85 *Exported skills*): the
  * harness loads it on its trigger, the brain stays canonical. */
 export function renderSkillStub(skill: SkillRecord): string {
@@ -243,6 +245,12 @@ function writeStubs(voice: Voice, root: string, skillsDir: string, dryRun: boole
       continue;
     }
     const existed = existsSync(dest);
+    // skillsDir can point at a shared dir (~/.claude/skills): a SKILL.md without the
+    // stub's own sentence came from a person or another tool, so it is left alone.
+    if (existed && !readFileSync(dest, "utf8").includes(STUB_MARK)) {
+      voice.line("!", `exported skill ${skill.path} skipped — ${dest} was not written by brainpick; delete it to let brainpick manage it`);
+      continue;
+    }
     mkdirSync(dirname(dest), { recursive: true });
     writeFileSync(dest, renderSkillStub(skill), "utf8");
     voice.line("✓", `exported skill: ${existed ? "updated" : "wrote"} ${dest} → ${skill.path}`);
@@ -354,7 +362,7 @@ export async function runIntegrate(target: string, root: string, options: Integr
     return 1;
   }
   if (options.skillsDir && target === "agents-md") {
-    print("--target only applies to claude-code, opencode and dsh (agents-md writes no skills)");
+    print("--target only applies to claude-code and opencode (agents-md writes no skills)");
     return 1;
   }
   const voice = new Voice(options.env ?? process.env, print);

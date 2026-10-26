@@ -194,6 +194,9 @@ copy is canonical and carries its prerequisites and tools.
 """
 
 
+_STUB_MARK = "This skill lives in the brain at"
+
+
 def render_skill_stub(skill: dict) -> str:
     """The pointer stub for one exported skill (spec/85 *Exported skills*): the
     harness loads it on its trigger, the brain stays canonical."""
@@ -242,6 +245,12 @@ def _write_stubs(voice: _Voice, root: Path, skills_dir: Path, dry_run: bool) -> 
             voice.step(f"• write the exported skill stub {dest}")
             continue
         existed = dest.is_file()
+        # --target can point at a shared dir (~/.claude/skills): a SKILL.md without the
+        # stub's own sentence came from a person or another tool, so it is left alone.
+        if existed and _STUB_MARK not in dest.read_text(encoding="utf-8"):
+            voice.line("!", f"exported skill {skill['path']} skipped — {dest} was not written by "
+                            "brainpick; delete it to let brainpick manage it")
+            continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(render_skill_stub(skill), encoding="utf-8")
         voice.line("✓", f"exported skill: {'updated' if existed else 'wrote'} {dest} → {skill['path']}")

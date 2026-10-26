@@ -1,7 +1,7 @@
 /** `brainpick integrate` (skill, MCP snippets, the AGENTS.md report) and the
  * compile-side report fill. Twin of packages/python/tests/test_integrate.py. */
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
@@ -413,10 +413,21 @@ describe("integrate root, target and YAML quoting", () => {
     expect(frontmatter(stub).description).toBe("a b c");
   });
 
+  test("never overwrites a skill it did not write", async () => {
+    const target = tempDir();
+    const own = join(target, "exported", "SKILL.md");
+    mkdirSync(dirname(own), { recursive: true });
+    writeFileSync(own, "---\nname: exported\n---\nhand-written\n", "utf8");
+    const lines: string[] = [];
+    expect(await runIntegrate("claude-code", await tomlRepo(), { print: (l) => lines.push(l), skillsDir: target })).toBe(0);
+    expect(readFileSync(own, "utf8")).toMatch(/hand-written\n$/);
+    expect(lines.join("\n")).toContain("not written by brainpick");
+  });
+
   test("skillsDir is rejected for agents-md", async () => {
     const lines: string[] = [];
     const code = await runIntegrate("agents-md", await tomlRepo(), { print: (l) => lines.push(l), skillsDir: tempDir() });
     expect(code).toBe(1);
-    expect(lines.join("\n")).toContain("--target only applies to claude-code, opencode and dsh");
+    expect(lines.join("\n")).toContain("--target only applies to claude-code and opencode");
   });
 });
