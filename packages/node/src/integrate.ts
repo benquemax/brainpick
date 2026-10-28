@@ -20,8 +20,12 @@
  * shipped copies are byte-identical to the canonicals.
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
+import { stringify as stringifyYaml } from "yaml";
+
+import { loadConfig } from "./config";
 import { runCompile } from "./compile/pipeline";
 import { REPORT_BEGIN_PREFIX, REPORT_END_MARKER } from "./compile/t1";
 import type { SkillRecord, SkillsArtifact } from "./compile/skills";
@@ -172,8 +176,7 @@ function graphBeforeGrepHook(): string {
 }
 
 const STUB_TEMPLATE = `---
-name: {name}
-description: {description}
+{frontmatter}
 ---
 
 # {title}
@@ -190,13 +193,20 @@ function stemOf(path: string): string {
   return path.split("/").pop()!.replace(/\.md$/, "");
 }
 
+const STUB_MARK = "This skill lives in the brain at";
+
 /** The pointer stub for one exported skill (spec/85 *Exported skills*): the
  * harness loads it on its trigger, the brain stays canonical. */
 export function renderSkillStub(skill: SkillRecord): string {
-  const description = (skill.description || skill.title).replace(/\n/g, " ").trim();
+  // split/join also flattens YAML line-break characters; the title fallback comes after
+  // the strip so a blank description cannot reach the stub (mirrors integrate.py).
+  const description = (skill.description ?? "").split(/[\s\u0085\u001c-\u001f]+/).filter(Boolean).join(" ") || skill.title;
+  // stringify quotes only when needed: a bare `a: b` or `a #b` (or name `yes`) is
+  // invalid/mistyped YAML and the harness silently drops the skill. lineWidth 0 = no folding;
+  // version 1.1 makes `yes`/`on` get quoted, as PyYAML does.
+  const frontmatter = stringifyYaml({ name: stemOf(skill.path), description }, { lineWidth: 0, version: "1.1" }).trimEnd();
   const fill: Record<string, string> = {
-    name: stemOf(skill.path),
-    description,
+    frontmatter,
     title: skill.title,
     path: skill.path,
     prerequisites: skill.depends_on.join(", ") || "none",
@@ -216,9 +226,14 @@ export function exportedSkillStubs(root: string): SkillRecord[] {
   }
 }
 
-function writeStubs(voice: Voice, root: string, repo: string, target: "claude-code" | "opencode", dryRun: boolean): void {
-  const skillsDir = dirname(dirname(join(repo, SKILL_DESTINATIONS[target])));
-  for (const skill of exportedSkillStubs(root)) {
+function skillsDirFor(repo: string, target: "claude-code" | "opencode", override?: string): string {
+  return override ?? dirname(dirname(join(repo, SKILL_DESTINATIONS[target])));
+}
+
+function writeStubs(voice: Voice, root: string, skillsDir: string, dryRun: boolean): void {
+  // compile output sits under the bundle brainpick.toml points at, not under --root
+  const bundle = resolve(root, loadConfig(root).bundle.root);
+  for (const skill of exportedSkillStubs(bundle)) {
     const name = stemOf(skill.path);
     if (name === "brainpick") {
       voice.line("!", `exported skill ${skill.path} skipped — its stub would shadow the brainpick skill; rename the doc`);
@@ -230,14 +245,20 @@ function writeStubs(voice: Voice, root: string, repo: string, target: "claude-co
       continue;
     }
     const existed = existsSync(dest);
+    // skillsDir can point at a shared dir (~/.claude/skills): a SKILL.md without the
+    // stub's own sentence came from a person or another tool, so it is left alone.
+    if (existed && !readFileSync(dest, "utf8").includes(STUB_MARK)) {
+      voice.line("!", `exported skill ${skill.path} skipped — ${dest} was not written by brainpick; delete it to let brainpick manage it`);
+      continue;
+    }
     mkdirSync(dirname(dest), { recursive: true });
     writeFileSync(dest, renderSkillStub(skill), "utf8");
     voice.line("✓", `exported skill: ${existed ? "updated" : "wrote"} ${dest} → ${skill.path}`);
   }
 }
 
-function writeSkill(repo: string, target: "claude-code" | "opencode", dryRun: boolean): [string, boolean] {
-  const dest = join(repo, SKILL_DESTINATIONS[target]);
+function writeSkill(skillsDir: string, dryRun: boolean): [string, boolean] {
+  const dest = join(skillsDir, "brainpick", "SKILL.md");
   const existed = existsSync(dest);
   if (!dryRun) {
     mkdirSync(dirname(dest), { recursive: true });
@@ -257,11 +278,12 @@ export function insertReportMarkers(text: string): string {
   return text.replace(/\n+$/, "") + "\n\n" + REPORT_PLACEHOLDER + "\n";
 }
 
-function integrateClaudeCode(voice: Voice, root: string, repo: string, dryRun: boolean): number {
-  const [dest, existed] = writeSkill(repo, "claude-code", dryRun);
+function integrateClaudeCode(voice: Voice, root: string, repo: string, dryRun: boolean, override?: string): number {
+  const skillsDir = skillsDirFor(repo, "claude-code", override);
+  const [dest, existed] = writeSkill(skillsDir, dryRun);
   const verb = dryRun ? "would write" : existed ? "updated" : "wrote";
   voice.line("✓", `skill: ${verb} ${dest}`);
-  writeStubs(voice, root, repo, "claude-code", dryRun);
+  writeStubs(voice, root, skillsDir, dryRun);
   ritualForHarness(voice, repo, dryRun);
   if (dryRun) {
     voice.step("• print the graph-before-grep PreToolUse hook and the `claude mcp add` snippet");
@@ -276,11 +298,12 @@ function integrateClaudeCode(voice: Voice, root: string, repo: string, dryRun: b
   return 0;
 }
 
-function integrateOpencode(voice: Voice, root: string, repo: string, dryRun: boolean): number {
-  const [dest, existed] = writeSkill(repo, "opencode", dryRun);
+function integrateOpencode(voice: Voice, root: string, repo: string, dryRun: boolean, override?: string): number {
+  const skillsDir = skillsDirFor(repo, "opencode", override);
+  const [dest, existed] = writeSkill(skillsDir, dryRun);
   const verb = dryRun ? "would write" : existed ? "updated" : "wrote";
   voice.line("✓", `skill: ${verb} ${dest}`);
-  writeStubs(voice, root, repo, "opencode", dryRun);
+  writeStubs(voice, root, skillsDir, dryRun);
   ritualForHarness(voice, repo, dryRun);
   if (dryRun) {
     voice.step("• print the opencode.json MCP snippet");
@@ -326,6 +349,8 @@ async function integrateAgentsMd(voice: Voice, root: string, repo: string, dryRu
 
 export interface IntegrateOptions {
   dryRun?: boolean;
+  /** CLI `--target`: the skills dir `<name>/SKILL.md` lands in (claude-code, opencode). */
+  skillsDir?: string;
   env?: NodeJS.ProcessEnv;
   print?: Print;
 }
@@ -336,8 +361,13 @@ export async function runIntegrate(target: string, root: string, options: Integr
     print(`unknown target '${target}'; choose from ${TARGETS.join(", ")}`);
     return 1;
   }
+  if (options.skillsDir && target === "agents-md") {
+    print("--target only applies to claude-code and opencode (agents-md writes no skills)");
+    return 1;
+  }
   const voice = new Voice(options.env ?? process.env, print);
   voice.banner();
+  const override = options.skillsDir ? resolve(options.skillsDir.replace(/^~(?=\/|$)/, homedir())) : undefined;
   const resolved = resolve(root);
   let isDir = false;
   try {
@@ -356,7 +386,7 @@ export async function runIntegrate(target: string, root: string, options: Integr
     voice.raw(`dry run — nothing written. integrate ${target} would:`);
   }
 
-  if (target === "claude-code") return integrateClaudeCode(voice, resolved, repo, Boolean(options.dryRun));
-  if (target === "opencode") return integrateOpencode(voice, resolved, repo, Boolean(options.dryRun));
+  if (target === "claude-code") return integrateClaudeCode(voice, resolved, repo, Boolean(options.dryRun), override);
+  if (target === "opencode") return integrateOpencode(voice, resolved, repo, Boolean(options.dryRun), override);
   return integrateAgentsMd(voice, resolved, repo, Boolean(options.dryRun));
 }

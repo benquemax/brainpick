@@ -30,8 +30,11 @@ import posixpath
 import re
 from pathlib import Path
 
+import yaml
+
 from brainpick.compile.pipeline import run_compile
 from brainpick.compile.t1 import REPORT_BEGIN_PREFIX, REPORT_END_MARKER
+from brainpick.config import resolve_bundle
 from brainpick.detect import find_repo_root
 from brainpick.scaffold import _Voice, dsh_snippet, mcp_snippets
 
@@ -177,8 +180,7 @@ def _graph_before_grep_hook() -> str:
 
 
 _STUB_TEMPLATE = """---
-name: {name}
-description: {description}
+{frontmatter}
 ---
 
 # {title}
@@ -192,13 +194,22 @@ copy is canonical and carries its prerequisites and tools.
 """
 
 
+_STUB_MARK = "This skill lives in the brain at"
+
+
 def render_skill_stub(skill: dict) -> str:
     """The pointer stub for one exported skill (spec/85 *Exported skills*): the
     harness loads it on its trigger, the brain stays canonical."""
     name = posixpath.splitext(posixpath.basename(skill["path"]))[0]
-    description = (skill.get("description") or skill["title"]).replace("\n", " ").strip()
+    # split/join also flattens YAML line-break characters (\x85, U+2028) that safe_dump
+    # would fold; falling back to the title after the strip keeps an empty value out.
+    description = " ".join((skill.get("description") or "").split()) or skill["title"]
+    # safe_dump quotes only when needed: a bare `a: b` or `a #b` (or name `yes`) is
+    # invalid/mistyped YAML and the harness silently drops the skill.
+    frontmatter = yaml.safe_dump({"name": name, "description": description},
+                                 allow_unicode=True, width=10**9, sort_keys=False).rstrip("\n")
     return _STUB_TEMPLATE.format(
-        name=name, description=description, title=skill["title"], path=skill["path"],
+        frontmatter=frontmatter, title=skill["title"], path=skill["path"],
         prerequisites=", ".join(skill.get("depends_on") or []) or "none",
         tools=", ".join(skill.get("tools") or []) or "none",
     )
@@ -206,7 +217,8 @@ def render_skill_stub(skill: dict) -> str:
 
 def exported_skill_stubs(root: Path) -> list[dict]:
     """The skills that declare `export: agent-skill`, from the compiled
-    t1/skills.json (path order) — empty when the bundle is uncompiled or a wiki."""
+    t1/skills.json (path order) — empty when the bundle is uncompiled or a wiki.
+    `root` is the BUNDLE dir (where `.brainpick` lives), not the config root."""
     artifact = Path(root) / ".brainpick" / "t1" / "skills.json"
     try:
         data = json.loads(artifact.read_text(encoding="utf-8"))
@@ -215,9 +227,14 @@ def exported_skill_stubs(root: Path) -> list[dict]:
     return [s for s in data.get("skills", []) if "agent-skill" in (s.get("export") or [])]
 
 
-def _write_stubs(voice: _Voice, root: Path, repo: Path, target: str, dry_run: bool) -> None:
-    skills_dir = (repo / SKILL_DESTINATIONS[target]).parent.parent
-    for skill in exported_skill_stubs(root):
+def _skills_dir(repo: Path, target: str, override: Path | None) -> Path:
+    return override or (repo / SKILL_DESTINATIONS[target]).parent.parent
+
+
+def _write_stubs(voice: _Voice, root: Path, skills_dir: Path, dry_run: bool) -> None:
+    # compile output sits under the bundle that brainpick.toml points at, not under --root
+    bundle, _ = resolve_bundle(root)
+    for skill in exported_skill_stubs(bundle):
         name = posixpath.splitext(posixpath.basename(skill["path"]))[0]
         if name == "brainpick":
             voice.line("!", f"exported skill {skill['path']} skipped — its stub would shadow "
@@ -228,13 +245,19 @@ def _write_stubs(voice: _Voice, root: Path, repo: Path, target: str, dry_run: bo
             voice.step(f"• write the exported skill stub {dest}")
             continue
         existed = dest.is_file()
+        # --target can point at a shared dir (~/.claude/skills): a SKILL.md without the
+        # stub's own sentence came from a person or another tool, so it is left alone.
+        if existed and _STUB_MARK not in dest.read_text(encoding="utf-8"):
+            voice.line("!", f"exported skill {skill['path']} skipped — {dest} was not written by "
+                            "brainpick; delete it to let brainpick manage it")
+            continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(render_skill_stub(skill), encoding="utf-8")
         voice.line("✓", f"exported skill: {'updated' if existed else 'wrote'} {dest} → {skill['path']}")
 
 
-def _write_skill(repo: Path, target: str, dry_run: bool) -> tuple[Path, bool]:
-    dest = repo / SKILL_DESTINATIONS[target]
+def _write_skill(skills_dir: Path, dry_run: bool) -> tuple[Path, bool]:
+    dest = skills_dir / "brainpick" / "SKILL.md"
     existed = dest.is_file()
     if not dry_run:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -253,11 +276,12 @@ def _insert_report_markers(text: str) -> str:
     return text.rstrip("\n") + "\n\n" + _REPORT_PLACEHOLDER + "\n"
 
 
-def _integrate_claude_code(voice: _Voice, root: Path, repo: Path, dry_run: bool) -> int:
-    dest, existed = _write_skill(repo, "claude-code", dry_run)
+def _integrate_claude_code(voice: _Voice, root: Path, repo: Path, dry_run: bool, skills_dir: Path | None) -> int:
+    skills_dir = _skills_dir(repo, "claude-code", skills_dir)
+    dest, existed = _write_skill(skills_dir, dry_run)
     verb = "would write" if dry_run else ("updated" if existed else "wrote")
     voice.line("✓", f"skill: {verb} {dest}")
-    _write_stubs(voice, root, repo, "claude-code", dry_run)
+    _write_stubs(voice, root, skills_dir, dry_run)
     _ritual_for_harness(voice, repo, dry_run)
     if dry_run:
         voice.step("• print the graph-before-grep PreToolUse hook and the `claude mcp add` snippet")
@@ -271,11 +295,12 @@ def _integrate_claude_code(voice: _Voice, root: Path, repo: Path, dry_run: bool)
     return 0
 
 
-def _integrate_opencode(voice: _Voice, root: Path, repo: Path, dry_run: bool) -> int:
-    dest, existed = _write_skill(repo, "opencode", dry_run)
+def _integrate_opencode(voice: _Voice, root: Path, repo: Path, dry_run: bool, skills_dir: Path | None) -> int:
+    skills_dir = _skills_dir(repo, "opencode", skills_dir)
+    dest, existed = _write_skill(skills_dir, dry_run)
     verb = "would write" if dry_run else ("updated" if existed else "wrote")
     voice.line("✓", f"skill: {verb} {dest}")
-    _write_stubs(voice, root, repo, "opencode", dry_run)
+    _write_stubs(voice, root, skills_dir, dry_run)
     _ritual_for_harness(voice, repo, dry_run)
     if dry_run:
         voice.step("• print the opencode.json MCP snippet")
@@ -287,11 +312,12 @@ def _integrate_opencode(voice: _Voice, root: Path, repo: Path, dry_run: bool) ->
     return 0
 
 
-def _integrate_dsh(voice: _Voice, root: Path, repo: Path, dry_run: bool) -> int:
-    dest, existed = _write_skill(repo, "dsh", dry_run)
+def _integrate_dsh(voice: _Voice, root: Path, repo: Path, dry_run: bool, skills_dir: Path | None) -> int:
+    skills_dir = _skills_dir(repo, "dsh", skills_dir)
+    dest, existed = _write_skill(skills_dir, dry_run)
     verb = "would write" if dry_run else ("updated" if existed else "wrote")
     voice.line("✓", f"skill: {verb} {dest}")
-    _write_stubs(voice, root, repo, "dsh", dry_run)
+    _write_stubs(voice, root, skills_dir, dry_run)
     _ritual_for_harness(voice, repo, dry_run)
     if dry_run:
         voice.step("• print the cordis.patch.yml insert for @deepseek-ai/dsh-mcp-client")
@@ -334,13 +360,20 @@ def _integrate_agents_md(voice: _Voice, root: Path, repo: Path, dry_run: bool) -
     return 0
 
 
-def run_integrate(target: str, root: str | Path, dry_run: bool = False) -> int:
+def run_integrate(target: str, root: str | Path, dry_run: bool = False,
+                  skills_dir: str | Path | None = None) -> int:
+    """`skills_dir` (CLI `--target`) overrides where `<name>/SKILL.md` lands for the
+    harness targets — e.g. `~/.claude/skills` for a user-level install."""
     if target not in TARGETS:
         print(f"unknown target {target!r}; choose from {', '.join(TARGETS)}")
         return 1
     voice = _Voice(os.environ)
     voice.banner()
     root = Path(root).resolve()
+    if skills_dir and target == "agents-md":
+        print("--target only applies to claude-code, opencode and dsh (agents-md writes no skills)")
+        return 1
+    skills_dir = Path(skills_dir).expanduser().resolve() if skills_dir else None
     if not root.is_dir():
         voice.line("✗", f"{root} is not a directory")
         return 1
@@ -351,9 +384,9 @@ def run_integrate(target: str, root: str | Path, dry_run: bool = False) -> int:
         voice.raw(f"dry run — nothing written. integrate {target} would:")
 
     if target == "claude-code":
-        return _integrate_claude_code(voice, root, repo, dry_run)
+        return _integrate_claude_code(voice, root, repo, dry_run, skills_dir)
     if target == "opencode":
-        return _integrate_opencode(voice, root, repo, dry_run)
+        return _integrate_opencode(voice, root, repo, dry_run, skills_dir)
     if target == "dsh":
-        return _integrate_dsh(voice, root, repo, dry_run)
+        return _integrate_dsh(voice, root, repo, dry_run, skills_dir)
     return _integrate_agents_md(voice, root, repo, dry_run)

@@ -1,9 +1,10 @@
 /** `brainpick integrate` (skill, MCP snippets, the AGENTS.md report) and the
  * compile-side report fill. Twin of packages/python/tests/test_integrate.py. */
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { parse as parseYaml } from "yaml";
 
 import { runCompile } from "../src/compile/pipeline";
 import { REPORT_BEGIN_PREFIX, REPORT_END_MARKER } from "../src/compile/t1";
@@ -344,5 +345,89 @@ describe("the brain ritual block (spec/20)", () => {
     const after = readFileSync(agents, "utf8");
     const slice = (t: string) => t.slice(t.indexOf(RITUAL_BEGIN_PREFIX), t.indexOf(RITUAL_END_MARKER));
     expect(slice(after)).toBe(slice(before));
+  });
+});
+
+// -- integrate resolves the bundle from brainpick.toml, honours --target, quotes YAML --
+
+const NASTY = 'Use when: brewing # coffee, "quoted" and more';
+
+/** --root holds brainpick.toml; the bundle is a subdir (`_brain`); two skill pages,
+ * only one exported, whose description needs YAML quoting. */
+async function tomlRepo(): Promise<string> {
+  const repo = tempDir();
+  mkdirSync(join(repo, ".git"), { recursive: true });
+  writeFileSync(join(repo, "brainpick.toml"), '[bundle]\nroot = "_brain"\n', "utf8");
+  mkdirSync(join(repo, "_brain", "skills"), { recursive: true });
+  for (const [name, extra] of [
+    ["exported", `export: agent-skill\ndescription: ${JSON.stringify(NASTY)}\n`],
+    ["private", ""],
+  ]) {
+    const title = name[0].toUpperCase() + name.slice(1);
+    writeFileSync(join(repo, "_brain", "skills", `${name}.md`), `---\ntype: skill\ntitle: ${title}\n${extra}---\n# ${title}\n`, "utf8");
+  }
+  await runCompile(join(repo, "_brain")); // the CLI resolves [bundle] root before compiling
+  return repo;
+}
+
+const frontmatter = (text: string) => parseYaml(text.split("---")[1]);
+
+describe("integrate root, target and YAML quoting", () => {
+  test("finds exported skills via the config root", async () => {
+    const repo = await tomlRepo();
+    expect(await runIntegrate("claude-code", repo, silent)).toBe(0);
+    const skills = join(repo, ".claude", "skills");
+    expect(existsSync(join(skills, "exported", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(skills, "private"))).toBe(false);
+  });
+
+  test("skillsDir redirects skill and stubs", async () => {
+    const repo = await tomlRepo();
+    const target = tempDir();
+    expect(await runIntegrate("claude-code", repo, { ...silent, skillsDir: target })).toBe(0);
+    expect(existsSync(join(target, "exported", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(target, "brainpick", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(target, "private"))).toBe(false);
+    expect(existsSync(join(repo, ".claude"))).toBe(false);
+  });
+
+  test("stub frontmatter parses back to the original description", async () => {
+    const repo = await tomlRepo();
+    await runIntegrate("claude-code", repo, silent);
+    const text = readFileSync(join(repo, ".claude", "skills", "exported", "SKILL.md"), "utf8");
+    expect(frontmatter(text)).toEqual({ name: "exported", description: NASTY });
+    for (const tricky of ['"starts with a quote', "ends with colon:", "- dash", "ä: ö # å", "[x]"]) {
+      const stub = renderSkillStub({ path: "skills/x.md", title: "X", description: tricky, depends_on: [], tools: [], export: [] } as never);
+      expect(frontmatter(stub).description).toBe(tricky);
+    }
+  });
+
+  test("name and blank description stay valid YAML", () => {
+    const stub = renderSkillStub({ path: "skills/yes.md", title: "Yes", description: "  \n ", depends_on: [], tools: [], export: [] } as never);
+    expect(stub).toContain('name: "yes"'); // default YAML 1.2 parsing would not catch a bare `yes`
+    expect(frontmatter(stub)).toEqual({ name: "yes", description: "Yes" });
+  });
+
+  test("YAML line-break characters in a description are flattened", () => {
+    const stub = renderSkillStub({ path: "skills/x.md", title: "X", description: "a\u0085b\u2028c", depends_on: [], tools: [], export: [] } as never);
+    expect(frontmatter(stub).description).toBe("a b c");
+  });
+
+  test("never overwrites a skill it did not write", async () => {
+    const target = tempDir();
+    const own = join(target, "exported", "SKILL.md");
+    mkdirSync(dirname(own), { recursive: true });
+    writeFileSync(own, "---\nname: exported\n---\nhand-written\n", "utf8");
+    const lines: string[] = [];
+    expect(await runIntegrate("claude-code", await tomlRepo(), { print: (l) => lines.push(l), skillsDir: target })).toBe(0);
+    expect(readFileSync(own, "utf8")).toMatch(/hand-written\n$/);
+    expect(lines.join("\n")).toContain("not written by brainpick");
+  });
+
+  test("skillsDir is rejected for agents-md", async () => {
+    const lines: string[] = [];
+    const code = await runIntegrate("agents-md", await tomlRepo(), { print: (l) => lines.push(l), skillsDir: tempDir() });
+    expect(code).toBe(1);
+    expect(lines.join("\n")).toContain("--target only applies to claude-code and opencode");
   });
 });

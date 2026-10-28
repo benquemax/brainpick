@@ -147,7 +147,9 @@ installs, one **pointer stub** per exported skill under the harness's
 skill convention: `<skills dir>/<stem>/SKILL.md`, where `<stem>` is the
 doc's file stem and `<skills dir>` is the directory the brainpick skill
 lands in (`.claude/skills/` for `claude-code` and `dsh`, `.opencode/skills/`
-for `opencode`). The stub is a pointer, not a copy — the brain stays
+for `opencode`; `--target DIR` overrides it, and the compiled bundle is resolved
+from `[bundle] root` under `--root`). The frontmatter is valid YAML (values quoted
+when needed). The stub is a pointer, not a copy — the brain stays
 canonical and the stub never drifts from it:
 
 ```markdown
